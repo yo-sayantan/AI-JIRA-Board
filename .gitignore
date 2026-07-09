@@ -1,0 +1,36 @@
+node_modules
+*.log
+.DS_Store
+__pycache__/
+.claude/
+*.swap
+
+# Build output (rebuild with: npm run build)
+dist/
+
+# ── jira-intern runtime data — company ticket content, NEVER commit ──
+jira-intern/data.json
+jira-intern/data.js
+jira-intern/cache/
+jira-intern/logs/
+jira-intern/.state.json
+jira-intern/_STATUS.md
+jira-intern/.pr_overrides.json
+jira-intern/*.lock
+jira-intern/.*.lock
+jira-intern/*.bak
+jira-intern/.data.*
+jira-intern/.tmp-*
+jira-intern/jira-export.xml
+
+# Retired legacy UI (pre-React) — rendered HTML holds real ticket content
+jira-intern/status.html
+jira-intern/tickets/
+jira-intern/assets/
+
+# Jira XML exports dropped in for import-jira-xml.mjs
+my_dashboard.xml
+
+# NOTE: jira-intern/config.json IS tracked — it's the single portability file.
+# It holds your name/id/endpoints (no secrets; API keys live in the connector's
+# secretsFile under ~). Swap its values before sharing the repo publicly.

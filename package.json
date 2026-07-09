@@ -1,0 +1,30 @@
+{
+  "name": "jira-board",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Personal, beautiful JIRA replacement board. Renders the dump produced by the bundled jira-intern/ agent pipeline.",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "serve": "node serve.mjs",
+    "open": "open dist/index.html"
+  },
+  "dependencies": {
+    "motion": "^12.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vite-plugin-singlefile": "^2.1.0"
+  }
+}

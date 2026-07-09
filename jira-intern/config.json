@@ -1,0 +1,78 @@
+{
+  "_readme": "SINGLE SOURCE OF TRUTH for the whole jira-board + jira-intern setup. Change values HERE to port the project to another user/machine — nothing else needs editing. Every key is documented in CONFIG.md next to this file.",
+
+  "user": {
+    "name": "Biswas, Sayantan",
+    "accountId": "C22014E",
+    "email": "sayantan.biswas@experian.com"
+  },
+
+  "endpoints": {
+    "jiraBase": "https://agile.experian.com",
+    "confluenceBase": "https://pages.experian.local",
+    "bitbucketBase": "https://code.experian.local"
+  },
+
+  "connector": {
+    "active": "cursor",
+    "cursor": {
+      "bin": "cursor-agent",
+      "binFallbacks": ["~/.local/bin/cursor-agent"],
+      "promptFlag": "-p",
+      "extraArgs": ["--output-format", "text", "--force"],
+      "modelFlag": "--model",
+      "secretsFile": "~/.cursor/mcp-secrets.env",
+      "apiKeyEnv": "CURSOR_API_KEY",
+      "install": "curl https://cursor.com/install -fsS | bash"
+    },
+    "codex": {
+      "bin": "codex",
+      "binFallbacks": [],
+      "promptFlag": "exec",
+      "extraArgs": ["--full-auto"],
+      "modelFlag": "--model",
+      "secretsFile": "~/.codex/secrets.env",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "install": "npm install -g @openai/codex"
+    },
+    "claude": {
+      "bin": "claude",
+      "binFallbacks": [],
+      "promptFlag": "-p",
+      "extraArgs": ["--output-format", "text", "--dangerously-skip-permissions"],
+      "modelFlag": "--model",
+      "secretsFile": "~/.claude/secrets.env",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "install": "npm install -g @anthropic-ai/claude-code"
+    }
+  },
+
+  "mcp": {
+    "jira": { "enabled": true, "read": true, "write": false },
+    "confluence": { "enabled": true, "read": true, "write": false },
+    "bitbucket": { "enabled": true, "read": true, "write": false }
+  },
+
+  "models": {
+    "main": "auto",
+    "summary": "auto"
+  },
+
+  "timeouts": {
+    "dailySec": 1800,
+    "weeklySec": 7200,
+    "summarySec": 900,
+    "refreshSec": 600
+  },
+
+  "app": {
+    "servePort": 4321,
+    "requiredApprovals": 2,
+    "branding": {
+      "tagline": "Built to dodge JIRA · made with ☕ + a refresh button",
+      "badgeText": "Sayantan.dev",
+      "badgeUrl": "https://tinyurl.com/sayantan-myportfolio",
+      "badgeTitle": "Made by Sayantan — sayantan.dev"
+    }
+  }
+}
