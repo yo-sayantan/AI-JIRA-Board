@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { loadData, loadArchivedKeys, persistArchivedKeys } from './data'
 import { completedToTicket, type ColumnKey, type Ticket } from './types'
-import { isServed, getInternStatus, startInternRun, startTicketRefresh, RUN_COMMAND } from './lib/runner'
+import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND } from './lib/runner'
 import { Header } from './components/Header'
 import { Stats } from './components/Stats'
 import { Board } from './components/Board'
@@ -17,6 +17,7 @@ import { StaleBanner } from './components/StaleBanner'
 import { Footer } from './components/Footer'
 import { EyeOffIcon } from './components/Icons'
 import { freshness } from './lib/format'
+import { matches, parseQuery } from './lib/search'
 
 /** Flatten tickets + their nested sub-tasks into a key→ticket map (recursive). */
 function indexTickets(list: Ticket[] | undefined, map: Map<string, Ticket>) {
@@ -24,19 +25,6 @@ function indexTickets(list: Ticket[] | undefined, map: Map<string, Ticket>) {
     if (!map.has(t.key)) map.set(t.key, t)
     if (t.subtasks?.length) indexTickets(t.subtasks, map)
   }
-}
-
-function matches(t: Ticket, term: string): boolean {
-  if (!term) return true
-  const hay = [
-    t.key, t.title, t.type, t.priority, t.status, t.branch,
-    t.assignee, t.reporter, t.sprint, t.epic?.key,
-    ...(t.labels ?? []), ...(t.components ?? []),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-  return hay.includes(term)
 }
 
 export default function App() {
@@ -55,6 +43,8 @@ export default function App() {
   const anyDrawer = stack.length > 0
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const [refreshing, setRefreshing] = useState(false)
+  const [archiveRefreshing, setArchiveRefreshing] = useState(false)
+  const [runProgress, setRunProgress] = useState<{ done: number; total: number; pct: number; current?: string | null; phase?: string } | null>(null)
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const [refreshingKeys, setRefreshingKeys] = useState<Set<string>>(new Set())
   const [completedOpen, setCompletedOpen] = useState(false)
@@ -70,6 +60,10 @@ export default function App() {
 
   const refreshingRef = useRef(false)
   refreshingRef.current = refreshing
+  const archiveRefreshingRef = useRef(false)
+  archiveRefreshingRef.current = archiveRefreshing
+  const refreshingKeysRef = useRef(refreshingKeys)
+  refreshingKeysRef.current = refreshingKeys
   const toastId = useRef(0)
 
   const dismiss = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), [])
@@ -125,21 +119,63 @@ export default function App() {
   }
 
   // Poll the server until the in-flight intern run finishes, then reload to show fresh data.
+  // `runAtWhenStarted` is lastRunAt captured AFTER a successful start (or when attaching to a
+  // 409). Completion requires that stamp to change again via lastExit from THIS run — not a
+  // stale lastExit from a previous failure.
   const watchRun = useCallback(
-    (before: number | null, loadingId: number) => {
+    (
+      before: number | null,
+      loadingId: number,
+      opts?: { ceilingMs?: number; onDone?: () => void; runAtWhenStarted?: string | null },
+    ) => {
       const startTs = Date.now()
+      const runAtWhenStarted = opts?.runAtWhenStarted ?? null
+      // Ceiling must exceed the runner's own timeout, or the board gives up on a
+      // still-legitimately-running intern and reloads stale/partial data.
+      const ceiling = opts?.ceilingMs ?? 32 * 60 * 1000
+      let sawRunning = false
       const poll = async () => {
         const s = await getInternStatus()
-        // Ceiling must exceed the runner's own 30-min timeout, or the board gives up on a
-        // still-legitimately-running intern and reloads stale/partial data.
-        const timedOut = Date.now() - startTs > 32 * 60 * 1000
-        const done = s && !s.running && (s.dataModified !== before || s.lastExit != null)
-        if (!s || done || timedOut) {
+        if (s?.running) sawRunning = true
+        // Live ticket-count progress → fill the refresh button left→right.
+        const p = s?.progress
+        if (p && typeof p.total === 'number' && p.total > 0) {
+          setRunProgress({
+            done: Number(p.done) || 0,
+            total: p.total,
+            pct: typeof p.pct === 'number' ? p.pct : Math.round((100 * (Number(p.done) || 0)) / p.total),
+            current: p.current ?? null,
+            phase: p.phase,
+          })
+        } else if (s?.running) {
+          // Early phase (searching / no total yet) — keep a soft indeterminate feel via 0%.
+          setRunProgress((prev) => prev ?? { done: 0, total: 0, pct: 0, phase: p?.phase || 'starting' })
+        }
+        const timedOut = Date.now() - startTs > ceiling
+        // Only treat as done once we've observed the run (or waited briefly) and it stopped.
+        // Require lastRunAt to match what we started with (same job), so a stale lastExit from
+        // an older failure doesn't fire an error toast the moment we attach.
+        const sameJob = !runAtWhenStarted || s?.lastRunAt === runAtWhenStarted
+        const done =
+          s &&
+          !s.running &&
+          sawRunning &&
+          sameJob &&
+          (s.dataModified !== before || s.lastExit != null)
+        if (done || timedOut) {
           dismiss(loadingId)
+          setRunProgress(null)
+          opts?.onDone?.()
           // On a non-zero exit, DON'T reload — nothing fresh landed and the reload would wipe
           // this error toast before it can be read. Let the user see it and check logs/.
-          if (s?.lastExit != null && s.lastExit !== 0) {
-            toast('Intern finished with errors — check logs/.', 'error', 6000)
+          if (done && s?.lastExit != null && s.lastExit !== 0) {
+            const msg =
+              s.lastExit === 3
+                ? 'Skipped — another refresh/archive was already running. Try again in a moment.'
+                : s.lastExit === 127
+                  ? 'Intern finished with errors (tooling missing) — check logs/.'
+                  : 'Intern finished with errors — check logs/.'
+            toast(msg, 'error', 6000)
             return
           }
           if (timedOut) {
@@ -150,11 +186,62 @@ export default function App() {
           setTimeout(() => location.reload(), 600)
           return
         }
-        setTimeout(poll, 2000)
+        // Status blip (null) — keep polling; don't claim success/failure.
+        setTimeout(poll, 800)
       }
-      setTimeout(poll, 2000)
+      setTimeout(poll, 400)
     },
     [toast, dismiss],
+  )
+
+  /** Start a job; on 409 attach to the in-flight run; retry once if the lock just cleared. */
+  const beginOrWatch = useCallback(
+    async (
+      start: () => Promise<{ ok: boolean; status: number }>,
+      before: number | null,
+      loading: number,
+      opts: { onDone: () => void; ceilingMs?: number; alreadyMsg: string; failMsg: string },
+    ) => {
+      let result = await start()
+      if (!result.ok && result.status === 409) {
+        const s = await getInternStatus()
+        if (s?.running) {
+          toast(opts.alreadyMsg, 'info')
+          watchRun(before, loading, {
+            onDone: opts.onDone,
+            ceilingMs: opts.ceilingMs,
+            runAtWhenStarted: s.lastRunAt,
+          })
+          return
+        }
+        // Race: lock released between 409 and status check — retry start once.
+        await new Promise((r) => setTimeout(r, 350))
+        result = await start()
+      }
+      if (!result.ok) {
+        const s = await getInternStatus()
+        if (s?.running) {
+          toast(opts.alreadyMsg, 'info')
+          watchRun(before, loading, {
+            onDone: opts.onDone,
+            ceilingMs: opts.ceilingMs,
+            runAtWhenStarted: s.lastRunAt,
+          })
+          return
+        }
+        dismiss(loading)
+        opts.onDone()
+        toast(opts.failMsg, 'error')
+        return
+      }
+      const s = await getInternStatus()
+      watchRun(before, loading, {
+        onDone: opts.onDone,
+        ceilingMs: opts.ceilingMs,
+        runAtWhenStarted: s?.lastRunAt ?? null,
+      })
+    },
+    [toast, dismiss, watchRun],
   )
 
   const handleRefresh = useCallback(async () => {
@@ -169,30 +256,47 @@ export default function App() {
 
     // served mode: run the intern live, then reload when fresh data lands.
     setRefreshing(true)
-    const loading = toast('Running the JIRA intern agent… will take a few minutes.', 'loading', 0)
+    const loading = toast('Refreshing the board — re-fetching your active tickets…', 'loading', 0)
+    const onDone = () => setRefreshing(false)
     const before = (await getInternStatus())?.dataModified ?? null
-    const ok = await startInternRun()
-    if (!ok) {
-      // 409 = already running (maybe started in a terminal). Attach to that run instead of erroring.
-      const s = await getInternStatus()
-      if (s?.running) {
-        toast('Intern already running — watching it.', 'info')
-        watchRun(before, loading)
-        return
-      }
-      dismiss(loading)
-      setRefreshing(false)
-      toast('Could not start the intern run.', 'error')
+    await beginOrWatch(startInternRun, before, loading, {
+      onDone,
+      alreadyMsg: 'Intern already running — watching it.',
+      failMsg: 'Could not start the intern run.',
+    })
+  }, [toast, beginOrWatch])
+
+  // The DEEP job: rebuild the Completed archive (every closed ticket + PRs/branches). Slow by design.
+  const handleArchiveRefresh = useCallback(async () => {
+    if (refreshingRef.current || archiveRefreshingRef.current) return
+    if (!isServed()) {
+      toast('The archive rebuild needs the local server — run `npm run serve`.', 'info', 4500)
       return
     }
-    watchRun(before, loading)
-  }, [toast, dismiss, watchRun])
+    setArchiveRefreshing(true)
+    const loading = toast('Rebuilding the Completed archive — the deep scan takes a while…', 'loading', 0)
+    const onDone = () => setArchiveRefreshing(false)
+    const before = (await getInternStatus())?.dataModified ?? null
+    await beginOrWatch(startArchiveRun, before, loading, {
+      onDone,
+      ceilingMs: 130 * 60 * 1000,
+      alreadyMsg: 'Another intern job is running — watching it.',
+      failMsg: 'Could not start the archive rebuild.',
+    })
+  }, [toast, beginOrWatch])
 
-  // Per-ticket background refresh — fetch the latest status of ONE in-flight ticket (served mode).
+  // Per-ticket background refresh — queue-aware. Several clicks enqueue FIFO on the
+  // server; each key is watched until IT leaves the pending set (not until data.json
+  // mtime bumps — another ticket finishing must not steal this watcher's completion).
   const handleRefreshTicket = useCallback(
     async (key: string) => {
       if (!isServed()) {
         toast('Single-ticket refresh needs the local server — run `npm run serve`.', 'info', 4500)
+        return
+      }
+      // Already watching this key locally — don't stack toasts / pollers.
+      if (refreshingKeysRef.current.has(key)) {
+        toast(`${key} is already queued.`, 'info', 1800)
         return
       }
       setRefreshingKeys((prev) => new Set(prev).add(key))
@@ -205,31 +309,29 @@ export default function App() {
           return n
         })
         if (msg) toast(msg, kind, kind === 'error' ? 4000 : 1800)
+        // Reload only when the whole queue is drained — mid-queue reloads abort other watches.
         if (reload) setTimeout(() => location.reload(), 500)
       }
 
-      const before = (await getInternStatus())?.dataModified ?? null
-      const ok = await startTicketRefresh(key)
-      if (!ok) {
-        // 409 (already running) → attach & watch; otherwise it genuinely failed to start.
-        const s = await getInternStatus()
-        if (!s?.refreshingKeys?.includes(key)) {
-          clear(`Couldn't start refresh for ${key}.`, 'error')
-          return
-        }
-        toast(`Already refreshing ${key} — watching it.`, 'info', 2500)
+      const start = await startTicketRefresh(key)
+      if (!start?.ok) {
+        clear(`Couldn't start refresh for ${key}.`, 'error')
+        return
+      }
+      if (start.already) {
+        toast(`${key} is already in the refresh queue.`, 'info', 2000)
+      } else if ((start.position ?? 0) > 0) {
+        toast(`${key} queued (#${(start.position ?? 0) + 1}) — will run next.`, 'info', 2200)
       }
 
-      // serve.mjs adds the key to its in-flight set synchronously on POST, so a successful start
-      // means it WAS running as of now. Seeding sawRunning=true lets a fast no-op refresh (that
-      // finishes before the first poll) terminate as "up to date" instead of polling to timeout.
-      let sawRunning = ok
+      let sawPending = true // POST put us on the server pending list synchronously
       let nullStreak = 0
       const startTs = Date.now()
+      // Ceiling scales with queue depth so waiting behind others isn't a false timeout.
+      const ceilingMs = 11 * 60 * 1000 + Math.max(0, start.position ?? 0) * 5 * 60 * 1000
       const poll = async () => {
         const s = await getInternStatus()
         if (!s) {
-          // transient server hiccup — tolerate a few, then give up cleanly (not "up to date").
           if (++nullStreak >= 4) {
             clear('Lost contact with the local server.', 'error')
             return
@@ -238,21 +340,30 @@ export default function App() {
           return
         }
         nullStreak = 0
-        const stillRunning = !!s.refreshingKeys?.includes(key)
-        if (stillRunning) sawRunning = true
-        const changed = s.dataModified !== before
-        // Ceiling must exceed refresh-ticket.sh's own 10-min timeout to avoid a false "timed out".
-        const timedOut = Date.now() - startTs > 11 * 60 * 1000
-        // Done = data changed, OR the run we observed has finished, OR we hit the ceiling.
-        if (changed || (sawRunning && !stillRunning) || timedOut) {
-          if (changed) clear(`${key} updated — reloading.`, 'success', true)
+        const pending = s.refreshingKeys ?? []
+        const stillPending = pending.includes(key)
+        if (stillPending) sawPending = true
+        const exitCode = s.refreshExits?.[key]
+        const finished = sawPending && !stillPending && typeof exitCode === 'number'
+        const timedOut = Date.now() - startTs > ceilingMs
+        if (finished || timedOut) {
+          const failed = typeof exitCode === 'number' && exitCode !== 0
+          const othersLeft = pending.some((k) => k !== key)
+          if (failed) clear(`${key} refresh failed (exit ${exitCode}).`, 'error')
           else if (timedOut) clear(`${key} refresh timed out.`, 'error')
-          else clear(`${key} is already up to date.`, 'info')
+          else if (exitCode === 0) {
+            // Success: reload only if nothing else is still queued (avoids stomping siblings).
+            clear(
+              othersLeft ? `${key} updated — more refreshes still running.` : `${key} updated — reloading.`,
+              'success',
+              !othersLeft,
+            )
+          } else clear(`${key} is already up to date.`, 'info')
           return
         }
         setTimeout(poll, 1500)
       }
-      setTimeout(poll, 1500)
+      setTimeout(poll, 1000)
     },
     [toast, dismiss],
   )
@@ -268,7 +379,11 @@ export default function App() {
       if (s?.running) {
         setRefreshing(true)
         const id = toast('JIRA Intern Agent is running… the board will reload when it finishes.', 'loading', 0)
-        watchRun(s.dataModified ?? null, id)
+        watchRun(s.dataModified ?? null, id, {
+          onDone: () => setRefreshing(false),
+          runAtWhenStarted: s.lastRunAt,
+          ceilingMs: s.job === 'archive' ? 130 * 60 * 1000 : undefined,
+        })
       }
     })()
   }, [served, toast, watchRun])
@@ -292,24 +407,28 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleRefresh, anyDrawer, completedOpen])
 
-  const term = query.trim().toLowerCase()
-  const filtered = useMemo(() => data.tickets.filter((t) => matches(t, term)), [data.tickets, term])
+  const terms = useMemo(() => parseQuery(query), [query])
+  const filtered = useMemo(() => data.tickets.filter((t) => matches(t, terms)), [data.tickets, terms])
   // User-archived tickets were already retired to completed[] inside loadData.
   const boardTickets = filtered.filter((t) => t.column !== 'hold')
   const holdTickets = filtered.filter((t) => t.column === 'hold')
   const hasAnyActive = useMemo(() => data.tickets.some((t) => t.column !== 'hold'), [data.tickets])
+  const myCompletedCount = useMemo(() => data.completed.filter((c) => c.mine !== false).length, [data.completed])
   const fr = freshness(data.generatedAt, now)
 
   // Index every ticket — top-level, completed parents, and all nested sub-tasks — so clicking
-  // any sub-task opens its own detail page.
+  // any sub-task opens its own detail page. Standalone rows are indexed BEFORE nested ones:
+  // the archive holds a sub-ticket twice (its own full row, and a compact copy under its
+  // master), and opening it must land on the full row.
   const byKey = useMemo(() => {
     const m = new Map<string, Ticket>()
-    indexTickets(data.tickets, m)
-    for (const c of data.completed) {
-      const t = completedToTicket(c)
+    const nested: Ticket[] = []
+    const top = [...data.tickets, ...data.completed.map(completedToTicket)]
+    for (const t of top) {
       if (!m.has(t.key)) m.set(t.key, t)
-      indexTickets(t.subtasks, m)
+      if (t.subtasks?.length) nested.push(...t.subtasks)
     }
+    indexTickets(nested, m)
     return m
   }, [data])
 
@@ -366,14 +485,19 @@ export default function App() {
         dark={dark}
         toggleTheme={toggleTheme}
         refreshing={refreshing}
+        archiveRefreshing={archiveRefreshing}
+        runProgress={runProgress}
         served={served}
         onRefresh={handleRefresh}
+        onArchiveRefresh={handleArchiveRefresh}
       />
 
       {fr.stale && <StaleBanner label={fr.label} served={served} refreshing={refreshing} onRefresh={handleRefresh} />}
 
-      {/* Counts follow the current search so the chips always agree with what's on the board. */}
-      <Stats tickets={filtered} completedCount={data.completed.length} active={focus} onSelect={setFocus} onOpenCompleted={() => setCompletedOpen(true)} />
+      {/* Counts follow the current search so the chips always agree with what's on the board.
+          The Completed chip counts MY tickets only — the archive also carries team-mates'
+          sub-tickets for context, and it opens on the same "Mine" scope. */}
+      <Stats tickets={filtered} completedCount={myCompletedCount} active={focus} onSelect={setFocus} onOpenCompleted={() => setCompletedOpen(true)} />
 
       {!hasAnyActive ? (
         <FunEmptyBoard served={served} refreshing={refreshing} onRefresh={handleRefresh} />

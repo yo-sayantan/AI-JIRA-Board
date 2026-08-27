@@ -2,7 +2,7 @@ import { motion } from 'motion/react'
 import type { Ticket } from '../types'
 import { COLUMN_META } from '../lib/columns'
 import { DONE_BOARD_DAYS } from '../data'
-import { priorityMeta, typeMeta, isClosedPr, prListOf, branchesOf, relTime, shortBranch, hexToRgba } from '../lib/format'
+import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, branchesOf, relTime, shortBranch, hexToRgba } from '../lib/format'
 import { Pill, PriorityBadge, PrBadge, Approvals, PointsTag } from './ui'
 import { TypeIcon, CommentIcon, RefreshIcon, TrophyIcon } from './Icons'
 
@@ -36,7 +36,7 @@ export function TicketCard({
   const meta = COLUMN_META[ticket.column]
   const accent = meta?.accent ?? '#64748b'
   const prio = priorityMeta(ticket.priority)
-  const tm = typeMeta(ticket.type)
+  const tm = typeMeta(effectiveType(ticket))
   const urgent = prio.rank >= 4
   const rel = relTime(ticket.lastUpdate, now)
   const prs = prListOf(ticket)
@@ -129,7 +129,7 @@ export function TicketCard({
 
       <div className="relative flex items-center justify-between gap-2">
         <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-wide" style={{ color: accent }}>
-          <TypeIcon type={ticket.type} color={tm.color} size={13} />
+          <TypeIcon type={effectiveType(ticket)} color={tm.color} size={13} />
           {ticket.key}
           <PointsTag points={ticket.storyPoints} />
         </span>

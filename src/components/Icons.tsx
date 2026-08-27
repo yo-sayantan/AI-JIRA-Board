@@ -145,6 +145,41 @@ export function TypeIcon({ type, color = 'currentColor', size = 14 }: { type?: s
     body = <path d="M10 3h4M9 3v5l-4 9a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 17l-4-9V3" {...s} />
   } else if (/improvement|enhance/.test(t)) {
     body = <path d="M12 3l1.8 4.4L18 9l-4.2 1.6L12 15l-1.8-4.4L6 9l4.2-1.6L12 3zM18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" fill={color} />
+  } else if (/support|service[\s-]?desk|incident|helpdesk/.test(t)) {
+    body = (
+      <>
+        <path d="M4.5 13a7.5 7.5 0 0 1 15 0" {...s} />
+        <rect x="3.5" y="12.5" width="4" height="6" rx="1.8" stroke={color} strokeWidth="1.9" />
+        <rect x="16.5" y="12.5" width="4" height="6" rx="1.8" stroke={color} strokeWidth="1.9" />
+        <path d="M18.5 18.5v.5a2.5 2.5 0 0 1-2.5 2.5h-3" {...s} />
+      </>
+    )
+  } else if (/requirement/.test(t)) {
+    body = (
+      <>
+        <rect x="5" y="4.5" width="14" height="16" rx="2.5" stroke={color} strokeWidth="1.9" />
+        <path d="M9 3h6v3.5H9z" stroke={color} strokeWidth="1.9" strokeLinejoin="round" />
+        <path d="M8.5 11.5h7M8.5 15h5" {...s} />
+      </>
+    )
+  } else if (/tech[\s-]?debt|refactor/.test(t)) {
+    body = <path d="M15 6.5a3.5 3.5 0 0 0-4.6 4.3l-6 6 2.8 2.8 6-6A3.5 3.5 0 0 0 17.5 9l-2 2-2-2 2-2z" stroke={color} strokeWidth="1.9" strokeLinejoin="round" />
+  } else if (/release|deploy/.test(t)) {
+    body = (
+      <>
+        <path d="M12 2.5c2.8 2 4.2 5.1 4.2 8.3 0 1.9-.4 3.6-1.1 5.2H8.9a13 13 0 0 1-1.1-5.2c0-3.2 1.4-6.3 4.2-8.3z" stroke={color} strokeWidth="1.9" strokeLinejoin="round" />
+        <circle cx="12" cy="9.5" r="1.8" stroke={color} strokeWidth="1.6" />
+        <path d="M8.9 13.5L6 16.5l3.4.7M15.1 13.5L18 16.5l-3.4.7M12 18.5v3" {...s} />
+      </>
+    )
+  } else if (/onboard/.test(t)) {
+    body = (
+      <>
+        <path d="M12 4L2.5 8.5 12 13l9.5-4.5L12 4z" stroke={color} strokeWidth="1.9" strokeLinejoin="round" />
+        <path d="M6.5 11v4.3c0 1.5 2.5 2.9 5.5 2.9s5.5-1.4 5.5-2.9V11" {...s} />
+        <path d="M21 9v4.5" {...s} />
+      </>
+    )
   } else if (/task/.test(t)) {
     body = (
       <>

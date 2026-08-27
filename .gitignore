@@ -15,6 +15,7 @@ jira-intern/cache/
 jira-intern/logs/
 jira-intern/.state.json
 jira-intern/_STATUS.md
+jira-intern/.progress.json
 jira-intern/.pr_overrides.json
 jira-intern/*.lock
 jira-intern/.*.lock

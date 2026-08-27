@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { Ticket, LinkRef, Comment, PullRequest } from '../types'
 import { COLUMN_META } from '../lib/columns'
-import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, isAssignedToMe, hexToRgba } from '../lib/format'
+import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba } from '../lib/format'
 import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink } from './ui'
 import { Pipeline } from './Pipeline'
 import {
@@ -143,7 +143,7 @@ export function TicketDetail({
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             <StatusBadge column={ticket.column} label={ticket.status} />
             <PriorityBadge priority={ticket.priority} />
-            <TypeBadge type={ticket.type} />
+            <TypeBadge type={effectiveType(ticket)} />
             <PrBadge state={prs[0]?.state} />
             {ticket.fixVersions?.map((v) => (
               <Pill key={v} color="#8b5cf6" title={`Fix version: ${v}`}>
@@ -572,6 +572,14 @@ function PrRow({ pr }: { pr: PullRequest }) {
               #{pr.id}
             </span>
           ))}
+        {/* Dev info comes from Jira's index, so PRs for one ticket can sit in different
+            repos (app, pipeline, infra) — the number alone doesn't identify them. */}
+        {pr.repo && (
+          <span className="rounded-md bg-[var(--surface-solid)] px-1.5 py-0.5 font-mono text-[10.5px] text-[var(--ink-soft)]" title="Repository">
+            {pr.repo}
+          </span>
+        )}
+        {pr.title && <span className="min-w-0 truncate text-[var(--muted)]">{pr.title}</span>}
         {!closed && <Approvals approvals={pr.approvals} />}
         {closed && typeof pr.approvals === 'number' && (
           <span className="font-semibold text-[#22c55e]">✓ {pr.approvals} approval{pr.approvals === 1 ? '' : 's'}</span>
@@ -749,13 +757,21 @@ function TreeRow({ node, onOpen, isRoot = false, user }: { node: Ticket; onOpen?
   const kids = node.subtasks ?? []
   // For sub-tasks owned by someone else, surface who's on it (those are fetched light, by design).
   const showAssignee = !isRoot && !!node.assignee && !isAssignedToMe(node.assignee, user)
-  const inner = (
+  // Review state at a glance — a master ticket's real progress lives in its sub-tasks' PRs,
+  // often spread across repos, so every review is listed and linked rather than just the first.
+  const nodePrs = isRoot ? [] : prListOf(node).filter((p) => p.state && p.state !== 'none')
+  const nodeBranches = branchesOf(node)
+  const label = (
     <>
-      <TypeIcon type={node.type} color={typeMeta(node.type).color} size={12} />
+      <TypeIcon type={effectiveType(node)} color={typeMeta(effectiveType(node)).color} size={12} />
       <span className="shrink-0 font-mono text-[11px] font-bold" style={{ color: accent }}>
         {node.key}
       </span>
       <span className="min-w-0 flex-1 truncate text-[12.5px] text-[var(--ink)]">{node.title}</span>
+    </>
+  )
+  const meta = (
+    <>
       {showAssignee && (
         <span
           className="hidden shrink-0 items-center gap-1 rounded-full border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--muted)] sm:inline-flex"
@@ -764,6 +780,28 @@ function TreeRow({ node, onOpen, isRoot = false, user }: { node: Ticket; onOpen?
           <PersonIcon size={10} /> {node.assignee}
         </span>
       )}
+      {!isRoot && nodeBranches.length > 0 && (
+        <span className="hidden shrink-0 items-center gap-1 text-[10px] text-[var(--muted)] md:inline-flex" title={nodeBranches.join('\n')}>
+          <BranchIcon size={10} /> {nodeBranches.length}
+        </span>
+      )}
+      {nodePrs.map((p, i) => (
+        <span key={i} className="hidden shrink-0 items-center gap-1 sm:inline-flex">
+          <PrBadge state={p.state} />
+          {p.url && (
+            <a
+              href={p.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[10px] font-bold hover:underline"
+              style={{ color: 'var(--pr-link)' }}
+              title={[p.repo, p.title].filter(Boolean).join(' — ')}
+            >
+              #{p.id}
+            </a>
+          )}
+        </span>
+      ))}
       {isRoot ? (
         <span className="shrink-0 rounded-full border border-[var(--line)] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-[var(--muted)]">this ticket</span>
       ) : (
@@ -773,17 +811,22 @@ function TreeRow({ node, onOpen, isRoot = false, user }: { node: Ticket; onOpen?
   )
   return (
     <div>
-      {isRoot ? (
-        <div className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] px-2.5 py-1.5">{inner}</div>
-      ) : (
-        <button
-          onClick={() => onOpen?.(node.key)}
-          className="flex w-full items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-left transition-colors hover:border-[var(--muted)]"
-          title="Open sub-task details"
-        >
-          {inner}
-        </button>
-      )}
+      {/* The PR links must stay real anchors, so the row is a flex container with a button
+          for the ticket itself rather than one big button wrapping everything. */}
+      <div
+        className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${
+          isRoot ? 'bg-[var(--surface-2)]' : 'border border-[var(--line)] bg-[var(--surface-2)] transition-colors hover:border-[var(--muted)]'
+        }`}
+      >
+        {isRoot ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">{label}</div>
+        ) : (
+          <button onClick={() => onOpen?.(node.key)} className="flex min-w-0 flex-1 items-center gap-2 text-left" title="Open sub-ticket details">
+            {label}
+          </button>
+        )}
+        {meta}
+      </div>
       {kids.length > 0 && (
         <div className="ml-3 mt-1.5 flex flex-col gap-1.5 border-l-2 pl-3" style={{ borderColor: hexToRgba(accent, 0.3) }}>
           {kids.map((k) => (

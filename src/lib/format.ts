@@ -38,8 +38,36 @@ export function typeMeta(t?: string | null): { color: string; glyph: string } {
   if (/sub-?task/.test(s)) return { color: '#0ea5e9', glyph: '↳' }
   if (/spike|research/.test(s)) return { color: '#f59e0b', glyph: '🔬' }
   if (/improvement|enhancement/.test(s)) return { color: '#14b8a6', glyph: '✨' }
+  if (/tech[\s-]?debt|refactor/.test(s)) return { color: '#f97316', glyph: '🔧' }
+  if (/release|deploy/.test(s)) return { color: '#ec4899', glyph: '🚀' }
+  if (/onboard/.test(s)) return { color: '#84cc16', glyph: '🎓' }
   if (/task/.test(s)) return { color: '#3b82f6', glyph: '☑️' }
   return { color: '#64748b', glyph: '🎫' }
+}
+
+// ── Derived types ─────────────────────────────────────────────────────────
+// Deployment / release-coordination and onboarding work arrives from Jira typed as
+// plain "Task" — derive first-class types from the title so every UI can surface
+// them. Keyword pairing avoids false hits like "spring-beans-3.2.11.RELEASE.jar".
+const RELEASE_RE = /\brelease\s+(?:management|coordination|mgmt)\b|\bdeploy(?:ing|ment|s)?\b/i
+const ONBOARDING_RE = /\bon-?boarding\b/i
+
+/** Display type: derived "Release" / "Onboarding" when the title says so, else the Jira type. */
+export function effectiveType(t: { type?: string | null; title?: string | null }): string | null {
+  const title = t.title ?? ''
+  if (RELEASE_RE.test(title)) return 'Release'
+  if (ONBOARDING_RE.test(title)) return 'Onboarding'
+  return t.type ?? null
+}
+
+/** Target environment of a release ticket, parsed from its title. */
+export function releaseEnvOf(t: { title?: string | null }): { label: string; color: string } | null {
+  const s = t.title ?? ''
+  if (/\bprod(?:uction)?\b/i.test(s)) return { label: 'Prod', color: '#ef4444' }
+  if (/\bdemo\b/i.test(s)) return { label: 'Demo', color: '#f59e0b' }
+  // "Stage", not "Staging" — the label sits in a fixed-width column next to Prod and Demo.
+  if (/\bsta?g(?:e|ing)?\b/i.test(s)) return { label: 'Stage', color: '#0ea5e9' }
+  return null
 }
 
 // ── Pull request ──────────────────────────────────────────────────────────
@@ -278,24 +306,54 @@ export function currentSprint(tickets: { sprint?: string | null }[]): SprintInfo
   )
 }
 
-/** Where the sprint stands relative to `now` — drives the header chip's label + colour. */
+/** Working days (Mon–Fri) in the INCLUSIVE calendar range [from, to]; 0 when to < from.
+ *  Sprints run ~2–3 weeks, so a simple day walk is plenty. */
+export function workdaysBetween(fromTs: number, toTs: number): number {
+  if (isNaN(fromTs) || isNaN(toTs) || toTs < fromTs) return 0
+  const d = new Date(fromTs)
+  d.setHours(0, 0, 0, 0)
+  const end = new Date(toTs)
+  end.setHours(0, 0, 0, 0)
+  let n = 0
+  while (d <= end) {
+    const wd = d.getDay()
+    if (wd !== 0 && wd !== 6) n++
+    d.setDate(d.getDate() + 1)
+  }
+  return n
+}
+
+/** Where the sprint stands relative to `now` — drives the header chip's label + colour.
+ *  Forward-looking counts ("left" / "starts in") are WORKING days (Mon–Fri), matching a
+ *  5-day sprint week; "ended ago" stays calendar days (how long it's actually been). */
 export function sprintStatus(
   sp: SprintInfo,
   now: number,
 ): { label: string; color: string; pct: number | null } {
   const DAY = 86_400_000
+  const days = (n: number) => `${n} day${n === 1 ? '' : 's'}`
   const startTs = sp.start ? Date.parse(`${sp.start}T00:00:00`) : NaN
   const endTs = sp.end ? Date.parse(`${sp.end}T23:59:59`) : NaN
   if (!isNaN(startTs) && now < startTs) {
-    return { label: `starts in ${Math.ceil((startTs - now) / DAY)}d`, color: '#64748b', pct: 0 }
+    return { label: `starts in ${days(workdaysBetween(now + DAY, startTs))}`, color: '#64748b', pct: 0 }
   }
   if (!isNaN(endTs)) {
-    if (now > endTs) return { label: `ended ${Math.ceil((now - endTs) / DAY)}d ago`, color: '#ef4444', pct: 1 }
-    const left = Math.ceil((endTs - now) / DAY)
-    const pct = !isNaN(startTs) && endTs > startTs ? Math.min(1, Math.max(0, (now - startTs) / (endTs - startTs))) : null
-    return { label: `${left}d left`, color: left <= 3 ? '#f59e0b' : '#3b82f6', pct }
+    if (now > endTs) return { label: `ended ${days(Math.ceil((now - endTs) / DAY))} ago`, color: '#ef4444', pct: 1 }
+    const left = workdaysBetween(now, endTs) // includes today when it's a weekday
+    const pct =
+      !isNaN(startTs) && endTs > startTs
+        ? Math.min(1, Math.max(0, workdaysBetween(startTs, now) / Math.max(1, workdaysBetween(startTs, endTs))))
+        : null
+    return { label: `${days(left)} left`, color: left <= 3 ? '#f59e0b' : '#3b82f6', pct }
   }
   return { label: sp.state || 'sprint', color: '#64748b', pct: null }
+}
+
+/** Compact "Jul 9" style date (no year) — for tight UI like the header sprint chip. */
+export function fmtDateShort(v?: string | null): string {
+  const d = parseDate(v)
+  if (!d) return v ?? '—'
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 // ── misc ──────────────────────────────────────────────────────────────────

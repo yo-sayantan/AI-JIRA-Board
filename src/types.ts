@@ -25,8 +25,15 @@ export interface PullRequest {
   reviewers?: string[]
   sourceBranch?: string | null
   destinationBranch?: string | null
+  /**
+   * Repository the review happened in. Dev info comes from Jira's dev-status index, so one
+   * ticket's PRs can span several repos (app, pipeline, infra) — the number alone is ambiguous.
+   */
+  repo?: string | null
+  author?: string | null
   merged?: boolean
   mergedAt?: string | null
+  updatedAt?: string | null
 }
 
 export interface Comment {
@@ -82,6 +89,14 @@ export interface Ticket {
   resolved?: string | null
   /** Parent issue key, if this ticket is itself a sub-task. */
   parentKey?: string | null
+  /** The parent ticket's summary, for lineage chips/tooltips. */
+  parentTitle?: string | null
+  /**
+   * False for a team-mate's sub-task pulled in because it hangs off a master ticket I worked
+   * on. Those rows give a master ticket its full delivery picture without being counted as
+   * my own output.
+   */
+  mine?: boolean
   /** Child sub-tasks — each a full ticket, openable as its own detail page. */
   subtasks?: Ticket[]
   subtaskCount?: number | null
@@ -131,8 +146,12 @@ export interface CompletedTicket {
   /** Project key prefix, e.g. "FIDM". Derived from key if absent. */
   project?: string | null
   status?: string | null // current status: Done / Closed / Resolved
-  /** Set when this row is actually a sub-task — used to keep it out of the archive. */
+  /** Set when this row is a sub-task archived standalone (its parent may belong to someone else). */
   parentKey?: string | null
+  /** The parent ticket's summary, for lineage chips/tooltips. */
+  parentTitle?: string | null
+  /** False for team-mates' work archived alongside mine — see Ticket.mine. */
+  mine?: boolean
   /** When it was opened. */
   created?: string | null
   /** When it was closed / resolved (ISO). */
