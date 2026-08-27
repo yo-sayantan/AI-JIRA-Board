@@ -4,6 +4,7 @@ import { BOARD_COLUMNS, NEXT_SPRINT_SECTION } from '../lib/columns'
 import type { ColumnKey, Ticket } from '../types'
 import { hexToRgba } from '../lib/format'
 import { TrophyIcon } from './Icons'
+import { OPEN_NEXT_SPRINT_EVENT } from './NextSprint'
 
 function AnimatedNumber({ value }: { value: number }) {
   const spring = useSpring(value, { stiffness: 110, damping: 22 })
@@ -81,7 +82,11 @@ export function Stats({
           whileHover={{ scale: 1.05, y: -1 }}
           whileTap={{ scale: 0.95 }}
           transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-          onClick={() => document.getElementById('jb-next-sprint')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+          onClick={() => {
+            // Ask the section to expand (it may be collapsed) BEFORE scrolling to it.
+            window.dispatchEvent(new Event(OPEN_NEXT_SPRINT_EVENT))
+            document.getElementById('jb-next-sprint')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }}
           title="Assigned to you, but the sprint hasn’t started — jump to the Next Sprint section"
           className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors"
           style={{

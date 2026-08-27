@@ -549,13 +549,7 @@ export default function App() {
       <OnHold tickets={holdTickets} now={now} onOpen={openTicket} />
 
       {/* Next sprint's queue — below the board and On Hold, because it's the least urgent thing here. */}
-      <NextSprint
-        tickets={nextSprintTickets}
-        now={now}
-        onOpen={openTicket}
-        onRefreshTicket={handleRefreshTicket}
-        refreshingKeys={refreshingKeys}
-      />
+      <NextSprint tickets={nextSprintTickets} now={now} onOpen={openTicket} />
 
       <Footer />
 
