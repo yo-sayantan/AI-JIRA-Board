@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { Ticket } from '../types'
 import { NEXT_SPRINT_SECTION as SEC } from '../lib/columns'
@@ -12,20 +12,7 @@ import {
   workdaysBetween,
   type SprintInfo,
 } from '../lib/format'
-import { ChevronIcon, TypeIcon } from './Icons'
-
-/** Stats' "Next Sprint" chip fires this before scrolling here, so a collapsed section opens itself. */
-export const OPEN_NEXT_SPRINT_EVENT = 'jb-open-next-sprint'
-
-const LS_KEY = 'jb-next-sprint-open'
-/** Closed by DEFAULT — parked work should cost one pill in the corner until asked for. */
-const readOpen = () => {
-  try {
-    return localStorage.getItem(LS_KEY) === '1'
-  } catch {
-    return false // file:// localStorage may be blocked
-  }
-}
+import { CalendarIcon, ChevronIcon, TypeIcon } from './Icons'
 
 /** Most urgent first, then most recently touched — same order as the board's To Do column. */
 const byUrgency = (a: Ticket, b: Ticket) =>
@@ -139,29 +126,23 @@ export function NextSprint({
   tickets,
   now,
   onOpen,
+  visible,
+  forceOpen = false,
 }: {
   tickets: Ticket[]
   now: number
   onOpen: (key: string) => void
+  /** Whether the bar exists at all — driven by the top chip selection ('next' or 'all'). */
+  visible: boolean
+  /** Open it straight to the full panel ("All"); otherwise it reveals the minimal icon first. */
+  forceOpen?: boolean
 }) {
-  const [open, setOpen] = useState(readOpen)
-  const toggle = useCallback(() => {
-    setOpen((v) => {
-      try {
-        localStorage.setItem(LS_KEY, v ? '0' : '1')
-      } catch {
-        /* file:// localStorage may be blocked */
-      }
-      return !v
-    })
-  }, [])
-
-  // Jumping here from the stats chip should reveal the rows, not land on a closed strip.
+  // Presence is the parent's call (the top chips); this only tracks the icon↔panel form. Re-sync
+  // on every (re)show so "All" lands on the panel and the Next Sprint chip lands on the icon.
+  const [expanded, setExpanded] = useState(forceOpen)
   useEffect(() => {
-    const onJump = () => setOpen(true)
-    window.addEventListener(OPEN_NEXT_SPRINT_EVENT, onJump)
-    return () => window.removeEventListener(OPEN_NEXT_SPRINT_EVENT, onJump)
-  }, [])
+    if (visible) setExpanded(forceOpen)
+  }, [visible, forceOpen])
 
   const groups = groupBySprint(tickets, now)
   const points = tickets.reduce((n, t) => n + (typeof t.storyPoints === 'number' ? t.storyPoints : 0), 0)
@@ -180,37 +161,39 @@ export function NextSprint({
 
   return (
     <AnimatePresence initial={false}>
-      {tickets.length > 0 && (
+      {visible && tickets.length > 0 && (
         <motion.section
           id="jb-next-sprint"
           initial={{ opacity: 0, marginTop: 0 }}
           animate={{ opacity: 1, marginTop: 16 }}
           exit={{ opacity: 0, marginTop: 0 }}
           transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-          // Collapsed, it's a pill in the bottom-right corner under everything else. Expanded, it
-          // takes the full width — the space is only spent once you've asked to see the rows.
+          // Collapsed, it's just a flat icon in the bottom-right corner. Expanded, it takes the full
+          // width — the space is only spent once you've asked to see the rows.
           className="flex justify-end"
         >
-          {!open ? (
+          {!expanded ? (
             <motion.button
               type="button"
-              onClick={toggle}
+              onClick={() => setExpanded(true)}
               aria-expanded={false}
+              aria-label={`Show Next Sprint — ${tickets.length} ticket${tickets.length === 1 ? '' : 's'} queued`}
               title={tip}
-              initial={{ opacity: 0, scale: 0.96 }}
+              initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.16 }}
               whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.97 }}
-              className="card-shadow inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface-solid)] px-3 py-1.5 text-[12px] font-semibold text-[var(--ink-soft)] transition-colors hover:border-[var(--muted)]"
+              whileTap={{ scale: 0.94 }}
+              className="card-shadow relative grid h-9 w-9 place-items-center rounded-full border bg-[var(--surface-solid)] transition-colors hover:border-[var(--muted)]"
+              style={{ borderColor: hexToRgba(SEC.accent, 0.5) }}
             >
-              <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: SEC.accent }} />
-              {SEC.label}
-              <b className="tabular-nums" style={{ color: SEC.accent }}>
+              <CalendarIcon size={15} color={SEC.accent} />
+              {/* Small count so the icon still carries information at a glance. */}
+              <span
+                className="absolute -right-1 -top-1 grid h-4 min-w-[16px] place-items-center rounded-full px-1 text-[9.5px] font-bold tabular-nums text-white"
+                style={{ background: SEC.accent }}
+              >
                 {tickets.length}
-              </b>
-              <span aria-hidden className="rotate-90 text-[var(--muted)]">
-                <ChevronIcon size={10} />
               </span>
             </motion.button>
           ) : (
@@ -222,10 +205,10 @@ export function NextSprint({
             >
               <button
                 type="button"
-                onClick={toggle}
+                onClick={() => setExpanded(false)}
                 aria-expanded
                 aria-controls="jb-next-sprint-rows"
-                title={tip}
+                title="Collapse to the corner icon"
                 className="flex w-full items-center gap-2 px-3 py-[7px] text-left transition-colors hover:bg-[var(--surface-solid)]"
               >
                 {/* Same 8px dot the pill and the stats chip use — one glyph, echoed everywhere. */}

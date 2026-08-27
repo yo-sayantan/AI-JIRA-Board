@@ -4,7 +4,7 @@ import { loadData, loadArchivedKeys, persistArchivedKeys } from './data'
 import { completedToTicket, type ColumnKey, type Ticket } from './types'
 import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND } from './lib/runner'
 import { Header } from './components/Header'
-import { Stats } from './components/Stats'
+import { Stats, type StatSelection } from './components/Stats'
 import { Board } from './components/Board'
 import { OnHold } from './components/OnHold'
 import { NextSprint } from './components/NextSprint'
@@ -37,7 +37,22 @@ export default function App() {
   const [now] = useState(() => Date.now())
   const [served] = useState(() => isServed())
   const [query, setQuery] = useState('')
-  const [focus, setFocus] = useState<ColumnKey | null>(null)
+  // One selection drives the whole top chip row (see StatSelection). A column key filters the
+  // board; 'next' reveals the Next Sprint bar; 'all' reveals everything expanded; null is the
+  // default. Because it's a single value, choosing any chip clears the rest — which is exactly
+  // what hides the Next Sprint bar the moment another tab is picked.
+  const [sel, setSel] = useState<StatSelection>(null)
+  const focus: ColumnKey | null = sel === 'next' || sel === 'all' ? null : sel
+  const nextSprintVisible = sel === 'next' || sel === 'all'
+  // Picking the Next Sprint chip reveals its icon at the very bottom; nudge it into view so the
+  // click has a visible result on a tall board. 'nearest' won't yank the page if it's already shown.
+  useEffect(() => {
+    if (sel !== 'next') return
+    const id = requestAnimationFrame(() =>
+      document.getElementById('jb-next-sprint')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
+    )
+    return () => cancelAnimationFrame(id)
+  }, [sel])
   // Navigation stack of ticket keys. Opening from the board resets it; opening a
   // sub-task pushes another drawer on top (each level is its own stacked drawer).
   const [stack, setStack] = useState<string[]>([])
@@ -510,8 +525,8 @@ export default function App() {
         tickets={filtered.filter((t) => !isNextSprint(t, now))}
         completedCount={myCompletedCount}
         nextSprintCount={nextSprintTickets.length}
-        active={focus}
-        onSelect={setFocus}
+        active={sel}
+        onSelect={setSel}
         onOpenCompleted={() => setCompletedOpen(true)}
       />
 
@@ -525,7 +540,7 @@ export default function App() {
           <div>
             <div className="mb-2 text-3xl">🔍</div>
             <p className="text-[14px] font-semibold text-[var(--ink)]">No tickets match “{query}”.</p>
-            <button onClick={() => { setQuery(''); setFocus(null) }} className="mt-2 text-[12.5px] text-[#8b9cff] hover:underline">
+            <button onClick={() => { setQuery(''); setSel(null) }} className="mt-2 text-[12.5px] text-[#8b9cff] hover:underline">
               Clear search
             </button>
           </div>
@@ -548,8 +563,15 @@ export default function App() {
 
       <OnHold tickets={holdTickets} now={now} onOpen={openTicket} />
 
-      {/* Next sprint's queue — below the board and On Hold, because it's the least urgent thing here. */}
-      <NextSprint tickets={nextSprintTickets} now={now} onOpen={openTicket} />
+      {/* Next sprint's queue — hidden until its top chip (or "All") is picked. 'all' opens it
+          fully; 'next' reveals the minimal corner icon to expand on demand. */}
+      <NextSprint
+        tickets={nextSprintTickets}
+        now={now}
+        onOpen={openTicket}
+        visible={nextSprintVisible}
+        forceOpen={sel === 'all'}
+      />
 
       <Footer />
 

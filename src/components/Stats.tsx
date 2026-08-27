@@ -3,8 +3,15 @@ import { motion, useSpring } from 'motion/react'
 import { BOARD_COLUMNS, NEXT_SPRINT_SECTION } from '../lib/columns'
 import type { ColumnKey, Ticket } from '../types'
 import { hexToRgba } from '../lib/format'
-import { TrophyIcon } from './Icons'
-import { OPEN_NEXT_SPRINT_EVENT } from './NextSprint'
+import { TrophyIcon, TicketGlyph } from './Icons'
+
+/**
+ * What the top chip row currently has selected. A column key filters the board to that
+ * column; 'next' reveals the Next Sprint bar; 'all' reveals everything (board + Next Sprint
+ * expanded); null is the default view. Selections are mutually exclusive — picking any chip
+ * clears the others, which is what hides the Next Sprint bar when another chip is chosen.
+ */
+export type StatSelection = ColumnKey | 'next' | 'all' | null
 
 function AnimatedNumber({ value }: { value: number }) {
   const spring = useSpring(value, { stiffness: 110, damping: 22 })
@@ -29,12 +36,13 @@ export function Stats({
   completedCount: number
   /** To Do tickets whose sprint hasn't started (rendered in the Next Sprint section). */
   nextSprintCount?: number
-  active: ColumnKey | null
-  onSelect: (key: ColumnKey | null) => void
+  active: StatSelection
+  onSelect: (key: StatSelection) => void
   onOpenCompleted?: () => void
 }) {
   const counts = (k: ColumnKey) => tickets.filter((t) => t.column === k).length
   const total = tickets.filter((t) => t.column !== 'hold').length
+  const NS = NEXT_SPRINT_SECTION.accent
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -76,32 +84,57 @@ export function Stats({
         )
       })}
 
-      {/* Not a focus filter (these tickets aren't in the kanban row) — it jumps to the section. */}
-      {nextSprintCount > 0 && (
-        <motion.button
-          whileHover={{ scale: 1.05, y: -1 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-          onClick={() => {
-            // Ask the section to expand (it may be collapsed) BEFORE scrolling to it.
-            window.dispatchEvent(new Event(OPEN_NEXT_SPRINT_EVENT))
-            document.getElementById('jb-next-sprint')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          }}
-          title="Assigned to you, but the sprint hasn’t started — jump to the Next Sprint section"
-          className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors"
-          style={{
-            borderColor: hexToRgba(NEXT_SPRINT_SECTION.accent, 0.5),
-            background: 'var(--surface-solid)',
-            color: NEXT_SPRINT_SECTION.accent,
-          }}
-        >
-          <span className="inline-block h-2 w-2 rounded-full" style={{ background: NEXT_SPRINT_SECTION.accent }} />
-          {NEXT_SPRINT_SECTION.label}
-          <b>
-            <AnimatedNumber value={nextSprintCount} />
-          </b>
-        </motion.button>
-      )}
+      {/* A toggle, not a filter: it shows/hides the Next Sprint bar below the board. Selecting any
+          other chip clears `active`, so the bar closes on its own — no cross-component wiring. */}
+      {nextSprintCount > 0 &&
+        (() => {
+          const on = active === 'next'
+          return (
+            <motion.button
+              whileHover={{ scale: 1.05, y: -1 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+              onClick={() => onSelect(on ? null : 'next')}
+              aria-pressed={on}
+              title="Assigned to you, but the sprint hasn’t started — show or hide the Next Sprint bar"
+              className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors"
+              style={{
+                borderColor: on ? NS : hexToRgba(NS, 0.5),
+                background: on ? hexToRgba(NS, 0.16) : 'var(--surface-solid)',
+                color: NS,
+                boxShadow: on ? `0 0 0 1px ${hexToRgba(NS, 0.4)}` : 'none',
+              }}
+            >
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: NS }} />
+              {NEXT_SPRINT_SECTION.label}
+              <b>
+                <AnimatedNumber value={nextSprintCount} />
+              </b>
+            </motion.button>
+          )
+        })()}
+
+      {/* "All" — reveal everything at once: every column plus the Next Sprint queue, expanded. */}
+      {(() => {
+        const on = active === 'all'
+        return (
+          <motion.button
+            whileHover={{ scale: 1.05, y: -1 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+            onClick={() => onSelect(on ? null : 'all')}
+            aria-pressed={on}
+            title="Show every ticket at once — all columns plus the Next Sprint queue, expanded"
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all ${
+              on
+                ? 'border-transparent bg-[var(--ink)] text-[var(--bg)]'
+                : 'border-[var(--line)] bg-[var(--surface-solid)] text-[var(--ink-soft)] hover:border-[var(--muted)]'
+            }`}
+          >
+            <TicketGlyph size={13} /> All
+          </motion.button>
+        )
+      })()}
 
       <motion.button
         whileTap={{ scale: 0.97 }}
