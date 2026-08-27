@@ -18,11 +18,12 @@ import { ChevronIcon, TypeIcon } from './Icons'
 export const OPEN_NEXT_SPRINT_EVENT = 'jb-open-next-sprint'
 
 const LS_KEY = 'jb-next-sprint-open'
+/** Closed by DEFAULT — parked work should cost one pill in the corner until asked for. */
 const readOpen = () => {
   try {
-    return localStorage.getItem(LS_KEY) !== '0'
+    return localStorage.getItem(LS_KEY) === '1'
   } catch {
-    return true // file:// localStorage may be blocked
+    return false // file:// localStorage may be blocked
   }
 }
 
@@ -171,110 +172,126 @@ export function NextSprint({
   // name + when so the name itself can be held back from truncating.
   const summary = multi ? `${groups.length} sprints · ${groups.map((g) => g.info.name).join(', ')}` : ''
 
+  const tip =
+    `${tickets.length} ticket${tickets.length === 1 ? '' : 's'} queued for ` +
+    `${groups.map((g) => g.info.name).join(', ')}` +
+    (groups.length === 1 ? ` — ${whenLabel(groups[0].info, now)}` : '') +
+    '. Not part of the current sprint.'
+
   return (
     <AnimatePresence initial={false}>
       {tickets.length > 0 && (
         <motion.section
           id="jb-next-sprint"
-          initial={{ opacity: 0, height: 0, marginTop: 0 }}
-          animate={{ opacity: 1, height: 'auto', marginTop: 16 }}
-          exit={{ opacity: 0, height: 0, marginTop: 0 }}
+          initial={{ opacity: 0, marginTop: 0 }}
+          animate={{ opacity: 1, marginTop: 16 }}
+          exit={{ opacity: 0, marginTop: 0 }}
           transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-          className="overflow-hidden"
+          // Collapsed, it's a pill in the bottom-right corner under everything else. Expanded, it
+          // takes the full width — the space is only spent once you've asked to see the rows.
+          className="flex justify-end"
         >
-          {/* Bounded, NOT full-bleed. The board and On Hold span the page; this deliberately stops
-              short of them (≈60% of a 1512px screen, all of a small one) so parked work reads as a
-              footnote to the board rather than another section competing with it. 56rem is the
-              narrowest width that still leaves ~94 characters of title before truncation. */}
-          <div className="w-full max-w-[56rem] overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-2)]">
-            <button
+          {!open ? (
+            <motion.button
               type="button"
               onClick={toggle}
-              aria-expanded={open}
-              aria-controls="jb-next-sprint-rows"
-              title="Assigned to you, but the sprint hasn’t started — not part of the current sprint"
-              className="flex w-full items-center gap-2 px-3 py-[7px] text-left transition-colors hover:bg-[var(--surface-solid)]"
+              aria-expanded={false}
+              title={tip}
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.16 }}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.97 }}
+              className="card-shadow inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface-solid)] px-3 py-1.5 text-[12px] font-semibold text-[var(--ink-soft)] transition-colors hover:border-[var(--muted)]"
             >
-              {/* Same 8px dot the stats chip uses — one glyph, echoed, so the jump target is obvious. */}
               <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: SEC.accent }} />
-              <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-soft)]">
-                {SEC.label}
+              {SEC.label}
+              <b className="tabular-nums" style={{ color: SEC.accent }}>
+                {tickets.length}
+              </b>
+              <span aria-hidden className="rotate-90 text-[var(--muted)]">
+                <ChevronIcon size={10} />
               </span>
-              <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[var(--ink-soft)]">
-                · {tickets.length}
-              </span>
+            </motion.button>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18 }}
+              className="w-full overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-2)]"
+            >
+              <button
+                type="button"
+                onClick={toggle}
+                aria-expanded
+                aria-controls="jb-next-sprint-rows"
+                title={tip}
+                className="flex w-full items-center gap-2 px-3 py-[7px] text-left transition-colors hover:bg-[var(--surface-solid)]"
+              >
+                {/* Same 8px dot the pill and the stats chip use — one glyph, echoed everywhere. */}
+                <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: SEC.accent }} />
+                <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-soft)]">
+                  {SEC.label}
+                </span>
+                <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[var(--ink-soft)]">
+                  · {tickets.length}
+                </span>
               {/* The sprint NAME is the point of this header, so it never shrinks and never fades:
                   11px on --ink, whitespace-nowrap. Only the "when" suffix is allowed to truncate.
                   (It was previously 10.5px --muted — the smallest, faintest thing in the row.) */}
-              {groups.length === 1 ? (
-                <>
-                  <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-[var(--ink)]">
-                    {groups[0].info.name}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[10.5px] text-[var(--muted)]">
-                    · {whenLabel(groups[0].info, now)}
-                  </span>
-                </>
-              ) : (
-                <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--ink-soft)]">{summary}</span>
-              )}
-              {points > 0 && (
-                <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--muted)]">{points} pts</span>
-              )}
-              <motion.span
-                className="shrink-0 text-[var(--muted)]"
-                animate={{ rotate: open ? 90 : 0 }}
-                transition={{ duration: 0.18 }}
-              >
-                <ChevronIcon size={10} />
-              </motion.span>
-            </button>
+                {groups.length === 1 ? (
+                  <>
+                    <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-[var(--ink)]">
+                      {groups[0].info.name}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[10.5px] text-[var(--muted)]">
+                      · {whenLabel(groups[0].info, now)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--ink-soft)]">{summary}</span>
+                )}
+                {points > 0 && (
+                  <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--muted)]">{points} pts</span>
+                )}
+                <span aria-hidden className="shrink-0 -rotate-90 text-[var(--muted)]">
+                  <ChevronIcon size={10} />
+                </span>
+              </button>
 
-            <AnimatePresence initial={false}>
-              {open && (
-                <motion.div
-                  id="jb-next-sprint-rows"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 280, damping: 32 }}
-                  className="overflow-hidden border-t border-[var(--line)]"
-                >
-                  {/* py-1 keeps the global focus ring (outline-offset: 2px) off the first/last row's
-                      edge. Bounded above 8 so a big grooming bucket can't push the page around. */}
-                  <div className={tickets.length > 8 ? 'max-h-[288px] overflow-y-auto py-1' : 'py-1'}>
-                    {groups.map((g, i) => (
-                      <div key={g.info.name}>
-                        {multi && (
-                          // id is index-based, never the sprint name: aria-labelledby is a
-                          // space-separated ID list, and "FraudBus READY" contains a space.
-                          <div
-                            id={`jb-ns-g${i}`}
-                            className="mt-2 mb-0.5 flex items-baseline gap-1.5 px-3 first:mt-0"
-                          >
-                            <span className="min-w-0 truncate text-[11px] font-semibold text-[var(--ink-soft)]">
-                              {g.info.name}
-                            </span>
-                            <span className="shrink-0 text-[10.5px] text-[var(--muted)]">
-                              {whenLabel(g.info, now)}
-                            </span>
-                            <span className="ml-auto shrink-0 text-[10.5px] tabular-nums text-[var(--muted)]">
-                              {g.tickets.length}
-                            </span>
-                          </div>
-                        )}
-                        <ul role="list" aria-labelledby={multi ? `jb-ns-g${i}` : undefined}>
-                          {g.tickets.map((t) => (
-                            <Row key={t.key} ticket={t} now={now} onOpen={onOpen} />
-                          ))}
-                        </ul>
+              {/* py-1 keeps the global focus ring (outline-offset: 2px) off the first/last row's
+                  edge. Bounded above 8 so a big grooming bucket can't push the page around. */}
+              <div
+                id="jb-next-sprint-rows"
+                className={`border-t border-[var(--line)] ${
+                  tickets.length > 8 ? 'max-h-[288px] overflow-y-auto py-1' : 'py-1'
+                }`}
+              >
+                {groups.map((g, i) => (
+                  <div key={g.info.name}>
+                    {multi && (
+                      // id is index-based, never the sprint name: aria-labelledby is a
+                      // space-separated ID list, and "FraudBus READY" contains a space.
+                      <div id={`jb-ns-g${i}`} className="mt-2 mb-0.5 flex items-baseline gap-1.5 px-3 first:mt-0">
+                        <span className="min-w-0 truncate text-[11px] font-semibold text-[var(--ink-soft)]">
+                          {g.info.name}
+                        </span>
+                        <span className="shrink-0 text-[10.5px] text-[var(--muted)]">{whenLabel(g.info, now)}</span>
+                        <span className="ml-auto shrink-0 text-[10.5px] tabular-nums text-[var(--muted)]">
+                          {g.tickets.length}
+                        </span>
                       </div>
-                    ))}
+                    )}
+                    <ul role="list" aria-labelledby={multi ? `jb-ns-g${i}` : undefined}>
+                      {g.tickets.map((t) => (
+                        <Row key={t.key} ticket={t} now={now} onOpen={onOpen} />
+                      ))}
+                    </ul>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
         </motion.section>
       )}
     </AnimatePresence>

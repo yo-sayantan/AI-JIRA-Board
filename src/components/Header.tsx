@@ -220,7 +220,7 @@ export function Header({
           {/* Current sprint — compact two-line block: name + workdays left, dates + progress. */}
           {sprint && sp && (
             <div
-              className="hidden flex-col gap-0.5 rounded-xl border px-2.5 py-1 leading-tight md:flex"
+              className="hidden shrink-0 flex-col gap-0.5 rounded-xl border px-2.5 py-1 leading-tight md:flex"
               style={{ borderColor: hexToRgba(sp.color, 0.4), background: hexToRgba(sp.color, 0.08) }}
               title={
                 (sprint.start && sprint.end
@@ -230,8 +230,13 @@ export function Header({
             >
               <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-[var(--ink-soft)]">
                 <CalendarIcon size={10} color={sp.color} />
-                <span className="max-w-[110px] truncate">{sprint.name}</span>
-                <b className="ml-auto" style={{ color: sp.color }}>{sp.label}</b>
+                {/* The pill sizes to the NAME — sprint names vary in length ("FraudBus Sprint 13.2"
+                    alone needs ~118px, so the old 110px cap clipped every one of them). 280px is a
+                    backstop against a pathological name squeezing the search box, not a budget. */}
+                <span className="max-w-[280px] shrink-0 truncate whitespace-nowrap">{sprint.name}</span>
+                <b className="ml-auto shrink-0 whitespace-nowrap pl-1" style={{ color: sp.color }}>
+                  {sp.label}
+                </b>
               </span>
               <span className="flex items-center gap-1.5 text-[10px] text-[var(--muted)]">
                 {sprint.start && sprint.end ? (
