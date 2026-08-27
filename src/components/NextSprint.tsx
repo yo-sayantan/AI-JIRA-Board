@@ -167,11 +167,9 @@ export function NextSprint({
   // One sprint → name it in the header and drop the per-group caption entirely (that duplication is
   // most of what made this section feel big). Several → summarise, and let the captions do the work.
   const multi = groups.length > 1
-  const summary = multi
-    ? `${groups.length} sprints · ${groups.map((g) => g.info.name).join(', ')}`
-    : groups.length === 1
-      ? `${groups[0].info.name} · ${whenLabel(groups[0].info, now)}`
-      : ''
+  // Only the multi-sprint header needs a rolled-up string; a single sprint renders as
+  // name + when so the name itself can be held back from truncating.
+  const summary = multi ? `${groups.length} sprints · ${groups.map((g) => g.info.name).join(', ')}` : ''
 
   return (
     <AnimatePresence initial={false}>
@@ -184,7 +182,11 @@ export function NextSprint({
           transition={{ type: 'spring', stiffness: 260, damping: 30 }}
           className="overflow-hidden"
         >
-          <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-2)]">
+          {/* Bounded, NOT full-bleed. The board and On Hold span the page; this deliberately stops
+              short of them (≈60% of a 1512px screen, all of a small one) so parked work reads as a
+              footnote to the board rather than another section competing with it. 56rem is the
+              narrowest width that still leaves ~94 characters of title before truncation. */}
+          <div className="w-full max-w-[56rem] overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-2)]">
             <button
               type="button"
               onClick={toggle}
@@ -198,10 +200,24 @@ export function NextSprint({
               <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-soft)]">
                 {SEC.label}
               </span>
-              <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[var(--muted)]">
+              <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[var(--ink-soft)]">
                 · {tickets.length}
               </span>
-              <span className="min-w-0 flex-1 truncate text-[10.5px] text-[var(--muted)]">{summary}</span>
+              {/* The sprint NAME is the point of this header, so it never shrinks and never fades:
+                  11px on --ink, whitespace-nowrap. Only the "when" suffix is allowed to truncate.
+                  (It was previously 10.5px --muted — the smallest, faintest thing in the row.) */}
+              {groups.length === 1 ? (
+                <>
+                  <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-[var(--ink)]">
+                    {groups[0].info.name}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[10.5px] text-[var(--muted)]">
+                    · {whenLabel(groups[0].info, now)}
+                  </span>
+                </>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--ink-soft)]">{summary}</span>
+              )}
               {points > 0 && (
                 <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--muted)]">{points} pts</span>
               )}
