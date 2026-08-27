@@ -15,8 +15,17 @@ browser**, and refreshing the data never rebuilds the app.
 React 19 · Vite 6 · Tailwind v4 · Motion · a Python fetch pipeline · one self-contained
 `dist/index.html` you can literally double-click.
 
-> **New here?** Open [`docs/index.html`](docs/index.html) in a browser for a visual, click-by-click
-> getting-started guide.
+> **New here?** Open the **Setup & Deployment guide** — requirements, per-OS install steps
+> (Windows/macOS/Linux), git & Docker commands, and troubleshooting, all copy-ready:
+>
+> | | |
+> |---|---|
+> | **macOS / Linux** | `./open-guide.sh` |
+> | **Windows** | double-click `open-guide.bat` |
+> | **Any OS** | open [`docs/index.html`](docs/index.html) directly |
+> | **Board running?** | click the **?** button in the header |
+>
+> It needs nothing installed — it's the page to reach for when the board *won't* start.
 
 ---
 
@@ -56,8 +65,10 @@ AI-JIRA-Board/
 ├── README.md                ← you are here
 ├── LICENSE                  ← MIT
 ├── .github/                 ← CI (typecheck + build), Dependabot, issue & PR templates
+├── open-guide.sh            ← open the guide (macOS/Linux) — no server needed
+├── open-guide.bat           ← open the guide (Windows) — no server needed
 ├── docs/                    ← 📚 documentation
-│   ├── index.html           ←   visual getting-started guide (open in a browser)
+│   ├── index.html           ←   Setup & Deployment guide (per-OS install, git/Docker commands)
 │   ├── ARCHITECTURE.md      ←   how the fetch, data file, and app fit together
 │   ├── DEPLOYMENT.md        ←   deploy & run: Docker / static file / live server
 │   └── USAGE.md             ←   using the board: chips, Next Sprint, drawer, shortcuts

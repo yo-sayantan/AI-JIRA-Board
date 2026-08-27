@@ -8,6 +8,18 @@ export function isServed(): boolean {
   return typeof location !== 'undefined' && /^https?:$/.test(location.protocol)
 }
 
+/**
+ * Where the Setup & Deployment guide lives, from wherever the board was opened.
+ *  • served (Docker / `npm run serve`) → `/docs/index.html` off the server root.
+ *    The Dockerfile copies `docs/` into the image so this resolves in the container too.
+ *  • file:// (double-clicked `dist/index.html`) → the sibling `../docs/index.html`.
+ * Deliberately a plain relative path so it works with no server at all — the guide is the
+ * thing you reach for WHEN the server is broken.
+ */
+export function guideUrl(): string {
+  return isServed() ? '/docs/index.html' : '../docs/index.html'
+}
+
 export interface InternProgress {
   job?: 'daily' | 'archive' | string
   phase?: string

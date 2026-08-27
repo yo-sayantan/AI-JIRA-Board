@@ -3,212 +3,542 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Jira Board — Getting Started</title>
+    <title>My Jira Board — Setup &amp; Deployment Guide</title>
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #eef1f7; --card: #ffffff; --ink: #131722; --soft: #43506a; --muted: #74809a;
-        --line: rgba(20, 28, 48, 0.12); --line2: rgba(20, 28, 48, 0.08);
-        --brand: #6d5bd0; --brand2: #3b82f6; --accent: #ec4899; --code-bg: #0f1524; --code-ink: #e6ebf5;
-        --ok: #16a34a; --warn: #b45309;
+        --bg: #eef1f7; --bg2: #e6eaf3; --card: #ffffff; --ink: #131722; --soft: #43506a; --muted: #74809a;
+        --line: rgba(20, 28, 48, 0.12); --line2: rgba(20, 28, 48, 0.07);
+        --brand: #6d5bd0; --brand2: #3b82f6; --accent: #ec4899;
+        --code-bg: #0f1524; --code-ink: #e6ebf5; --code-cmt: #8b9bc0;
+        --ok: #16a34a; --warn: #b45309; --danger: #dc2626;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #11141a; --card: #1b1f27; --ink: #f3f6fb; --soft: #d4dbe8; --muted: #9da7b8;
-          --line: rgba(255, 255, 255, 0.14); --line2: rgba(255, 255, 255, 0.08);
-          --code-bg: #0b0f1a; --code-ink: #e6ebf5;
+          --bg: #11141a; --bg2: #161a21; --card: #1b1f27; --ink: #f3f6fb; --soft: #d4dbe8; --muted: #9da7b8;
+          --line: rgba(255, 255, 255, 0.14); --line2: rgba(255, 255, 255, 0.07);
+          --code-bg: #0b0f1a; --ok: #4ade80; --warn: #fbbf24; --danger: #f87171;
         }
       }
       * { box-sizing: border-box; }
-      html { scroll-behavior: smooth; }
+      html { scroll-behavior: smooth; scroll-padding-top: 68px; }
       body {
-        margin: 0; background: var(--bg); color: var(--ink); line-height: 1.6;
+        margin: 0; background: var(--bg); color: var(--ink); line-height: 1.65;
         font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         -webkit-font-smoothing: antialiased;
       }
-      .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px 96px; }
+      .wrap { max-width: 900px; margin: 0 auto; padding: 0 20px 110px; }
+
+      /* ── sticky nav ─────────────────────────────────────────────── */
+      nav.top {
+        position: sticky; top: 0; z-index: 50; backdrop-filter: blur(14px);
+        background: color-mix(in srgb, var(--bg) 82%, transparent);
+        border-bottom: 1px solid var(--line); padding: 10px 20px;
+      }
+      nav.top .inner { max-width: 900px; margin: 0 auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      nav.top .brand { font-weight: 800; font-size: 14px; margin-right: 6px; letter-spacing: -0.01em; }
+      nav.top a {
+        font-size: 12.5px; font-weight: 600; color: var(--soft); text-decoration: none;
+        padding: 5px 10px; border-radius: 999px; border: 1px solid transparent;
+      }
+      nav.top a:hover { border-color: var(--line); background: var(--card); color: var(--ink); }
+
+      /* ── hero ───────────────────────────────────────────────────── */
       header.hero {
-        text-align: center; padding: 64px 20px 40px;
-        background: radial-gradient(1200px 400px at 50% -120px, rgba(109, 91, 208, 0.28), transparent 70%);
+        text-align: center; padding: 58px 20px 34px;
+        background: radial-gradient(1100px 380px at 50% -130px, rgba(109, 91, 208, 0.3), transparent 70%);
       }
       .logo {
-        width: 62px; height: 62px; border-radius: 16px; display: inline-grid; place-items: center;
-        background: linear-gradient(135deg, var(--brand), var(--brand2)); color: #fff; font-size: 30px;
-        box-shadow: 0 12px 30px -10px rgba(109, 91, 208, 0.6); margin-bottom: 18px;
+        width: 60px; height: 60px; border-radius: 16px; display: inline-grid; place-items: center;
+        background: linear-gradient(135deg, var(--brand), var(--brand2)); font-size: 29px;
+        box-shadow: 0 12px 30px -10px rgba(109, 91, 208, 0.6); margin-bottom: 16px;
       }
-      h1 { font-size: 34px; margin: 0 0 8px; letter-spacing: -0.02em; }
-      .sub { color: var(--muted); font-size: 16px; max-width: 620px; margin: 0 auto; }
-      .pills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 22px; }
-      .pill {
-        font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: 999px;
-        border: 1px solid var(--line); background: var(--card); color: var(--soft); text-decoration: none;
+      h1 { font-size: 33px; margin: 0 0 8px; letter-spacing: -0.025em; }
+      .sub { color: var(--muted); font-size: 15.5px; max-width: 640px; margin: 0 auto; }
+
+      h2 {
+        font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);
+        margin: 50px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line2);
       }
-      .pill:hover { border-color: var(--muted); }
-      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 44px 0 14px; }
-      .step {
-        background: var(--card); border: 1px solid var(--line); border-radius: 16px;
-        padding: 20px 22px; margin: 14px 0; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 30px -20px rgba(16, 24, 40, 0.35);
+      h3 { font-size: 16.5px; margin: 0; }
+
+      /* ── cards & steps ──────────────────────────────────────────── */
+      .card, .step {
+        background: var(--card); border: 1px solid var(--line); border-radius: 15px;
+        padding: 18px 20px; margin: 12px 0;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 32px -24px rgba(16, 24, 40, 0.4);
       }
-      .step-h { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+      .step-h { display: flex; align-items: center; gap: 11px; margin-bottom: 4px; }
       .num {
-        flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
-        font-weight: 800; font-size: 14px; color: #fff; background: linear-gradient(135deg, var(--brand), var(--brand2));
+        flex: none; width: 29px; height: 29px; border-radius: 9px; display: grid; place-items: center;
+        font-weight: 800; font-size: 13.5px; color: #fff; background: linear-gradient(135deg, var(--brand), var(--brand2));
       }
-      .step-h h3 { margin: 0; font-size: 17px; }
-      .step p { margin: 8px 0; color: var(--soft); }
-      .step p.small { font-size: 13.5px; color: var(--muted); }
-      code.inl { background: var(--line2); padding: 1px 6px; border-radius: 6px; font-size: 0.9em; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+      p { margin: 8px 0; color: var(--soft); }
+      p.small, .small { font-size: 13.5px; color: var(--muted); }
+      ul { color: var(--soft); padding-left: 20px; margin: 8px 0; }
+      li { margin: 4px 0; }
+      a { color: var(--brand2); }
+
+      code.inl {
+        background: var(--line2); padding: 1.5px 6px; border-radius: 6px; font-size: 0.88em;
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+      }
+      kbd {
+        background: var(--card); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px;
+        padding: 1px 6px; font-size: 11.5px; font-family: ui-monospace, Menlo, monospace; color: var(--soft);
+      }
       pre {
         position: relative; background: var(--code-bg); color: var(--code-ink); border-radius: 11px;
-        padding: 14px 16px; overflow: auto; font-size: 13px; line-height: 1.55;
+        padding: 14px 54px 14px 16px; overflow-x: auto; font-size: 12.8px; line-height: 1.6;
         font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; margin: 10px 0 4px;
       }
-      pre .cmt { color: #8b9bc0; }
+      pre .cmt { color: var(--code-cmt); }
       .copy {
-        position: absolute; top: 8px; right: 8px; font: inherit; font-size: 11px; font-weight: 700;
-        color: var(--code-ink); background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.18);
+        position: absolute; top: 8px; right: 8px; font: inherit; font-size: 10.5px; font-weight: 700;
+        color: var(--code-ink); background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: 7px; padding: 3px 9px; cursor: pointer;
       }
-      .copy:hover { background: rgba(255, 255, 255, 0.2); }
-      .note { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 12px 0; font-size: 14px; }
-      .note.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
-      .note b { color: var(--ink); }
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      @media (max-width: 620px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 28px; } }
-      .doc {
-        display: block; text-decoration: none; color: inherit; background: var(--card);
-        border: 1px solid var(--line); border-radius: 13px; padding: 16px 18px;
+      .copy:hover { background: rgba(255, 255, 255, 0.22); }
+
+      .note {
+        border-left: 3px solid var(--brand2); background: color-mix(in srgb, var(--brand2) 8%, transparent);
+        border-radius: 0 10px 10px 0; padding: 11px 15px; margin: 12px 0; font-size: 14px; color: var(--soft);
       }
+      .note.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 11%, transparent); }
+      .note.ok { border-left-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+      .note.pink { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+      .note b { color: var(--ink); }
+
+      table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 10px 0; }
+      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+      th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+      td { color: var(--soft); }
+
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      @media (max-width: 700px) { .grid, .grid3 { grid-template-columns: 1fr; } h1 { font-size: 27px; } }
+
+      .doc { display: block; text-decoration: none; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 13px; padding: 15px 17px; }
       .doc:hover { border-color: var(--brand); }
-      .doc b { display: block; font-size: 15px; margin-bottom: 3px; }
+      .doc b { display: block; font-size: 14.5px; margin-bottom: 2px; }
       .doc span { font-size: 13px; color: var(--muted); }
-      footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 48px; }
-      a { color: var(--brand2); }
+
+      .tool { display: flex; gap: 12px; align-items: flex-start; }
+      .tool .ic { font-size: 22px; line-height: 1.2; }
+      .req { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+      .req.must { color: #fff; background: var(--danger); }
+      .req.opt { color: var(--muted); border: 1px solid var(--line); }
+
+      /* ── OS tabs ────────────────────────────────────────────────── */
+      .tabs { display: flex; gap: 6px; margin: 6px 0 12px; flex-wrap: wrap; }
+      .tabs button {
+        font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 7px 15px;
+        border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--soft);
+      }
+      .tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: transparent; }
+      .os-pane > h3 { margin-bottom: 6px; }
+      .js-on .os-pane[hidden] { display: none; }
+      .os-pane .os-label { display: none; }
+      body:not(.js-on) .os-pane .os-label { display: block; font-weight: 800; margin-top: 14px; }
+
+      footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 54px; }
       .ok { color: var(--ok); font-weight: 700; }
     </style>
   </head>
   <body>
+    <nav class="top">
+      <div class="inner">
+        <span class="brand">🎫 My Jira Board</span>
+        <a href="#tools">Requirements</a>
+        <a href="#install">Install</a>
+        <a href="#git">Git</a>
+        <a href="#configure">Configure</a>
+        <a href="#docker">Docker</a>
+        <a href="#run">Run</a>
+        <a href="#trouble">Troubleshooting</a>
+      </div>
+    </nav>
+
     <header class="hero">
       <div class="logo">🎫</div>
-      <h1>My Jira Board</h1>
-      <p class="sub">A personal, beautiful replacement for staring at the Jira web UI. It renders tickets a
-        background fetcher pulls for you — no Jira login, no waiting on the browser. This page gets you
-        from clone to running board.</p>
-      <div class="pills">
-        <a class="pill" href="#setup">Setup</a>
-        <a class="pill" href="#deploy">Deploy</a>
-        <a class="pill" href="#run">Other ways to run</a>
-        <a class="pill" href="#docs">Full docs</a>
-      </div>
+      <h1>Setup &amp; Deployment Guide</h1>
+      <p class="sub">Everything you need to install the tools, clone the repo, add your Jira token, and get
+        the board running — on <b>Windows</b>, <b>macOS</b> or <b>Linux</b>. Every command is copy-ready.</p>
     </header>
 
     <div class="wrap">
-      <h2>Before you start — what you need</h2>
-      <div class="step">
-        <p style="margin-top: 0">
-          <b>Docker Desktop</b> (the easy path), and <b>one Jira Personal Access Token</b>. That's the only
-          token the board strictly needs. Confluence and Bitbucket tokens are optional and just add richer
-          detail. <span class="small">Node.js is only needed if you want to build the app or run the local
-          server instead of Docker.</span>
-        </p>
-        <div class="note"><b>Your tokens never enter this repo.</b> They live in one file outside it
-          (<code class="inl">~/.cursor/mcp-secrets.env</code>). Everything else points at it by path.</div>
+      <div class="note ok" style="margin-top: 8px">
+        <b>Reopen this page anytime</b> — it needs nothing running:
+        <code class="inl">./open-guide.sh</code> (macOS/Linux) · double-click
+        <code class="inl">open-guide.bat</code> (Windows) · or click the <b>?</b> button in the board's header
+        when it's up.
+      </div>
+    </div>
+
+    <div class="wrap">
+      <!-- ── WHAT ─────────────────────────────────────────────────── -->
+      <h2>What this is</h2>
+      <div class="card">
+        <p style="margin-top: 0">A personal, self-hosted mirror of your Jira board. A background fetcher pulls
+          the tickets assigned to you into a plain data file; a single-file React app renders them — no Jira
+          login, no waiting on the web UI. Two moving parts:</p>
+        <ul>
+          <li><b>The fetch</b> (<code class="inl">jira-intern/</code>) — pulls your tickets. Needs <b>one Jira token</b>.</li>
+          <li><b>The app</b> (<code class="inl">dist/index.html</code>) — renders whatever the fetch produced. Needs nothing.</li>
+        </ul>
+        <div class="note pink"><b>Your tokens never enter the repo.</b> They live in one file outside it
+          (<code class="inl">~/.cursor/mcp-secrets.env</code>); everything else points at it by path.</div>
       </div>
 
-      <h2 id="setup">Setup — three files</h2>
+      <!-- ── TOOLS ────────────────────────────────────────────────── -->
+      <h2 id="tools">Requirements — what to install &amp; where to get it</h2>
+      <div class="grid">
+        <div class="card tool">
+          <span class="ic">🐳</span>
+          <div>
+            <h3>Docker Desktop <span class="req must">Required</span></h3>
+            <p class="small">The one-command way to run everything. Builds the app, fetches your tickets, and serves the board.</p>
+            <p class="small"><a href="https://www.docker.com/products/docker-desktop/">docker.com/products/docker-desktop</a><br />
+              Linux: <a href="https://docs.docker.com/engine/install/">Docker Engine</a> + <a href="https://docs.docker.com/compose/install/">Compose</a></p>
+          </div>
+        </div>
+        <div class="card tool">
+          <span class="ic">🌿</span>
+          <div>
+            <h3>Git <span class="req must">Required</span></h3>
+            <p class="small">To clone the repo and pull updates.</p>
+            <p class="small"><a href="https://git-scm.com/downloads">git-scm.com/downloads</a></p>
+          </div>
+        </div>
+        <div class="card tool">
+          <span class="ic">🎟️</span>
+          <div>
+            <h3>Jira Personal Access Token <span class="req must">Required</span></h3>
+            <p class="small">The only credential the board strictly needs. Read scope is enough.</p>
+            <p class="small">Jira → your avatar → <b>Profile</b> → <b>Personal Access Tokens</b> → <b>Create token</b>.
+              Copy it immediately — you can't view it again.</p>
+          </div>
+        </div>
+        <div class="card tool">
+          <span class="ic">🟩</span>
+          <div>
+            <h3>Node.js 20+ <span class="req opt">Optional</span></h3>
+            <p class="small">Only to build/develop the app outside Docker, or to run the live server.</p>
+            <p class="small"><a href="https://nodejs.org/">nodejs.org</a> (LTS)</p>
+          </div>
+        </div>
+        <div class="card tool">
+          <span class="ic">🐍</span>
+          <div>
+            <h3>Python 3.9+ <span class="req opt">Optional</span></h3>
+            <p class="small">Only to run the fetch scripts directly on your machine. The Docker image already contains it.</p>
+            <p class="small"><a href="https://www.python.org/downloads/">python.org/downloads</a></p>
+          </div>
+        </div>
+        <div class="card tool">
+          <span class="ic">📄</span>
+          <div>
+            <h3>Confluence / Bitbucket tokens <span class="req opt">Optional</span></h3>
+            <p class="small">Add richer cards: linked docs, real branch names, PR state and approvals.</p>
+            <p class="small">Same place as the Jira token, in each product's own settings.</p>
+          </div>
+        </div>
+      </div>
 
-      <div class="step">
-        <div class="step-h"><span class="num">1</span><h3>Clone the repo</h3></div>
+      <!-- ── INSTALL PER OS ───────────────────────────────────────── -->
+      <h2 id="install">Installing the tools</h2>
+      <div class="tabs" role="tablist" aria-label="Operating system">
+        <button role="tab" data-os="win" aria-selected="false">🪟 Windows</button>
+        <button role="tab" data-os="mac" aria-selected="false">🍎 macOS</button>
+        <button role="tab" data-os="linux" aria-selected="false">🐧 Linux</button>
+      </div>
+
+      <div class="card os-pane" data-os="win">
+        <span class="os-label">🪟 Windows</span>
+        <h3>Windows 10 / 11</h3>
+        <p class="small">Easiest path: <b>winget</b>, which ships with Windows 11 and modern Windows 10. Run in
+          PowerShell.</p>
+        <pre><button class="copy">Copy</button>winget install -e --id Git.Git
+winget install -e --id Docker.DockerDesktop
+winget install -e --id OpenJS.NodeJS.LTS      <span class="cmt"># optional</span>
+winget install -e --id Python.Python.3.12     <span class="cmt"># optional</span></pre>
+        <p class="small">Then <b>reboot</b> (Docker Desktop needs it), launch Docker Desktop once, and wait for
+          "Engine running". Docker Desktop will enable WSL 2 for you if it isn't already.</p>
+        <div class="note"><b>No winget?</b> Install each from its download page in the table above. Use
+          <b>PowerShell</b> (not CMD) for the commands on this page — or Git Bash if you prefer bash syntax.</div>
+        <div class="note warn"><b>Path note:</b> commands here use <code class="inl">~/</code> for your home
+          folder. In PowerShell that's <code class="inl">$HOME</code> — e.g.
+          <code class="inl">$HOME\.cursor\mcp-secrets.env</code>.</div>
+      </div>
+
+      <div class="card os-pane" data-os="mac">
+        <span class="os-label">🍎 macOS</span>
+        <h3>macOS 12+</h3>
+        <p class="small">Easiest path: <a href="https://brew.sh">Homebrew</a>. Install it first if you don't have it:</p>
+        <pre><button class="copy">Copy</button>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</pre>
+        <pre><button class="copy">Copy</button>brew install git
+brew install --cask docker      <span class="cmt"># Docker Desktop</span>
+brew install node               <span class="cmt"># optional</span>
+brew install python@3.12        <span class="cmt"># optional</span></pre>
+        <p class="small">Open Docker Desktop once from Applications and wait until the whale icon says
+          "Docker Desktop is running". Git may also come from Xcode Command Line Tools:
+          <code class="inl">xcode-select --install</code>.</p>
+      </div>
+
+      <div class="card os-pane" data-os="linux">
+        <span class="os-label">🐧 Linux</span>
+        <h3>Linux (Debian / Ubuntu shown)</h3>
+        <pre><button class="copy">Copy</button>sudo apt update
+sudo apt install -y git curl python3      <span class="cmt"># python optional</span></pre>
+        <p class="small">Docker Engine + Compose plugin, via Docker's official convenience script:</p>
+        <pre><button class="copy">Copy</button>curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER"      <span class="cmt"># run docker without sudo</span>
+newgrp docker                        <span class="cmt"># apply the group now (or log out/in)</span></pre>
+        <p class="small">Node.js (optional) via <a href="https://github.com/nvm-sh/nvm">nvm</a>:</p>
+        <pre><button class="copy">Copy</button>curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+nvm install 20</pre>
+        <p class="small">Fedora/RHEL: swap <code class="inl">apt</code> for <code class="inl">dnf</code>.
+          Arch: <code class="inl">sudo pacman -S git docker docker-compose nodejs</code>.</p>
+      </div>
+
+      <div class="card">
+        <h3>Verify everything is installed</h3>
+        <pre><button class="copy">Copy</button>git --version
+docker --version
+docker compose version
+node --version     <span class="cmt"># optional</span>
+python3 --version  <span class="cmt"># optional (Windows: python --version)</span></pre>
+        <p class="small">Each should print a version. If <code class="inl">docker</code> errors with
+          "cannot connect to the daemon", Docker Desktop isn't running yet.</p>
+      </div>
+
+      <!-- ── GIT ──────────────────────────────────────────────────── -->
+      <h2 id="git">Getting the code — Git commands</h2>
+      <div class="card">
+        <h3>Clone the repository</h3>
         <pre><button class="copy">Copy</button>git clone https://github.com/yo-sayantan/AI-JIRA-Board.git
 cd AI-JIRA-Board</pre>
+        <p class="small">First time using Git on this machine? Set your identity:</p>
+        <pre><button class="copy">Copy</button>git config --global user.name  "Your Name"
+git config --global user.email "you@example.com"</pre>
+      </div>
+      <div class="card">
+        <h3>Everyday Git</h3>
+        <pre><button class="copy">Copy</button>git pull                       <span class="cmt"># get the latest changes</span>
+git status                     <span class="cmt"># what have I changed?</span>
+git switch -c my-change        <span class="cmt"># start a branch</span>
+git add -A                     <span class="cmt"># stage everything</span>
+git commit -m "What I changed" <span class="cmt"># commit</span>
+git push -u origin my-change   <span class="cmt"># push the branch</span></pre>
+        <div class="note warn"><b>Never commit secrets.</b> <code class="inl">.gitignore</code> already blocks
+          <code class="inl">*.env</code> and the fetched ticket data. Before pushing, a quick sanity check:
+          <code class="inl">git status</code> should show no <code class="inl">.env</code> files and no
+          <code class="inl">jira-intern/data.*</code>.</div>
+      </div>
+
+      <!-- ── CONFIGURE ────────────────────────────────────────────── -->
+      <h2 id="configure">Configure — two files, once</h2>
+
+      <div class="step">
+        <div class="step-h"><span class="num">1</span><h3>Create your secrets file</h3></div>
+        <p class="small">macOS / Linux:</p>
+        <pre><button class="copy">Copy</button>mkdir -p ~/.cursor
+cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env
+chmod 600 ~/.cursor/mcp-secrets.env</pre>
+        <p class="small">Windows (PowerShell):</p>
+        <pre><button class="copy">Copy</button>New-Item -ItemType Directory -Force "$HOME\.cursor" | Out-Null
+Copy-Item "setup\mcp-secrets.env.template" "$HOME\.cursor\mcp-secrets.env"</pre>
+        <p class="small">Now open that file and set at least these two lines:</p>
+        <pre><button class="copy">Copy</button>JIRA_URL=https://jira.your-company.example
+JIRA_PERSONAL_TOKEN=your-token-here</pre>
       </div>
 
       <div class="step">
-        <div class="step-h"><span class="num">2</span><h3>Create your secrets file</h3></div>
-        <p>Copy the template out of the repo and lock it down, then paste in your Jira token.</p>
-        <pre><button class="copy">Copy</button>cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env
-chmod 600 ~/.cursor/mcp-secrets.env
-<span class="cmt"># then edit it and set:</span>
-<span class="cmt">#   JIRA_URL=https://jira.your-company.example</span>
-<span class="cmt">#   JIRA_PERSONAL_TOKEN=&lt;your token&gt;</span></pre>
-        <p class="small">Jira → your avatar → Profile → Personal Access Tokens → Create token. Read scope is
-          enough. Copy it immediately — you can't see it again.</p>
+        <div class="step-h"><span class="num">2</span><h3>Fill in your details</h3></div>
+        <pre><button class="copy">Copy</button>cp setup/config.example.json jira-intern/config.json</pre>
+        <p class="small">Windows: <code class="inl">Copy-Item setup\config.example.json jira-intern\config.json</code></p>
+        <p class="small">Edit <code class="inl">jira-intern/config.json</code> — your <b>name exactly as Jira
+          shows it</b> (that's how "assigned to me" matches), your company URLs, and the footer branding.
+          Every key is documented in <code class="inl">jira-intern/CONFIG.md</code>. <b>No tokens go in this file.</b></p>
       </div>
 
-      <div class="step">
-        <div class="step-h"><span class="num">3</span><h3>Fill in your config</h3></div>
-        <p>Who you are and your company's URLs. <b>No tokens here.</b></p>
-        <pre><button class="copy">Copy</button>cp setup/config.example.json jira-intern/config.json
-<span class="cmt"># edit jira-intern/config.json: your name (exactly as Jira shows it),</span>
-<span class="cmt"># your endpoints, and the footer branding</span></pre>
-        <p class="small">Every key is documented in <code class="inl">jira-intern/CONFIG.md</code>.</p>
-      </div>
-
-      <h2 id="deploy">Deploy — one command (Docker)</h2>
-      <div class="step">
-        <div class="step-h"><span class="num">4</span><h3>Build, fetch, and serve</h3></div>
-        <p>This builds the app, pulls your tickets on start, auto-refreshes every 15 minutes, and serves the board.</p>
+      <!-- ── DOCKER ───────────────────────────────────────────────── -->
+      <h2 id="docker">Docker — build &amp; deploy</h2>
+      <div class="card">
+        <h3>The one command</h3>
         <pre><button class="copy">Copy</button>docker compose up -d --build</pre>
         <p>Then open <a href="http://localhost:4321/dist/index.html">http://localhost:4321/dist/index.html</a>
-          <span class="ok">✓ done.</span></p>
-        <div class="note"><b>macOS shortcut:</b> copy
-          <code class="inl">setup/Start Jira Board.command.template</code> to your Desktop, set the repo path
-          inside it, <code class="inl">chmod +x</code> it, and double-click to build + deploy + open — no
-          terminal needed.</div>
-        <div class="note warn"><b>Changed code in <code class="inl">src/</code>?</b> Re-run with
-          <code class="inl">--build</code>. Changing only data does not need a rebuild — the container refetches.</div>
+          <span class="ok">✓</span></p>
+        <p class="small">This builds the image (stage 1 compiles the app, stage 2 runs the server + Python fetch),
+          starts a container named <code class="inl">jira-board</code>, mounts your secrets read-only, fetches once
+          on boot, and re-fetches every 15 minutes.</p>
       </div>
 
-      <p class="small" style="color: var(--muted)">Everyday commands:</p>
-      <pre><button class="copy">Copy</button>docker compose logs -f     <span class="cmt"># watch fetch + server logs</span>
-docker compose down        <span class="cmt"># stop</span></pre>
+      <div class="card">
+        <h3>Build and run separately</h3>
+        <pre><button class="copy">Copy</button><span class="cmt"># build the image only</span>
+docker compose build --pull
+<span class="cmt"># or with plain docker</span>
+docker build -t jira-board:latest .
 
+<span class="cmt"># run it (plain docker, without compose)</span>
+docker run -d --name jira-board -p 4321:4321 \
+  -v "$HOME/.cursor/mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro" \
+  -v "$(pwd)/jira-intern:/app/jira-intern" \
+  jira-board:latest</pre>
+        <p class="small">Windows PowerShell equivalent for the volume flags:
+          <code class="inl">-v "${HOME}\.cursor\mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro"</code> and
+          <code class="inl">-v "${PWD}\jira-intern:/app/jira-intern"</code>.</p>
+      </div>
+
+      <div class="card">
+        <h3>Managing the container</h3>
+        <pre><button class="copy">Copy</button>docker compose logs -f          <span class="cmt"># watch fetch + server logs</span>
+docker compose ps               <span class="cmt"># is it running?</span>
+docker compose restart          <span class="cmt"># restart without rebuilding</span>
+docker compose down             <span class="cmt"># stop and remove</span>
+docker compose up -d --build    <span class="cmt"># rebuild + redeploy after a code change</span></pre>
+        <pre><button class="copy">Copy</button>docker exec -it jira-board sh   <span class="cmt"># shell inside the container</span>
+docker stats jira-board         <span class="cmt"># resource usage</span>
+docker image prune -f           <span class="cmt"># clean old layers</span></pre>
+        <div class="note warn"><b>Changed anything in <code class="inl">src/</code>?</b> You must rebuild
+          (<code class="inl">--build</code>) — the app is baked into the image. Changing only <i>data</i> needs no
+          rebuild; the container refetches on its own.</div>
+      </div>
+
+      <div class="card">
+        <h3>Environment knobs</h3>
+        <table>
+          <tr><th>Variable</th><th>Default</th><th>What it does</th></tr>
+          <tr><td><code class="inl">PORT</code></td><td>4321</td><td>Host port the board is published on.</td></tr>
+          <tr><td><code class="inl">REFRESH_ON_START</code></td><td>1</td><td>Fetch once when the container boots.</td></tr>
+          <tr><td><code class="inl">REFRESH_INTERVAL</code></td><td>900</td><td>Seconds between auto-refreshes. <code class="inl">0</code> disables.</td></tr>
+          <tr><td><code class="inl">SKIP_SUMMARY</code></td><td>1</td><td>Deterministic fetch, no LLM — so no AI API key is needed.</td></tr>
+        </table>
+        <pre><button class="copy">Copy</button>PORT=8080 docker compose up -d --build   <span class="cmt"># run on a different port</span></pre>
+      </div>
+
+      <div class="card">
+        <h3>One-click launcher (macOS / Linux)</h3>
+        <p class="small">Starts Docker if needed, frees the port, rebuilds, redeploys, waits for health, and opens
+          the board. Safe to run repeatedly — it never stacks containers or drifts ports.</p>
+        <pre><button class="copy">Copy</button>./start-jira-board.sh</pre>
+        <p class="small">For a Desktop shortcut, copy
+          <code class="inl">setup/Start Jira Board.command.template</code> to your Desktop, set
+          <code class="inl">REPO_DIR</code> inside it, then <code class="inl">chmod +x</code> it and double-click.</p>
+      </div>
+
+      <!-- ── RUN WITHOUT DOCKER ───────────────────────────────────── -->
       <h2 id="run">Other ways to run</h2>
       <div class="grid">
-        <div class="step" style="margin: 0">
-          <div class="step-h"><h3 style="font-size: 15px">📄 Static file</h3></div>
-          <p class="small">No server. If a dump exists, just open the single-file build:</p>
-          <pre><button class="copy">Copy</button>open dist/index.html</pre>
-          <p class="small">Press <code class="inl">r</code> to re-read the latest data.</p>
+        <div class="card" style="margin: 0">
+          <h3>📄 Static file — no server</h3>
+          <p class="small">The build is one self-contained HTML file. If a data dump exists, just open it:</p>
+          <pre><button class="copy">Copy</button><span class="cmt"># macOS</span>
+open dist/index.html
+<span class="cmt"># Linux</span>
+xdg-open dist/index.html
+<span class="cmt"># Windows</span>
+start dist\index.html</pre>
+          <p class="small">Press <kbd>r</kbd> to re-read the latest data.</p>
         </div>
-        <div class="step" style="margin: 0">
-          <div class="step-h"><h3 style="font-size: 15px">🖥️ Live server</h3></div>
-          <p class="small">The header button runs the fetch on your machine:</p>
+        <div class="card" style="margin: 0">
+          <h3>🖥️ Live local server</h3>
+          <p class="small">The header button becomes a real <b>Refresh</b> that runs the fetch on your machine.</p>
           <pre><button class="copy">Copy</button>npm install
 npm run serve</pre>
-          <p class="small">Opens on port 4321 with a working Refresh.</p>
+          <p class="small">Serves on port 4321. Needs Node.js 20+.</p>
         </div>
       </div>
 
-      <h2 id="docs">Full documentation</h2>
-      <div class="grid">
-        <a class="doc" href="../setup/README.md"><b>⚙️ Setup guide</b><span>Secrets, config & MCP — every template explained, step by step.</span></a>
-        <a class="doc" href="DEPLOYMENT.md"><b>🚀 Deployment</b><span>Docker, static file, live server, refresh commands, troubleshooting.</span></a>
-        <a class="doc" href="USAGE.md"><b>🧭 Using the board</b><span>Chips, Next Sprint, the drawer, Completed, keyboard shortcuts.</span></a>
-        <a class="doc" href="ARCHITECTURE.md"><b>🏗️ Architecture</b><span>How the fetch, data file, and app fit together.</span></a>
+      <div class="card">
+        <h3>Build &amp; develop the app</h3>
+        <pre><button class="copy">Copy</button>npm install        <span class="cmt"># install dependencies</span>
+npm run dev        <span class="cmt"># localhost:5173 — sample data, hot reload</span>
+npm run typecheck  <span class="cmt"># tsc --noEmit</span>
+npm run build      <span class="cmt"># → dist/index.html (single file)</span></pre>
       </div>
 
-      <div class="note warn" style="margin-top: 26px">
-        <b>Before you push this repo public</b>, confirm no <code class="inl">*.env</code> with real values is
-        staged, and sanitize or untrack <code class="inl">jira-intern/config.json</code> (it holds your name and
-        internal hostnames). See <a href="../setup/README.md">setup/README.md → "Before you make the repo public"</a>.
+      <div class="card">
+        <h3>Refresh the ticket data by hand</h3>
+        <pre><button class="copy">Copy</button>bash jira-intern/local-runner/run-intern.sh        <span class="cmt"># active tickets (daily)</span>
+bash jira-intern/local-runner/update-completed.sh  <span class="cmt"># full Completed archive (weekly)</span></pre>
+        <p class="small">Both rewrite <code class="inl">jira-intern/data.json</code> and
+          <code class="inl">data.js</code>; reload the board to see the result.</p>
+      </div>
+
+      <!-- ── TROUBLESHOOTING ──────────────────────────────────────── -->
+      <h2 id="trouble">Troubleshooting</h2>
+      <div class="card">
+        <table>
+          <tr><th>Symptom</th><th>Fix</th></tr>
+          <tr><td>Board loads but is empty</td><td>No data yet. Wait for the boot fetch, check <code class="inl">docker compose logs -f</code>, or run the fetch by hand.</td></tr>
+          <tr><td>"no JIRA_PERSONAL_TOKEN found — skipping fetch"</td><td>Your secrets file isn't mounted or readable. Confirm <code class="inl">~/.cursor/mcp-secrets.env</code> exists and contains the token.</td></tr>
+          <tr><td><code class="inl">docker: cannot connect to the Docker daemon</code></td><td>Docker Desktop isn't running. Launch it and wait for "Engine running".</td></tr>
+          <tr><td>Port 4321 already in use</td><td><code class="inl">docker compose down</code>, or run on another port: <code class="inl">PORT=8080 docker compose up -d --build</code>.</td></tr>
+          <tr><td><code class="inl">Name or service not known</code> for your Jira host</td><td>Docker DNS, common on VPN. Uncomment the <code class="inl">dns:</code> block in <code class="inl">docker-compose.yml</code> and recreate.</td></tr>
+          <tr><td>Container exits immediately</td><td><code class="inl">docker logs jira-board</code> — usually a bad token or an unreachable host.</td></tr>
+          <tr><td>Changed <code class="inl">src/</code> but the UI looks old</td><td>Rebuild: <code class="inl">docker compose up -d --build</code>.</td></tr>
+          <tr><td>Permission denied running <code class="inl">docker</code> on Linux</td><td><code class="inl">sudo usermod -aG docker "$USER"</code>, then log out and back in.</td></tr>
+          <tr><td><code class="inl">./start-jira-board.sh: Permission denied</code></td><td><code class="inl">chmod +x start-jira-board.sh</code></td></tr>
+        </table>
+      </div>
+
+      <!-- ── MORE DOCS ────────────────────────────────────────────── -->
+      <h2>Full documentation</h2>
+      <div class="grid">
+        <a class="doc" href="../setup/README.md"><b>⚙️ Setup guide</b><span>Secrets, config &amp; MCP — every template explained.</span></a>
+        <a class="doc" href="DEPLOYMENT.md"><b>🚀 Deployment</b><span>Docker, static file, live server, troubleshooting.</span></a>
+        <a class="doc" href="USAGE.md"><b>🧭 Using the board</b><span>Chips, Next Sprint, the drawer, keyboard shortcuts.</span></a>
+        <a class="doc" href="ARCHITECTURE.md"><b>🏗️ Architecture</b><span>How the fetch, data file and app fit together.</span></a>
+      </div>
+
+      <div class="note warn" style="margin-top: 24px">
+        <b>Before making the repo public:</b> confirm no <code class="inl">*.env</code> with real values is staged,
+        and sanitize or untrack <code class="inl">jira-intern/config.json</code> (it holds your name and internal
+        hostnames). Checklist in <a href="../setup/README.md">setup/README.md</a>.
       </div>
 
       <footer>Built to dodge JIRA · made with ☕ + a refresh button</footer>
+
     </div>
 
     <script>
-      // Progressive enhancement: copy buttons. No effect if JS is off.
+      document.body.classList.add('js-on');
+
+      // Copy buttons.
       document.querySelectorAll('pre .copy').forEach(function (btn) {
         btn.addEventListener('click', function () {
-          var pre = btn.parentElement.cloneNode(true);
-          pre.querySelector('.copy').remove();
-          navigator.clipboard.writeText(pre.textContent.trim()).then(function () {
-            var t = btn.textContent; btn.textContent = 'Copied ✓';
-            setTimeout(function () { btn.textContent = t; }, 1400);
+          var clone = btn.parentElement.cloneNode(true);
+          clone.querySelector('.copy').remove();
+          navigator.clipboard.writeText(clone.textContent.trim()).then(function () {
+            var prev = btn.textContent;
+            btn.textContent = 'Copied ✓';
+            setTimeout(function () { btn.textContent = prev; }, 1400);
           });
         });
       });
+
+      // OS tabs — default to the visitor's platform, remember the choice.
+      var tabs = document.querySelectorAll('.tabs button[data-os]');
+      var panes = document.querySelectorAll('.os-pane[data-os]');
+      function pickOS(os) {
+        tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t.dataset.os === os)); });
+        panes.forEach(function (p) { p.hidden = p.dataset.os !== os; });
+        try { localStorage.setItem('jb-guide-os', os); } catch (e) { /* ignore */ }
+      }
+      function detectOS() {
+        try {
+          var saved = localStorage.getItem('jb-guide-os');
+          if (saved) return saved;
+        } catch (e) { /* ignore */ }
+        var ua = navigator.userAgent;
+        if (/Win/i.test(ua)) return 'win';
+        if (/Mac/i.test(ua)) return 'mac';
+        return 'linux';
+      }
+      tabs.forEach(function (t) { t.addEventListener('click', function () { pickOS(t.dataset.os); }); });
+      pickOS(detectOS());
     </script>
   </body>
 </html>

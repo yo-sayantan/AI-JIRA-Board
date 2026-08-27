@@ -44,6 +44,9 @@ WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY serve.mjs package.json ./
 COPY jira-intern ./jira-intern
+# The Setup & Deployment guide, served at /docs/index.html — this is what the board's
+# help (?) button opens, so it must exist inside the image, not just in the repo.
+COPY docs ./docs
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh \
  # Pristine copy used to seed an empty mounted volume on first boot.

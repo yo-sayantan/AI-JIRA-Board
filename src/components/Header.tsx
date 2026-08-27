@@ -2,7 +2,8 @@ import { motion } from 'motion/react'
 import type { ReactNode } from 'react'
 import type { JiraData } from '../types'
 import { currentSprint, fmtDate, fmtDateShort, freshness, hexToRgba, sprintStatus } from '../lib/format'
-import { CalendarIcon, RefreshIcon, SearchIcon, SunIcon, MoonIcon, TicketGlyph, TrophyIcon } from './Icons'
+import { CalendarIcon, QuestionIcon, RefreshIcon, SearchIcon, SunIcon, MoonIcon, TicketGlyph, TrophyIcon } from './Icons'
+import { guideUrl } from '../lib/runner'
 
 export type RunProgress = {
   done: number
@@ -303,6 +304,22 @@ export function Header({
               idleIcon={<TrophyIcon size={15} />}
             />
           )}
+
+          {/* Help — opens the Setup & Deployment guide. An <a>, not a fetch/route, so it still works
+              when the server is down (file:// falls back to the sibling docs/ folder). */}
+          <motion.a
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+            href={guideUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Setup and deployment guide"
+            title="Setup & deployment guide — requirements, install steps for Windows/macOS/Linux, git & Docker commands, troubleshooting"
+            className="grid h-9 w-9 place-items-center rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] text-[var(--ink-soft)] card-shadow hover:border-[var(--muted)] hover:text-[var(--ink)]"
+          >
+            <QuestionIcon size={16} />
+          </motion.a>
 
           <motion.button
             whileHover={{ scale: 1.08, rotate: dark ? -8 : 8 }}
