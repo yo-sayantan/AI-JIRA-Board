@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, useSpring } from 'motion/react'
-import { BOARD_COLUMNS } from '../lib/columns'
+import { BOARD_COLUMNS, NEXT_SPRINT_SECTION } from '../lib/columns'
 import type { ColumnKey, Ticket } from '../types'
 import { hexToRgba } from '../lib/format'
 import { TrophyIcon } from './Icons'
@@ -18,12 +18,16 @@ function AnimatedNumber({ value }: { value: number }) {
 export function Stats({
   tickets,
   completedCount,
+  nextSprintCount = 0,
   active,
   onSelect,
   onOpenCompleted,
 }: {
+  /** Board + On Hold tickets only — next-sprint work is counted separately. */
   tickets: Ticket[]
   completedCount: number
+  /** To Do tickets whose sprint hasn't started (rendered in the Next Sprint section). */
+  nextSprintCount?: number
   active: ColumnKey | null
   onSelect: (key: ColumnKey | null) => void
   onOpenCompleted?: () => void
@@ -70,6 +74,29 @@ export function Stats({
           </motion.button>
         )
       })}
+
+      {/* Not a focus filter (these tickets aren't in the kanban row) — it jumps to the section. */}
+      {nextSprintCount > 0 && (
+        <motion.button
+          whileHover={{ scale: 1.05, y: -1 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+          onClick={() => document.getElementById('jb-next-sprint')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+          title="Assigned to you, but the sprint hasn’t started — jump to the Next Sprint section"
+          className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors"
+          style={{
+            borderColor: hexToRgba(NEXT_SPRINT_SECTION.accent, 0.5),
+            background: 'var(--surface-solid)',
+            color: NEXT_SPRINT_SECTION.accent,
+          }}
+        >
+          <span className="inline-block h-2 w-2 rounded-full" style={{ background: NEXT_SPRINT_SECTION.accent }} />
+          {NEXT_SPRINT_SECTION.label}
+          <b>
+            <AnimatedNumber value={nextSprintCount} />
+          </b>
+        </motion.button>
+      )}
 
       <motion.button
         whileTap={{ scale: 0.97 }}

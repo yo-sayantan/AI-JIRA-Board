@@ -349,6 +349,35 @@ export function sprintStatus(
   return { label: sp.state || 'sprint', color: '#64748b', pct: null }
 }
 
+/**
+ * The ticket's sprint IF that sprint hasn't started yet — work that is *queued* (next
+ * sprint, or a grooming bucket like "FraudBus READY"), not committed to the current one.
+ *
+ * Jira's own `state` is authoritative: a sprint nobody has clicked "Start" on stays
+ * `future` even once its planned start date has slipped by, and a READY bucket carries
+ * no dates at all. Dates are only consulted for dumps that carry no state.
+ */
+export function futureSprintOf(sprint?: string | null, now: number = Date.now()): SprintInfo | null {
+  const sp = parseSprint(sprint)
+  if (!sp) return null
+  if (sp.state === 'future') return sp
+  if (sp.state) return null // active / closed → live work, belongs on the board
+  const startTs = sp.start ? Date.parse(`${sp.start}T00:00:00`) : NaN
+  return !Number.isNaN(startTs) && now < startTs ? sp : null
+}
+
+/**
+ * Board rule: a To Do ticket parked in a not-yet-started sprint is NOT this sprint's
+ * work — it gets its own "Next Sprint" section instead of padding the To Do column
+ * (otherwise a fully-cleared To Do still looks like you have work outstanding).
+ *
+ * Deliberately scoped to `todo`: the moment you actually pick a next-sprint ticket up,
+ * it shows in In Progress / Review / QA / On Hold where the real work state is.
+ */
+export function isNextSprint(t: { column: string; sprint?: string | null }, now: number): boolean {
+  return t.column === 'todo' && futureSprintOf(t.sprint, now) != null
+}
+
 /** Compact "Jul 9" style date (no year) — for tight UI like the header sprint chip. */
 export function fmtDateShort(v?: string | null): string {
   const d = parseDate(v)

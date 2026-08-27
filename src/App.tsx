@@ -7,6 +7,7 @@ import { Header } from './components/Header'
 import { Stats } from './components/Stats'
 import { Board } from './components/Board'
 import { OnHold } from './components/OnHold'
+import { NextSprint } from './components/NextSprint'
 import { CompletedOverlay } from './components/Completed'
 import { TicketDetail } from './components/TicketDetail'
 import { EmptyState } from './components/EmptyState'
@@ -16,7 +17,7 @@ import { NoticesDock } from './components/NoticesDock'
 import { StaleBanner } from './components/StaleBanner'
 import { Footer } from './components/Footer'
 import { EyeOffIcon } from './components/Icons'
-import { freshness } from './lib/format'
+import { freshness, isNextSprint } from './lib/format'
 import { matches, parseQuery } from './lib/search'
 
 /** Flatten tickets + their nested sub-tasks into a key→ticket map (recursive). */
@@ -409,10 +410,18 @@ export default function App() {
 
   const terms = useMemo(() => parseQuery(query), [query])
   const filtered = useMemo(() => data.tickets.filter((t) => matches(t, terms)), [data.tickets, terms])
+  // Three destinations, mutually exclusive: the kanban row, the On Hold section, and the
+  // Next Sprint section (To Do tickets whose sprint hasn't started — see isNextSprint).
   // User-archived tickets were already retired to completed[] inside loadData.
-  const boardTickets = filtered.filter((t) => t.column !== 'hold')
+  const nextSprintTickets = filtered.filter((t) => isNextSprint(t, now))
   const holdTickets = filtered.filter((t) => t.column === 'hold')
-  const hasAnyActive = useMemo(() => data.tickets.some((t) => t.column !== 'hold'), [data.tickets])
+  const boardTickets = filtered.filter((t) => t.column !== 'hold' && !isNextSprint(t, now))
+  // "Nothing on the board" must ignore next-sprint work too — otherwise finishing the
+  // sprint never earns the celebration, because next sprint's queue is always sitting there.
+  const hasAnyActive = useMemo(
+    () => data.tickets.some((t) => t.column !== 'hold' && !isNextSprint(t, now)),
+    [data.tickets, now],
+  )
   const myCompletedCount = useMemo(() => data.completed.filter((c) => c.mine !== false).length, [data.completed])
   const fr = freshness(data.generatedAt, now)
 
@@ -497,11 +506,21 @@ export default function App() {
       {/* Counts follow the current search so the chips always agree with what's on the board.
           The Completed chip counts MY tickets only — the archive also carries team-mates'
           sub-tickets for context, and it opens on the same "Mine" scope. */}
-      <Stats tickets={filtered} completedCount={myCompletedCount} active={focus} onSelect={setFocus} onOpenCompleted={() => setCompletedOpen(true)} />
+      <Stats
+        tickets={filtered.filter((t) => !isNextSprint(t, now))}
+        completedCount={myCompletedCount}
+        nextSprintCount={nextSprintTickets.length}
+        active={focus}
+        onSelect={setFocus}
+        onOpenCompleted={() => setCompletedOpen(true)}
+      />
 
       {!hasAnyActive ? (
         <FunEmptyBoard served={served} refreshing={refreshing} onRefresh={handleRefresh} />
-      ) : boardTickets.length === 0 ? (
+      ) : filtered.length === 0 ? (
+        // Gate on `filtered`, not `boardTickets`: a search that only hits On Hold / Next Sprint
+        // DID match something, and those sections render it right below — claiming "no tickets
+        // match" there would contradict the screen.
         <div className="grid min-h-[34vh] place-items-center rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--surface-2)] text-center">
           <div>
             <div className="mb-2 text-3xl">🔍</div>
@@ -528,6 +547,15 @@ export default function App() {
       )}
 
       <OnHold tickets={holdTickets} now={now} onOpen={openTicket} />
+
+      {/* Next sprint's queue — below the board and On Hold, because it's the least urgent thing here. */}
+      <NextSprint
+        tickets={nextSprintTickets}
+        now={now}
+        onOpen={openTicket}
+        onRefreshTicket={handleRefreshTicket}
+        refreshingKeys={refreshingKeys}
+      />
 
       <Footer />
 
