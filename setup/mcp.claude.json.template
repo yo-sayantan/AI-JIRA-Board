@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "TEMPLATE for Claude Code / Claude Desktop MCP config.",
+    "Add this 'mcpServers' block to ~/.claude/.claude.json (Claude Code) or to your",
+    "claude_desktop_config.json. Same rule as everywhere else: NO tokens in this file.",
+    "The wrapper script (setup/mcp-with-secrets.sh.template) sources your secrets file",
+    "and then execs the real MCP server, so tokens never touch this JSON.",
+    "This is optional for jira-board — the fetch also works with a plain Jira PAT and",
+    "no MCP at all (direct REST). MCP just gives the AI-summary pass richer context."
+  ],
+  "mcpServers": {
+    "jira": {
+      "command": "/absolute/path/to/mcp-with-secrets.sh",
+      "args": ["mcp-atlassian"],
+      "env": {
+        "JIRA_URL": "https://jira.your-company.example",
+        "JIRA_SSL_VERIFY": "false"
+      }
+    },
+    "confluence": {
+      "command": "/absolute/path/to/mcp-with-secrets.sh",
+      "args": ["mcp-atlassian"],
+      "env": {
+        "CONFLUENCE_URL": "https://confluence.your-company.example",
+        "CONFLUENCE_SSL_VERIFY": "false"
+      }
+    }
+  }
+}

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Jira Board — Getting Started</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #eef1f7; --card: #ffffff; --ink: #131722; --soft: #43506a; --muted: #74809a;
+        --line: rgba(20, 28, 48, 0.12); --line2: rgba(20, 28, 48, 0.08);
+        --brand: #6d5bd0; --brand2: #3b82f6; --accent: #ec4899; --code-bg: #0f1524; --code-ink: #e6ebf5;
+        --ok: #16a34a; --warn: #b45309;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #11141a; --card: #1b1f27; --ink: #f3f6fb; --soft: #d4dbe8; --muted: #9da7b8;
+          --line: rgba(255, 255, 255, 0.14); --line2: rgba(255, 255, 255, 0.08);
+          --code-bg: #0b0f1a; --code-ink: #e6ebf5;
+        }
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0; background: var(--bg); color: var(--ink); line-height: 1.6;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px 96px; }
+      header.hero {
+        text-align: center; padding: 64px 20px 40px;
+        background: radial-gradient(1200px 400px at 50% -120px, rgba(109, 91, 208, 0.28), transparent 70%);
+      }
+      .logo {
+        width: 62px; height: 62px; border-radius: 16px; display: inline-grid; place-items: center;
+        background: linear-gradient(135deg, var(--brand), var(--brand2)); color: #fff; font-size: 30px;
+        box-shadow: 0 12px 30px -10px rgba(109, 91, 208, 0.6); margin-bottom: 18px;
+      }
+      h1 { font-size: 34px; margin: 0 0 8px; letter-spacing: -0.02em; }
+      .sub { color: var(--muted); font-size: 16px; max-width: 620px; margin: 0 auto; }
+      .pills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 22px; }
+      .pill {
+        font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: 999px;
+        border: 1px solid var(--line); background: var(--card); color: var(--soft); text-decoration: none;
+      }
+      .pill:hover { border-color: var(--muted); }
+      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 44px 0 14px; }
+      .step {
+        background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+        padding: 20px 22px; margin: 14px 0; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 30px -20px rgba(16, 24, 40, 0.35);
+      }
+      .step-h { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+      .num {
+        flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+        font-weight: 800; font-size: 14px; color: #fff; background: linear-gradient(135deg, var(--brand), var(--brand2));
+      }
+      .step-h h3 { margin: 0; font-size: 17px; }
+      .step p { margin: 8px 0; color: var(--soft); }
+      .step p.small { font-size: 13.5px; color: var(--muted); }
+      code.inl { background: var(--line2); padding: 1px 6px; border-radius: 6px; font-size: 0.9em; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+      pre {
+        position: relative; background: var(--code-bg); color: var(--code-ink); border-radius: 11px;
+        padding: 14px 16px; overflow: auto; font-size: 13px; line-height: 1.55;
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; margin: 10px 0 4px;
+      }
+      pre .cmt { color: #8b9bc0; }
+      .copy {
+        position: absolute; top: 8px; right: 8px; font: inherit; font-size: 11px; font-weight: 700;
+        color: var(--code-ink); background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 7px; padding: 3px 9px; cursor: pointer;
+      }
+      .copy:hover { background: rgba(255, 255, 255, 0.2); }
+      .note { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 12px 0; font-size: 14px; }
+      .note.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+      .note b { color: var(--ink); }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 620px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 28px; } }
+      .doc {
+        display: block; text-decoration: none; color: inherit; background: var(--card);
+        border: 1px solid var(--line); border-radius: 13px; padding: 16px 18px;
+      }
+      .doc:hover { border-color: var(--brand); }
+      .doc b { display: block; font-size: 15px; margin-bottom: 3px; }
+      .doc span { font-size: 13px; color: var(--muted); }
+      footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 48px; }
+      a { color: var(--brand2); }
+      .ok { color: var(--ok); font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="logo">🎫</div>
+      <h1>My Jira Board</h1>
+      <p class="sub">A personal, beautiful replacement for staring at the Jira web UI. It renders tickets a
+        background fetcher pulls for you — no Jira login, no waiting on the browser. This page gets you
+        from clone to running board.</p>
+      <div class="pills">
+        <a class="pill" href="#setup">Setup</a>
+        <a class="pill" href="#deploy">Deploy</a>
+        <a class="pill" href="#run">Other ways to run</a>
+        <a class="pill" href="#docs">Full docs</a>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <h2>Before you start — what you need</h2>
+      <div class="step">
+        <p style="margin-top: 0">
+          <b>Docker Desktop</b> (the easy path), and <b>one Jira Personal Access Token</b>. That's the only
+          token the board strictly needs. Confluence and Bitbucket tokens are optional and just add richer
+          detail. <span class="small">Node.js is only needed if you want to build the app or run the local
+          server instead of Docker.</span>
+        </p>
+        <div class="note"><b>Your tokens never enter this repo.</b> They live in one file outside it
+          (<code class="inl">~/.cursor/mcp-secrets.env</code>). Everything else points at it by path.</div>
+      </div>
+
+      <h2 id="setup">Setup — three files</h2>
+
+      <div class="step">
+        <div class="step-h"><span class="num">1</span><h3>Clone the repo</h3></div>
+        <pre><button class="copy">Copy</button>git clone &lt;your-repo-url&gt; jira-board
+cd jira-board</pre>
+      </div>
+
+      <div class="step">
+        <div class="step-h"><span class="num">2</span><h3>Create your secrets file</h3></div>
+        <p>Copy the template out of the repo and lock it down, then paste in your Jira token.</p>
+        <pre><button class="copy">Copy</button>cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env
+chmod 600 ~/.cursor/mcp-secrets.env
+<span class="cmt"># then edit it and set:</span>
+<span class="cmt">#   JIRA_URL=https://jira.your-company.example</span>
+<span class="cmt">#   JIRA_PERSONAL_TOKEN=&lt;your token&gt;</span></pre>
+        <p class="small">Jira → your avatar → Profile → Personal Access Tokens → Create token. Read scope is
+          enough. Copy it immediately — you can't see it again.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-h"><span class="num">3</span><h3>Fill in your config</h3></div>
+        <p>Who you are and your company's URLs. <b>No tokens here.</b></p>
+        <pre><button class="copy">Copy</button>cp setup/config.example.json jira-intern/config.json
+<span class="cmt"># edit jira-intern/config.json: your name (exactly as Jira shows it),</span>
+<span class="cmt"># your endpoints, and the footer branding</span></pre>
+        <p class="small">Every key is documented in <code class="inl">jira-intern/CONFIG.md</code>.</p>
+      </div>
+
+      <h2 id="deploy">Deploy — one command (Docker)</h2>
+      <div class="step">
+        <div class="step-h"><span class="num">4</span><h3>Build, fetch, and serve</h3></div>
+        <p>This builds the app, pulls your tickets on start, auto-refreshes every 15 minutes, and serves the board.</p>
+        <pre><button class="copy">Copy</button>docker compose up -d --build</pre>
+        <p>Then open <a href="http://localhost:4321/dist/index.html">http://localhost:4321/dist/index.html</a>
+          <span class="ok">✓ done.</span></p>
+        <div class="note"><b>macOS shortcut:</b> copy
+          <code class="inl">setup/Start Jira Board.command.template</code> to your Desktop, set the repo path
+          inside it, <code class="inl">chmod +x</code> it, and double-click to build + deploy + open — no
+          terminal needed.</div>
+        <div class="note warn"><b>Changed code in <code class="inl">src/</code>?</b> Re-run with
+          <code class="inl">--build</code>. Changing only data does not need a rebuild — the container refetches.</div>
+      </div>
+
+      <p class="small" style="color: var(--muted)">Everyday commands:</p>
+      <pre><button class="copy">Copy</button>docker compose logs -f     <span class="cmt"># watch fetch + server logs</span>
+docker compose down        <span class="cmt"># stop</span></pre>
+
+      <h2 id="run">Other ways to run</h2>
+      <div class="grid">
+        <div class="step" style="margin: 0">
+          <div class="step-h"><h3 style="font-size: 15px">📄 Static file</h3></div>
+          <p class="small">No server. If a dump exists, just open the single-file build:</p>
+          <pre><button class="copy">Copy</button>open dist/index.html</pre>
+          <p class="small">Press <code class="inl">r</code> to re-read the latest data.</p>
+        </div>
+        <div class="step" style="margin: 0">
+          <div class="step-h"><h3 style="font-size: 15px">🖥️ Live server</h3></div>
+          <p class="small">The header button runs the fetch on your machine:</p>
+          <pre><button class="copy">Copy</button>npm install
+npm run serve</pre>
+          <p class="small">Opens on port 4321 with a working Refresh.</p>
+        </div>
+      </div>
+
+      <h2 id="docs">Full documentation</h2>
+      <div class="grid">
+        <a class="doc" href="../setup/README.md"><b>⚙️ Setup guide</b><span>Secrets, config & MCP — every template explained, step by step.</span></a>
+        <a class="doc" href="DEPLOYMENT.md"><b>🚀 Deployment</b><span>Docker, static file, live server, refresh commands, troubleshooting.</span></a>
+        <a class="doc" href="USAGE.md"><b>🧭 Using the board</b><span>Chips, Next Sprint, the drawer, Completed, keyboard shortcuts.</span></a>
+        <a class="doc" href="ARCHITECTURE.md"><b>🏗️ Architecture</b><span>How the fetch, data file, and app fit together.</span></a>
+      </div>
+
+      <div class="note warn" style="margin-top: 26px">
+        <b>Before you push this repo public</b>, confirm no <code class="inl">*.env</code> with real values is
+        staged, and sanitize or untrack <code class="inl">jira-intern/config.json</code> (it holds your name and
+        internal hostnames). See <a href="../setup/README.md">setup/README.md → "Before you make the repo public"</a>.
+      </div>
+
+      <footer>Built to dodge JIRA · made with ☕ + a refresh button</footer>
+    </div>
+
+    <script>
+      // Progressive enhancement: copy buttons. No effect if JS is off.
+      document.querySelectorAll('pre .copy').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var pre = btn.parentElement.cloneNode(true);
+          pre.querySelector('.copy').remove();
+          navigator.clipboard.writeText(pre.textContent.trim()).then(function () {
+            var t = btn.textContent; btn.textContent = 'Copied ✓';
+            setTimeout(function () { btn.textContent = t; }, 1400);
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

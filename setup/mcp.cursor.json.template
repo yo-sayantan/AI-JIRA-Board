@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "TEMPLATE for the Cursor MCP config (real file: ~/.cursor/mcp.json).",
+    "Only the three servers jira-board uses are shown here — jira, confluence, bitbucket.",
+    "TOKENS DO NOT GO IN THIS FILE. Each server points at your secrets file via",
+    "'envFile', so ~/.cursor/mcp-secrets.env is the ONLY place your tokens live.",
+    "Replace the URLs with your company's hosts. Remove SSL_VERIFY=false lines if",
+    "your internal certificates are trusted (they relax TLS for private CAs).",
+    "'mcp-atlassian' is the community server: pipx install mcp-atlassian (or brew)."
+  ],
+  "mcpServers": {
+    "jira": {
+      "command": "mcp-atlassian",
+      "args": [],
+      "envFile": "~/.cursor/mcp-secrets.env",
+      "env": {
+        "JIRA_URL": "https://jira.your-company.example",
+        "JIRA_SSL_VERIFY": "false",
+        "PYTHONHTTPSVERIFY": "0",
+        "REQUESTS_CA_BUNDLE": "",
+        "CURL_CA_BUNDLE": ""
+      }
+    },
+    "confluence": {
+      "command": "mcp-atlassian",
+      "args": [],
+      "envFile": "~/.cursor/mcp-secrets.env",
+      "env": {
+        "CONFLUENCE_URL": "https://confluence.your-company.example",
+        "CONFLUENCE_SSL_VERIFY": "false",
+        "PYTHONHTTPSVERIFY": "0",
+        "REQUESTS_CA_BUNDLE": "",
+        "CURL_CA_BUNDLE": ""
+      }
+    },
+    "bitbucket": {
+      "command": "~/.cursor/bin/mcp-with-secrets.sh",
+      "args": ["your-bitbucket-mcp-server"],
+      "envFile": "~/.cursor/mcp-secrets.env",
+      "env": {
+        "BITBUCKET_URL": "https://bitbucket.your-company.example"
+      }
+    }
+  }
+}

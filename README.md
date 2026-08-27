@@ -1,67 +1,94 @@
-# jira-board
+# 🎫 My Jira Board
 
-A personal, beautiful replacement for staring at the Jira board. It renders the data that
-**`jira-intern`** dumps into `jira-intern/` — no Jira login, no waiting on the web UI.
+A personal, beautiful replacement for staring at the Jira web UI. A background fetcher pulls the
+tickets assigned to you; a fast single-page app renders them — **no Jira login, no waiting on the
+browser**, and refreshing the data never rebuilds the app.
 
-React 19 · Vite 6 · Tailwind v4 · Motion (Framer Motion). Built to a **single self-contained
-`dist/index.html`** you just double-click — no server, no rebuild when the data refreshes.
+React 19 · Vite 6 · Tailwind v4 · Motion · a Python fetch pipeline · one self-contained
+`dist/index.html` you can literally double-click.
 
-## Open it — two ways
+> **New here?** Open [`docs/index.html`](docs/index.html) in a browser for a visual, click-by-click
+> getting-started guide.
 
-**1. No server (default).** Just double-click **`Open Board.html`** (or `dist/index.html`). It reads the
-last data the intern dumped to `../jira-intern/data.js` straight off `file://` — nothing to run.
-The header's **Reload** button (or press `r`) re-reads the latest dump; run the intern in a terminal
-whenever you want fresh tickets. **You never rebuild the app to see new data.**
+---
 
-```
-open dist/index.html        # macOS — or double-click "Open Board.html"
-```
+## What it does
 
-**2. Live server (optional).** `npm run serve` → open the printed `http://localhost:4321/...` URL.
-Here the header button becomes **Refresh** and actually runs `run-intern.sh` for you, shows a spinner,
-and reloads when fresh data lands. If a run is already going (even one you started in a terminal), the
-button reattaches to it — and if you refresh the page mid-run, it reconnects instead of looking idle.
+- **Kanban board** — To Do · In Progress · In Review (folds in Ready4Review + Code Review) · QA ·
+  Done. Colour-coded animated cards; click any for a full detail drawer. Chips filter; live search.
+- **On Hold** — its own section, shown only when something is blocked/waiting.
+- **Next Sprint** — tickets queued in a sprint that hasn't started yet, kept out of To Do so a
+  cleared sprint doesn't look full. Toggle it from the top chips; **All** reveals everything at once.
+- **Completed** — the full historical archive of every Done ticket, with inline peek + detail.
+- **Ticket detail** — a slide-in drawer: status pipeline, PR card, description, an interactive
+  acceptance-criteria checklist, comments, related issues, Confluence/docs, branch, sources.
 
-## What you get
+## Quick start (Docker)
 
-- **Board** — To Do · In Progress · **In Review** (folds in *Ready4Review* + *Code Review*) · QA · Done.
-  Colour-coded, animated cards; click one for full details. Stat chips filter the board; live search.
-- **On Hold** — its own section, shown **only when something is blocked/waiting** (hidden otherwise).
-- **Completed** — the full historical archive of every Done ticket, **collapsed by default**. Expand to a
-  list (number · name · status); each row has a ▸ to **peek inline** (opened, closed, branch, status, PR /
-  merged) without leaving the page, plus *Expand all*. Click a row to open the full detail page.
-- **Ticket details** — a slide-in drawer with **every section expanded by default**: status pipeline,
-  overview, PR card, description, an interactive acceptance-criteria checklist, comments, related issues,
-  Confluence/docs, proposed solution, effort, open questions, copy-able branch, sources. Light/dark toggle.
+```bash
+# 1. one-time setup — your token + your details (see setup/)
+cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env   # then add your Jira token
+cp setup/config.example.json      jira-intern/config.json     # then add your name + URLs
 
-## Data contract
-
-`src/types.ts` is the single source of truth for the data shape. `jira-intern/intern-prompt.md`
-documents the **same** schema for the intern to produce — keep the two in sync. Files the intern writes:
-
-- `jira-intern/data.json` — canonical, parseable dump.
-- `jira-intern/data.js`   — `window.__JIRA_DATA__ = <that json>;` for `file://` loading.
-
-## Develop / rebuild
-
-```
-npm install                                  # uses a writable cache: npm i --cache "$TMPDIR/npm-cache-jb"
-npm run dev                                  # localhost:5173 — renders a SAMPLE fixture (src/fixtures.ts)
-npm run build                                # -> dist/index.html (single self-contained file)
+# 2. build, fetch, and serve
+docker compose up -d --build
 ```
 
-`npm run dev` shows rich sample data so you can design every state (On Hold, Completed, the drawer).
-The production build only ever reads the real `window.__JIRA_DATA__`; the fixture is dead-code-eliminated.
+Open **http://localhost:4321/dist/index.html**. That's it — the container fetches on start and
+auto-refreshes every 15 minutes. Full details and other run modes: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
-## Layout
+## Repository layout
 
 ```
-src/
-  types.ts              # THE CONTRACT (shared with intern-prompt.md)
-  data.ts               # window.__JIRA_DATA__ → app  (dev fixture / empty-state fallback)
-  fixtures.ts           # SAMPLE data for `npm run dev` only
-  lib/columns.ts        # status → column mapping + colours
-  lib/format.ts         # priority / type / PR / date helpers
-  components/            # Header, Stats, Board, Column, TicketCard, OnHold, Completed, TicketDetail, …
-vite.config.ts          # single-file build + injects the external data.js <script>
+jira-board/
+├── README.md                ← you are here
+├── docs/                    ← 📚 documentation
+│   ├── index.html           ←   visual getting-started guide (open in a browser)
+│   ├── ARCHITECTURE.md      ←   how the fetch, data file, and app fit together
+│   ├── DEPLOYMENT.md        ←   deploy & run: Docker / static file / live server
+│   └── USAGE.md             ←   using the board: chips, Next Sprint, drawer, shortcuts
+├── setup/                   ← 🔐 templates for secrets, config & MCP (no real values)
+│   ├── README.md            ←   step-by-step setup guide
+│   ├── mcp-secrets.env.template
+│   ├── config.example.json
+│   ├── mcp.cursor.json.template  ·  mcp.claude.json.template  ·  mcp-with-secrets.sh.template
+│   └── Start Jira Board.command.template   ←   macOS double-click launcher
+├── src/                     ← ⚛️ the React app (compiled to dist/index.html)
+├── jira-intern/             ← 🐍 the fetch pipeline ("the intern") + its config
+├── serve.mjs                ← optional zero-dep server for live mode
+├── Dockerfile · docker-compose.yml · docker-entrypoint.sh   ← containerised deploy
+└── start-jira-board.sh      ← build + deploy + open, in one script (Desktop-launcher friendly)
 ```
+
+> Working files (`Dockerfile`, `serve.mjs`, `start-jira-board.sh`, `vite.config.ts`) stay at the
+> repo root on purpose — the Docker build and Vite config reference them by path.
+
+## Setup
+
+You need **one Jira Personal Access Token**; everything else is optional. Tokens live in a single
+file **outside this repo** (`~/.cursor/mcp-secrets.env`) — nothing here is ever committed with a
+real value in it. Walk through it in [`setup/README.md`](setup/README.md).
+
+## Develop
+
+```bash
+npm install
+npm run dev        # localhost:5173 — renders a SAMPLE fixture (src/fixtures.ts), every UI state
+npm run build      # → dist/index.html (single self-contained file)
+npm run typecheck  # tsc --noEmit
+```
+
+`src/types.ts` is the **data contract** — the single source of truth for the ticket shape, mirrored
+in prose by `jira-intern/intern-prompt.md`. Keep the two in sync. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full picture.
+
+## Publishing this repo
+
+It's safe to push **because your secrets never enter it** — they live only in
+`~/.cursor/mcp-secrets.env` (git-ignored). Before going **public**, confirm no `*.env` with real
+values is staged and sanitize or untrack `jira-intern/config.json` (it holds your name and internal
+hostnames). Checklist: [`setup/README.md → Before you make the repo public`](setup/README.md#before-you-make-the-repo-public).
+
+---
+
+<sub>Built to dodge JIRA · made with ☕ + a refresh button</sub>

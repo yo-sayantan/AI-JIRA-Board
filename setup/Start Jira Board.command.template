@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+#  Start Jira Board.command  —  double-click launcher (macOS)  —  TEMPLATE
+# ─────────────────────────────────────────────────────────────────────────────
+#  A Desktop shortcut that builds + deploys the board in Docker and opens it,
+#  so you never touch a terminal after setup. It just calls start-jira-board.sh
+#  in the repo with KEEP_OPEN=1 (so the window stays open to show progress).
+#
+#  INSTALL (one time)
+#    1. Set REPO_DIR below to where you cloned this repo.
+#    2. Copy this file to your Desktop and drop the ".template" from the name:
+#         cp "setup/Start Jira Board.command.template" ~/Desktop/"Start Jira Board.command"
+#    3. Make it double-clickable:
+#         chmod +x ~/Desktop/"Start Jira Board.command"
+#    4. Double-click it. (First run: macOS may ask to confirm — right-click ▸ Open.)
+#
+#  Every click rebuilds the image and redeploys on the same fixed port — clicking
+#  it again is always safe (it never stacks containers or drifts ports).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 👉 EDIT THIS to your clone location, e.g. /Users/you/git/jira-board
+REPO_DIR="__REPLACE_WITH_ABSOLUTE_PATH_TO_REPO__"
+
+if [ ! -d "$REPO_DIR" ]; then
+  echo "✖  REPO_DIR does not exist: $REPO_DIR"
+  echo "   Edit this file and set REPO_DIR to your jira-board clone."
+  read -r -p "Press Enter to close… "
+  exit 1
+fi
+
+cd "$REPO_DIR" || exit 1
+
+# KEEP_OPEN=1 makes the launcher pause at the end so you can read the summary.
+KEEP_OPEN=1 exec bash ./start-jira-board.sh

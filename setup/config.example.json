@@ -1,0 +1,81 @@
+{
+  "_readme": "TEMPLATE for jira-intern/config.json — the single source of truth for everything user-, company- and machine-specific. Copy this to jira-intern/config.json and edit the values. Full docs: jira-intern/CONFIG.md. NOTE: no API tokens live here — those go in mcp-secrets.env (see setup/mcp-secrets.env.template).",
+
+  "user": {
+    "name": "Your Name (exactly as Jira shows it)",
+    "accountId": "YOUR_CORP_ID",
+    "email": "you@your-company.example"
+  },
+
+  "endpoints": {
+    "jiraBase": "https://jira.your-company.example",
+    "confluenceBase": "https://confluence.your-company.example",
+    "bitbucketBase": "https://bitbucket.your-company.example"
+  },
+
+  "_excludeProjects": "Project keys to DROP from the board AND the archive entirely, even if a ticket was once assigned to you. Leave [] to keep everything.",
+  "excludeProjects": [],
+
+  "connector": {
+    "active": "cursor",
+    "cursor": {
+      "bin": "cursor-agent",
+      "binFallbacks": ["~/.local/bin/cursor-agent"],
+      "promptFlag": "-p",
+      "extraArgs": ["--output-format", "text", "--force"],
+      "modelFlag": "--model",
+      "secretsFile": "~/.cursor/mcp-secrets.env",
+      "apiKeyEnv": "CURSOR_API_KEY",
+      "install": "curl https://cursor.com/install -fsS | bash"
+    },
+    "claude": {
+      "bin": "claude",
+      "binFallbacks": [],
+      "promptFlag": "-p",
+      "extraArgs": ["--output-format", "text", "--dangerously-skip-permissions"],
+      "modelFlag": "--model",
+      "secretsFile": "~/.claude/mcp-secrets.env",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "install": "npm install -g @anthropic-ai/claude-code"
+    },
+    "codex": {
+      "bin": "codex",
+      "binFallbacks": [],
+      "promptFlag": "exec",
+      "extraArgs": ["--full-auto"],
+      "modelFlag": "--model",
+      "secretsFile": "~/.codex/secrets.env",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "install": "npm install -g @openai/codex"
+    }
+  },
+
+  "mcp": {
+    "jira": { "enabled": true, "read": true, "write": false },
+    "confluence": { "enabled": true, "read": true, "write": false },
+    "bitbucket": { "enabled": true, "read": true, "write": false }
+  },
+
+  "models": {
+    "main": "auto",
+    "summary": "auto"
+  },
+
+  "timeouts": {
+    "dailySec": 1800,
+    "weeklySec": 7200,
+    "summarySec": 900,
+    "refreshSec": 600
+  },
+
+  "app": {
+    "servePort": 4321,
+    "requiredApprovals": 2,
+    "branding": {
+      "tagline": "Built to dodge JIRA · made with ☕ + a refresh button",
+      "badgeText": "your-name.dev",
+      "badgeUrl": "https://your-portfolio.example",
+      "badgeTitle": "Made by You"
+    }
+  }
+}

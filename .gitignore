@@ -5,6 +5,16 @@ __pycache__/
 .claude/
 *.swap
 
+# ── SECRETS — never commit real tokens ──────────────────────────────────────
+# Real secrets live OUTSIDE this repo (~/.cursor/mcp-secrets.env). These rules are
+# a backstop in case a filled-in copy ever lands inside the repo. The safe, empty
+# setup/*.template files are NOT matched (they don't end in .env) and stay tracked.
+*.env
+*.env.local
+secrets.env
+mcp-secrets.env
+!setup/*.template
+
 # Build output (rebuild with: npm run build)
 dist/
 
