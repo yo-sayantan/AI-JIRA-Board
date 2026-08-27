@@ -9,11 +9,10 @@ import {
   hexToRgba,
   priorityMeta,
   relTime,
-  typeMeta,
   workdaysBetween,
   type SprintInfo,
 } from '../lib/format'
-import { CalendarIcon, ChevronIcon, PriorityIcon, TypeIcon } from './Icons'
+import { ChevronIcon, TypeIcon } from './Icons'
 
 /** Stats' "Next Sprint" chip fires this before scrolling here, so a collapsed section opens itself. */
 export const OPEN_NEXT_SPRINT_EVENT = 'jb-open-next-sprint'
@@ -66,59 +65,74 @@ function groupBySprint(tickets: Ticket[], now: number): Group[] {
     )
 }
 
-/** One ticket = one line. Everything the board card shows that can't help you decide "do I care
- *  about this yet?" (PR state, approvals, branch, comment count) is deliberately dropped — none of
- *  it exists yet on work that hasn't started. */
+/**
+ * One ticket = one 30px line, no card, no separator. Alignment does the work a border would:
+ * the key column is fixed width, so every title starts at the same x and the rows read as a table.
+ *
+ * Colour is granted in exactly one place — the priority dot, and only from High upwards. Type is
+ * carried by the glyph's SHAPE, not its hue: six issue-type colours would make a list that is
+ * supposed to recede louder than the board above it.
+ */
 function Row({ ticket, now, onOpen }: { ticket: Ticket; now: number; onOpen: (key: string) => void }) {
   const prio = priorityMeta(ticket.priority)
-  const type = effectiveType(ticket)
   const rel = relTime(ticket.lastUpdate, now)
+  const pts = typeof ticket.storyPoints === 'number' ? ticket.storyPoints : null
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={`Open ${ticket.key}: ${ticket.title}`}
-      onClick={() => onOpen(ticket.key)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onOpen(ticket.key)
-        }
-      }}
-      className="group flex cursor-pointer items-center gap-2.5 border-t border-[var(--line)] px-3 py-[7px] transition-colors hover:bg-[var(--surface-solid)] focus-visible:bg-[var(--surface-solid)] focus-visible:outline-none"
-    >
-      <TypeIcon type={type} color={typeMeta(type).color} size={13} />
-      <span className="shrink-0 font-mono text-[11px] font-bold tracking-tight text-[var(--ink-soft)]">
-        {ticket.key}
-      </span>
-      {typeof ticket.storyPoints === 'number' && (
-        <span
-          className="shrink-0 rounded border border-[var(--line)] px-1 text-[9.5px] font-bold tabular-nums text-[var(--muted)]"
-          title={`${ticket.storyPoints} story point${ticket.storyPoints === 1 ? '' : 's'}`}
-        >
-          {ticket.storyPoints}
+    <li>
+      <button
+        type="button"
+        onClick={() => onOpen(ticket.key)}
+        aria-label={`Open ${ticket.key}: ${ticket.title} — ${prio.label} priority`}
+        className="group flex min-h-[30px] w-full items-center gap-2.5 rounded-md px-3 py-[6px] text-left transition-colors duration-150 hover:bg-[var(--surface-solid)] focus-visible:bg-[var(--surface-solid)]"
+      >
+        {/* Urgent gets a dot; everything else gets the same 6px of nothing, so the columns still line
+            up. A near-invisible hollow ring would read as "unread", which is not what this means. */}
+        {prio.rank >= 4 ? (
+          <span
+            aria-hidden
+            title={`${prio.label} priority`}
+            className="h-[6px] w-[6px] shrink-0 rounded-full"
+            style={{ background: prio.color, boxShadow: `0 0 0 3px ${hexToRgba(prio.color, 0.14)}` }}
+          />
+        ) : (
+          <span aria-hidden className="h-[6px] w-[6px] shrink-0" />
+        )}
+        <span className="inline-flex shrink-0 text-[var(--muted)] opacity-70 transition-opacity group-hover:opacity-100">
+          <TypeIcon type={effectiveType(ticket)} size={10} />
         </span>
-      )}
-      <span className="min-w-0 flex-1 truncate text-[12.5px] text-[var(--ink)]" title={ticket.title}>
-        {ticket.title}
-      </span>
-      {/* Colour only where it earns its keep: nothing below High goes coloured in here. */}
-      {prio.rank >= 4 && <PriorityIcon rank={prio.rank} color={prio.color} size={12} />}
-      {rel && <span className="shrink-0 text-[10px] tabular-nums text-[var(--muted)]">{rel}</span>}
-      <ChevronIcon
-        size={11}
-        className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity group-hover:opacity-100"
-      />
-    </div>
+        {/* Fixed at 104px: FRAUDBUSTE-227 is 14 mono chars ≈ 92px, so real keys never truncate. */}
+        <span className="w-[104px] shrink-0 truncate font-mono text-[11px] font-semibold tracking-tight text-[var(--muted)] transition-colors group-hover:text-[var(--ink-soft)]">
+          {ticket.key}
+        </span>
+        <span
+          className="min-w-0 flex-1 truncate text-[12.5px] font-medium leading-[17px] text-[var(--ink-soft)] transition-colors group-hover:text-[var(--ink)]"
+          title={ticket.title}
+        >
+          {ticket.title}
+        </span>
+        {pts != null && (
+          <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--muted)]">
+            {pts} pt{pts === 1 ? '' : 's'}
+          </span>
+        )}
+        {/* relTime is '' when lastUpdate is missing — flex-1 on the title holds the rail, so no ml-auto. */}
+        {rel && <span className="shrink-0 text-[10px] tabular-nums text-[var(--muted)]">{rel}</span>}
+        <ChevronIcon
+          size={10}
+          className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity group-hover:opacity-100"
+        />
+      </button>
+    </li>
   )
 }
 
 /**
  * Tickets assigned to you whose sprint hasn't started — rendered ONLY when there are any.
  *
- * Design brief: this is the least urgent thing on the page, so it gets the least ink — a single
- * collapsible strip of one-line rows, no tinted panel, no board-size cards. It must never look
- * like current-sprint work, and it must never cost more than ~1 row of height per ticket.
+ * Design brief: this is the least urgent thing on the page, so it gets the least ink. The board's
+ * cards have a drop shadow and a column accent; On Hold has a warm tint and a pulsing icon because
+ * blocked work needs a nudge. This has neither — hierarchy comes from type size, ink level and
+ * withheld colour, so the section recedes until you go looking for it.
  */
 export function NextSprint({
   tickets,
@@ -150,12 +164,14 @@ export function NextSprint({
 
   const groups = groupBySprint(tickets, now)
   const points = tickets.reduce((n, t) => n + (typeof t.storyPoints === 'number' ? t.storyPoints : 0), 0)
-  // One sprint → name it in the header and skip the per-group caption entirely (that duplication is
+  // One sprint → name it in the header and drop the per-group caption entirely (that duplication is
   // most of what made this section feel big). Several → summarise, and let the captions do the work.
-  const summary =
-    groups.length === 1
+  const multi = groups.length > 1
+  const summary = multi
+    ? `${groups.length} sprints · ${groups.map((g) => g.info.name).join(', ')}`
+    : groups.length === 1
       ? `${groups[0].info.name} · ${whenLabel(groups[0].info, now)}`
-      : `${groups.length} sprints · ${groups.map((g) => g.info.name).join(', ')}`
+      : ''
 
   return (
     <AnimatePresence initial={false}>
@@ -168,29 +184,24 @@ export function NextSprint({
           transition={{ type: 'spring', stiffness: 260, damping: 30 }}
           className="overflow-hidden"
         >
-          <div
-            className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-2)]"
-            style={{ boxShadow: `inset 2px 0 0 ${hexToRgba(SEC.accent, 0.55)}` }}
-          >
+          <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-2)]">
             <button
               type="button"
               onClick={toggle}
               aria-expanded={open}
               aria-controls="jb-next-sprint-rows"
               title="Assigned to you, but the sprint hasn’t started — not part of the current sprint"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-solid)]"
+              className="flex w-full items-center gap-2 px-3 py-[7px] text-left transition-colors hover:bg-[var(--surface-solid)]"
             >
-              <CalendarIcon size={13} color={SEC.accent} />
-              <span className="shrink-0 text-[12px] font-bold" style={{ color: SEC.accent }}>
+              {/* Same 8px dot the stats chip uses — one glyph, echoed, so the jump target is obvious. */}
+              <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: SEC.accent }} />
+              <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-soft)]">
                 {SEC.label}
               </span>
-              <span
-                className="shrink-0 rounded-full px-1.5 py-[1px] text-[10px] font-bold tabular-nums"
-                style={{ color: SEC.accent, background: hexToRgba(SEC.accent, 0.14) }}
-              >
-                {tickets.length}
+              <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[var(--muted)]">
+                · {tickets.length}
               </span>
-              <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--muted)]">{summary}</span>
+              <span className="min-w-0 flex-1 truncate text-[10.5px] text-[var(--muted)]">{summary}</span>
               {points > 0 && (
                 <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--muted)]">{points} pts</span>
               )}
@@ -199,7 +210,7 @@ export function NextSprint({
                 animate={{ rotate: open ? 90 : 0 }}
                 transition={{ duration: 0.18 }}
               >
-                <ChevronIcon size={12} />
+                <ChevronIcon size={10} />
               </motion.span>
             </button>
 
@@ -210,29 +221,37 @@ export function NextSprint({
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                  className="overflow-hidden"
+                  transition={{ type: 'spring', stiffness: 280, damping: 32 }}
+                  className="overflow-hidden border-t border-[var(--line)]"
                 >
-                  {/* Bounded so a big grooming bucket can never push the page around. */}
-                  <div className={tickets.length > 8 ? 'max-h-[288px] overflow-y-auto' : ''}>
-                    {groups.map((g) => (
+                  {/* py-1 keeps the global focus ring (outline-offset: 2px) off the first/last row's
+                      edge. Bounded above 8 so a big grooming bucket can't push the page around. */}
+                  <div className={tickets.length > 8 ? 'max-h-[288px] overflow-y-auto py-1' : 'py-1'}>
+                    {groups.map((g, i) => (
                       <div key={g.info.name}>
-                        {groups.length > 1 && (
-                          <div className="flex items-center gap-2 border-t border-[var(--line)] px-3 py-1">
-                            <span
-                              className="min-w-0 truncate text-[9.5px] font-bold uppercase tracking-wider"
-                              style={{ color: hexToRgba(SEC.accent, 0.85) }}
-                            >
+                        {multi && (
+                          // id is index-based, never the sprint name: aria-labelledby is a
+                          // space-separated ID list, and "FraudBus READY" contains a space.
+                          <div
+                            id={`jb-ns-g${i}`}
+                            className="mt-2 mb-0.5 flex items-baseline gap-1.5 px-3 first:mt-0"
+                          >
+                            <span className="min-w-0 truncate text-[11px] font-semibold text-[var(--ink-soft)]">
                               {g.info.name}
                             </span>
-                            <span className="shrink-0 text-[9.5px] tabular-nums text-[var(--muted)]">
-                              {g.tickets.length} · {whenLabel(g.info, now)}
+                            <span className="shrink-0 text-[10.5px] text-[var(--muted)]">
+                              {whenLabel(g.info, now)}
+                            </span>
+                            <span className="ml-auto shrink-0 text-[10.5px] tabular-nums text-[var(--muted)]">
+                              {g.tickets.length}
                             </span>
                           </div>
                         )}
-                        {g.tickets.map((t) => (
-                          <Row key={t.key} ticket={t} now={now} onOpen={onOpen} />
-                        ))}
+                        <ul role="list" aria-labelledby={multi ? `jb-ns-g${i}` : undefined}>
+                          {g.tickets.map((t) => (
+                            <Row key={t.key} ticket={t} now={now} onOpen={onOpen} />
+                          ))}
+                        </ul>
                       </div>
                     ))}
                   </div>
