@@ -1,0 +1,64 @@
+name: 🐞 Bug report
+description: Something in the board or the fetch isn't working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Please don't paste real ticket content, tokens, or internal
+        hostnames — redact anything sensitive first.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you get instead?
+      placeholder: The Next Sprint bar didn't appear when I clicked the chip…
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker (docker compose / start-jira-board.sh)
+        - Static file (open dist/index.html)
+        - Live server (npm run serve)
+        - Building / developing (npm run dev / build)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options:
+        - The board UI (rendering, filters, drawer)
+        - The fetch / data (jira-intern, empty or wrong tickets)
+        - Setup / secrets / config
+        - Deployment (Docker, ports)
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: e.g. `docker compose logs`, the browser console, or a fetch error. Redact tokens.
+      render: shell
+
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: macOS 15 · Docker Desktop 4.x · Chrome 130

@@ -1,5 +1,13 @@
 # 🎫 My Jira Board
 
+[![CI](https://github.com/yo-sayantan/AI-JIRA-Board/actions/workflows/ci.yml/badge.svg)](https://github.com/yo-sayantan/AI-JIRA-Board/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![React 19](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white)
+![Vite 6](https://img.shields.io/badge/Vite-6-646cff?logo=vite&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)
+![Tailwind v4](https://img.shields.io/badge/Tailwind-v4-38bdf8?logo=tailwindcss&logoColor=white)
+![Docker ready](https://img.shields.io/badge/Docker-ready-2496ed?logo=docker&logoColor=white)
+
 A personal, beautiful replacement for staring at the Jira web UI. A background fetcher pulls the
 tickets assigned to you; a fast single-page app renders them — **no Jira login, no waiting on the
 browser**, and refreshing the data never rebuilds the app.
@@ -26,6 +34,10 @@ React 19 · Vite 6 · Tailwind v4 · Motion · a Python fetch pipeline · one se
 ## Quick start (Docker)
 
 ```bash
+# 0. clone
+git clone https://github.com/yo-sayantan/AI-JIRA-Board.git
+cd AI-JIRA-Board
+
 # 1. one-time setup — your token + your details (see setup/)
 cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env   # then add your Jira token
 cp setup/config.example.json      jira-intern/config.json     # then add your name + URLs
@@ -40,8 +52,10 @@ auto-refreshes every 15 minutes. Full details and other run modes: [`docs/DEPLOY
 ## Repository layout
 
 ```
-jira-board/
+AI-JIRA-Board/
 ├── README.md                ← you are here
+├── LICENSE                  ← MIT
+├── .github/                 ← CI (typecheck + build), Dependabot, issue & PR templates
 ├── docs/                    ← 📚 documentation
 │   ├── index.html           ←   visual getting-started guide (open in a browser)
 │   ├── ARCHITECTURE.md      ←   how the fetch, data file, and app fit together

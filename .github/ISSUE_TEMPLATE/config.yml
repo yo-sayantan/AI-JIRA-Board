@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Setup & deployment docs
+    url: https://github.com/yo-sayantan/AI-JIRA-Board/tree/main/docs
+    about: Getting started, deployment, usage, and architecture — most questions are answered here.
+  - name: 🔐 Secrets & config setup
+    url: https://github.com/yo-sayantan/AI-JIRA-Board/tree/main/setup
+    about: Templates and steps for tokens, config.json, and MCP servers.
