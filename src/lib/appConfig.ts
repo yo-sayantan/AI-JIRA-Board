@@ -23,9 +23,12 @@ export const APP_CONFIG: Required<Pick<AppRuntimeConfig, 'requiredApprovals'>> &
     typeof injected.requiredApprovals === 'number' && injected.requiredApprovals > 0 ? injected.requiredApprovals : 2,
 }
 
+// Fallbacks are deliberately generic: whoever clones this sees neutral branding until they
+// set `app.branding` in their own config.json (which reaches the built app at runtime via
+// window.__JIRA_CONFIG__ — no rebuild needed). Put YOUR name/portfolio there, not here.
 export const BRANDING = {
   tagline: injected.branding?.tagline ?? 'Built to dodge JIRA · made with ☕ + a refresh button',
-  badgeText: injected.branding?.badgeText ?? 'Sayantan.dev',
-  badgeUrl: injected.branding?.badgeUrl ?? 'https://tinyurl.com/sayantan-myportfolio',
-  badgeTitle: injected.branding?.badgeTitle ?? 'Made by Sayantan — sayantan.dev',
+  badgeText: injected.branding?.badgeText ?? '',
+  badgeUrl: injected.branding?.badgeUrl ?? '',
+  badgeTitle: injected.branding?.badgeTitle ?? '',
 }

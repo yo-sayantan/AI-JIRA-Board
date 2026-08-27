@@ -50,7 +50,7 @@ MCP_POLICY="$(node "$HERE/config.mjs" policy 2>/dev/null || echo 'Use ONLY the j
 
 PROMPT="You are refreshing ONE Jira ticket: $KEY. Never invent data.
 $MCP_POLICY
-Re-fetch the CURRENT state of $KEY and produce its FULL ticket object per the schema in $INTERN_DIR/intern-prompt.md
+Re-fetch the CURRENT state of $KEY and produce its FULL ticket object per the schema in $INTERN_DIR/prompts/intern-prompt.md
 (mirrors git/jira-board/src/types.ts): key, title, status, column (todo|prog|rev|qa|done|hold), type, priority,
 storyPoints, branch, pr {state(approved|comments|changes|declined|merged|none), id, url, approvals, openComments, merged, mergedAt,
 sourceBranch, destinationBranch}, commentCount, ALL comments, lastUpdate, created, url, sprint, reporter, assignee, epic,

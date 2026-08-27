@@ -34,7 +34,7 @@ Key scripts:
 | `completed_archive.py` | Build the full historical "Completed" archive. |
 | `local-runner/*.sh` | Thin wrappers: daily, weekly, per-ticket refresh, summary. |
 | `local-runner/config.mjs` | Resolves `config.json` into shell vars, rendered prompts, MCP policy. |
-| `intern-prompt.md` | The schema the fetch must produce, in prose — mirrors `src/types.ts`. |
+| `prompts/intern-prompt.md` | The schema the fetch must produce, in prose — mirrors `src/types.ts`. |
 | `config.json` | **Single source of truth** for identity, endpoints, connector, policy, branding. |
 
 The fetch needs only a **Jira token**. Confluence/Bitbucket tokens and MCP servers are optional
@@ -47,7 +47,7 @@ inlined) so it runs from a double-click. It reads `window.__JIRA_DATA__` at load
 
 | File | Role |
 |---|---|
-| `src/types.ts` | **The data contract.** Single source of truth for the ticket shape; mirrored by `intern-prompt.md`. |
+| `src/types.ts` | **The data contract.** Single source of truth for the ticket shape; mirrored by `prompts/intern-prompt.md`. |
 | `src/data.ts` | Loads `window.__JIRA_DATA__`; applies lifecycle rules (e.g. retire old Done tickets). Falls back to a dev fixture. |
 | `src/lib/columns.ts` | Jira status → board column mapping + colours; the Next Sprint / On Hold section identities. |
 | `src/lib/format.ts` | Priority / type / PR / date / sprint helpers (incl. `isNextSprint`, `futureSprintOf`). |

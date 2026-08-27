@@ -1,11 +1,11 @@
 #!/bin/bash
-# JIRA Intern — AI SUMMARY pass. Two tiers (see ../intern-summary-prompt.md):
+# JIRA Intern — AI SUMMARY pass. Two tiers (see ../prompts/intern-summary-prompt.md):
 #   • DEEP BRIEF for To Do / In-Progress tickets — enriched from linked Confluence docs, related
 #     tickets, Bitbucket PRs/diffs, attachments and external links (read-only MCP), regenerated
 #     when the ticket's lastUpdate outruns its aiSummaryAt.
 #   • QUICK SUMMARY for In-Review / QA tickets + active sub-tasks — local-only, 2–4 sentences.
 #
-#   bash /Users/c22014e/git/jira-board/jira-intern/local-runner/summarize-active.sh
+#   bash /path/to/AI-JIRA-Board/jira-intern/local-runner/summarize-active.sh
 #
 # COST: bounded by hard caps in the prompt (≤3 docs, ≤4 related, ≤2 PRs, ≤2 links per ticket;
 # ≤6 deep briefs per run; skip-if-current). Route through a cheaper model with SUMMARY_MODEL=…
@@ -19,7 +19,7 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/us
 [ -f "$HOME/.zshrc" ]    && . "$HOME/.zshrc"    2>/dev/null
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROMPT_FILE="$HERE/../intern-summary-prompt.md"
+PROMPT_FILE="$HERE/../prompts/intern-summary-prompt.md"
 GIT_ROOT="$(cd "$HERE/../../.." && pwd)"
 INTERN_DIR="$(cd "$HERE/.." && pwd)"
 LOG_DIR="$HERE/../logs"; mkdir -p "$LOG_DIR"

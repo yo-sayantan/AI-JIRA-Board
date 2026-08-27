@@ -11,7 +11,7 @@ copy a template, fill it in on your machine, and keep your filled-in copies out 
 | Template in this folder | Copy it to | What it is |
 |---|---|---|
 | [`mcp-secrets.env.template`](mcp-secrets.env.template) | `~/.cursor/mcp-secrets.env` | Your API tokens (Jira required; Confluence/Bitbucket optional). |
-| [`config.example.json`](config.example.json) | `../jira-intern/config.json` | Who you are + your company URLs + preferences. **No tokens.** |
+| [`config.example.json`](config.example.json) | `~/.ai/config.json` | Who you are + your company URLs + preferences. **No tokens.** Lives outside the repo. |
 | [`mcp.cursor.json.template`](mcp.cursor.json.template) | `~/.cursor/mcp.json` | MCP servers for Cursor (optional — richer AI briefs). |
 | [`mcp.claude.json.template`](mcp.claude.json.template) | `~/.claude/.claude.json` | MCP servers for Claude Code (optional). |
 | [`mcp-with-secrets.sh.template`](mcp-with-secrets.sh.template) | `~/.local/bin/mcp-with-secrets.sh` | Wrapper that keeps tokens out of the MCP JSON. |
@@ -53,18 +53,36 @@ Tokens** → **Create token**. Copy it immediately (you can't see it again). Rea
 
 Optional, for richer cards: `CONFLUENCE_PERSONAL_TOKEN`, `BITBUCKET_PAT` (see the template).
 
-## Step 2 — Fill in `config.json` (required)
+## Step 2 — Create your personal `config.json` (required)
+
+This holds your identity and company URLs. It lives **outside the repo** so your real values
+never enter git:
 
 ```bash
-cp setup/config.example.json jira-intern/config.json
+mkdir -p ~/.ai
+cp setup/config.example.json ~/.ai/config.json
+chmod 600 ~/.ai/config.json
 ```
 
-Edit `jira-intern/config.json` and set your `user` (name **exactly** as Jira shows it, so
+Edit `~/.ai/config.json` and set your `user` (name **exactly** as Jira shows it, so
 "assigned to me" matches), your `endpoints` (company URLs), and the `app.branding` footer.
 Full reference for every key: [`../jira-intern/CONFIG.md`](../jira-intern/CONFIG.md).
 
-> This file has **no tokens**, but it does have your name and internal hostnames — see
-> "[Before you make the repo public](#before-you-make-the-repo-public)" below.
+**Which file wins**, first match:
+
+1. `$AI_CONFIG_FILE` — explicit override, any path
+2. `~/.ai/config.json` — **yours** (the one you just created)
+3. `jira-intern/config.json` — the tracked template/fallback, placeholders only
+
+Confirm what's actually in effect:
+
+```bash
+node jira-intern/local-runner/config.mjs path
+```
+
+> Docker mounts `~/.ai/config.json` read-only into the container, so it resolves the same way
+> there. Create the file **before** your first `docker compose up` — if the path is missing,
+> Docker creates a stray directory in its place.
 
 ## Step 3 — Configure MCP servers (optional)
 

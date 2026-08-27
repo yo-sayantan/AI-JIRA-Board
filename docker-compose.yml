@@ -26,12 +26,20 @@ services:
       # Tokens: reuse your existing connector secrets file, read-only. It just needs
       # JIRA_PERSONAL_TOKEN (and optionally BITBUCKET_PAT / ATLASSIAN_TOKEN).
       - ${HOME}/.cursor/mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro
+      # Your personal config (name, corporate id, company URLs), read-only. It lives OUTSIDE
+      # the repo so the repo can be public; the container resolves it exactly like the host
+      # does ($AI_CONFIG_FILE > ~/.ai/config.json > the in-repo template).
+      # Create it BEFORE the first `docker compose up`:
+      #     mkdir -p ~/.ai && cp jira-intern/config.json ~/.ai/config.json   (then edit it)
+      # If the path is missing Docker silently creates a DIRECTORY there, the parse fails and
+      # the board falls back to the repo template — so make the file first.
+      - ${HOME}/.ai/config.json:/root/.ai/config.json:ro
       # Persist fetched data on the host (and reuse your current dump). Remove this
       # line for a fully self-contained, ephemeral container that uses the baked data.
       - ./jira-intern:/app/jira-intern
     restart: unless-stopped
     # If auto-refresh / archive logs show "Name or service not known" for
-    # agile.experian.com, Docker's DNS proxy is flapping (common with VPN).
+    # your Jira host, Docker's DNS proxy is flapping (common with VPN).
     # Uncomment one of these and recreate the container:
     # dns:
     #   - 8.8.8.8

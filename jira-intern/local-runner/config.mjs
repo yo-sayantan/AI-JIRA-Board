@@ -1,7 +1,7 @@
-// Config resolver for the jira-intern pipeline. Reads ../config.json (single source of
+// Config resolver for the jira-intern pipeline. Reads config.json (single source of
 // truth) and serves it to every consumer so portability lives in ONE file:
 //
-//   node config.mjs get <dot.path>       → print a value ("user.accountId" → C22014E)
+//   node config.mjs get <dot.path>       → print a value ("user.accountId" → ABC1234)
 //   node config.mjs shellenv             → eval-able lines for the bash runners
 //                                          (AGENT_BIN, AGENT_PROMPT_FLAG, AGENT_EXTRA_ARGS,
 //                                           AGENT_MODEL_FLAG, AGENT_SECRETS, AGENT_API_KEY_ENV,
@@ -10,14 +10,30 @@
 //   node config.mjs policy               → the generated MCP POLICY block (allow + read/write)
 //   node config.mjs render <prompt.md>   → prompt with {{TOKENS}} substituted, to stdout
 //
-// Missing config.json → built-in defaults (current cursor setup), so nothing breaks.
+// WHICH config.json? Real, personal values (your name, corporate ID, internal company
+// hostnames) do NOT live in the repo — the tracked jira-intern/config.json is a safe,
+// sanitized template so the project can be public. Resolution order (first match wins):
+//   1. $AI_CONFIG_FILE          — explicit override (any path)
+//   2. ~/.ai/config.json        — your personal config, OUTSIDE any repo (see setup/README.md)
+//   3. <repo>/jira-intern/config.json — the in-repo template/fallback
+// Missing config.json entirely → built-in defaults (current cursor setup), so nothing breaks.
 import { readFileSync, existsSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { homedir } from 'os'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const CONFIG_PATH = join(HERE, '..', 'config.json')
+const REPO_CONFIG_PATH = join(HERE, '..', 'config.json')
+const PERSONAL_CONFIG_PATH = join(homedir(), '.ai', 'config.json')
+
+/** Same precedence documented above — exported so callers can report which file won. */
+export function resolveConfigPath() {
+  if (process.env.AI_CONFIG_FILE) return process.env.AI_CONFIG_FILE
+  if (existsSync(PERSONAL_CONFIG_PATH)) return PERSONAL_CONFIG_PATH
+  return REPO_CONFIG_PATH
+}
+
+const CONFIG_PATH = resolveConfigPath()
 
 const DEFAULTS = {
   user: { name: '', accountId: '', email: '' },
@@ -178,7 +194,11 @@ switch (cmd) {
     }
     process.stdout.write(render(arg))
     break
+  case 'path':
+    // Which config.json actually won — the first thing to check when settings don't seem to apply.
+    process.stdout.write(`${CONFIG_PATH}${existsSync(CONFIG_PATH) ? '' : '  (does not exist — using built-in defaults)'}\n`)
+    break
   default:
-    process.stderr.write('usage: node config.mjs <get <dot.path> | shellenv | policy | render <file>>\n')
+    process.stderr.write('usage: node config.mjs <get <dot.path> | shellenv | policy | render <file> | path>\n')
     process.exit(2)
 }

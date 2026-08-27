@@ -21,7 +21,7 @@ AGENT_SECRETS="$HOME/.cursor/mcp-secrets.env"; AGENT_INSTALL_HINT='curl https://
 MODEL_MAIN=auto; TIMEOUT_WEEKLY=7200
 command -v node >/dev/null 2>&1 && eval "$(node "$HERE/config.mjs" shellenv 2>/dev/null)"
 if [ -f "$AGENT_SECRETS" ]; then set -a; . "$AGENT_SECRETS"; set +a; fi
-PROMPT_FILE="$HERE/../intern-completed-prompt.md"
+PROMPT_FILE="$HERE/../prompts/intern-completed-prompt.md"
 GIT_ROOT="$(cd "$HERE/../../.." && pwd)"
 INTERN_DIR="$(cd "$HERE/.." && pwd)"
 LOG_DIR="$HERE/../logs"; mkdir -p "$LOG_DIR"

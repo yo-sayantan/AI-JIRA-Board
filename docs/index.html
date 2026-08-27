@@ -354,12 +354,26 @@ JIRA_PERSONAL_TOKEN=your-token-here</pre>
       </div>
 
       <div class="step">
-        <div class="step-h"><span class="num">2</span><h3>Fill in your details</h3></div>
-        <pre><button class="copy">Copy</button>cp setup/config.example.json jira-intern/config.json</pre>
-        <p class="small">Windows: <code class="inl">Copy-Item setup\config.example.json jira-intern\config.json</code></p>
-        <p class="small">Edit <code class="inl">jira-intern/config.json</code> — your <b>name exactly as Jira
-          shows it</b> (that's how "assigned to me" matches), your company URLs, and the footer branding.
-          Every key is documented in <code class="inl">jira-intern/CONFIG.md</code>. <b>No tokens go in this file.</b></p>
+        <div class="step-h"><span class="num">2</span><h3>Create your personal config</h3></div>
+        <p class="small">Your identity and company URLs live <b>outside the repo</b>, at
+          <code class="inl">~/.ai/config.json</code>, so they never enter git.</p>
+        <p class="small">macOS / Linux:</p>
+        <pre><button class="copy">Copy</button>mkdir -p ~/.ai
+cp setup/config.example.json ~/.ai/config.json
+chmod 600 ~/.ai/config.json</pre>
+        <p class="small">Windows (PowerShell):</p>
+        <pre><button class="copy">Copy</button>New-Item -ItemType Directory -Force "$HOME\.ai" | Out-Null
+Copy-Item "setup\config.example.json" "$HOME\.ai\config.json"</pre>
+        <p class="small">Edit it — your <b>name exactly as Jira shows it</b> (that's how "assigned to me"
+          matches), your company URLs, and the footer branding. Every key is documented in
+          <code class="inl">jira-intern/CONFIG.md</code>. <b>No tokens go in this file.</b></p>
+        <div class="note"><b>Which config wins:</b> <code class="inl">$AI_CONFIG_FILE</code> →
+          <code class="inl">~/.ai/config.json</code> → the tracked
+          <code class="inl">jira-intern/config.json</code> template. Check with
+          <code class="inl">node jira-intern/local-runner/config.mjs path</code>.</div>
+        <div class="note warn">Create this file <b>before</b> your first
+          <code class="inl">docker compose up</code> — Docker mounts it, and if the path is missing it
+          silently creates a directory there instead.</div>
       </div>
 
       <!-- ── DOCKER ───────────────────────────────────────────────── -->

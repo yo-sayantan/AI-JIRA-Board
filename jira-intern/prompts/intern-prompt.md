@@ -55,7 +55,7 @@ SCOPE — this is the FAST DAILY run: ACTIVE tickets ONLY. Keep it LIGHT.
 ═══════════════════════════════════════════════════════════════════════════════
 This daily run must be FAST. It gathers ONLY my ACTIVE / in-flight work (section A) and writes `tickets[]`.
 *** DO NOT walk my closed history. DO NOT rebuild `completed[]`. DO NOT touch the per-ticket cache/. ***
-Those are owned by the SEPARATE WEEKLY job `local-runner/update-completed.sh` (intern-completed-prompt.md),
+Those are owned by the SEPARATE WEEKLY job `local-runner/update-completed.sh` (prompts/intern-completed-prompt.md),
 which is the slow one. This run PRESERVES the existing `completed[]` untouched (see B).
 
 TIGHT JQL — query only my active set (small — usually a handful):
@@ -148,7 +148,7 @@ A) ACTIVE + RECENT — `tickets[]` (rich objects). All issues where assignee = c
 
 B) COMPLETED ARCHIVE — NOT fetched in this daily run. *** PRESERVE IT, DON'T REBUILD IT. ***
    The full historical archive (`completed[]`) is owned by a SEPARATE WEEKLY job:
-   `local-runner/update-completed.sh` (which uses intern-completed-prompt.md). It's slow (every closed ticket +
+   `local-runner/update-completed.sh` (which uses prompts/intern-completed-prompt.md). It's slow (every closed ticket +
    its real branches/PRs), so it does NOT belong in this fast daily run.
    In THIS run: do NOT query closed tickets and do NOT rebuild completed[]. READ the existing `completed[]` from
    the current data.json and WRITE IT BACK UNCHANGED (byte-for-byte). You only (re)write `tickets[]`, `notes`,

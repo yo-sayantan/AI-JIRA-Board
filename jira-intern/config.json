@@ -1,17 +1,20 @@
 {
-  "_readme": "SINGLE SOURCE OF TRUTH for the whole jira-board + jira-intern setup. Change values HERE to port the project to another user/machine — nothing else needs editing. Every key is documented in CONFIG.md next to this file.",
+  "_readme": "TEMPLATE / FALLBACK — safe to commit, contains NO personal values. Your real config lives OUTSIDE the repo at ~/.ai/config.json, which always wins over this file. Resolution order: $AI_CONFIG_FILE > ~/.ai/config.json > this file. Create yours with: cp jira-intern/config.json ~/.ai/config.json (then edit it). Every key is documented in CONFIG.md next to this file.",
 
   "user": {
-    "name": "Biswas, Sayantan",
-    "accountId": "C22014E",
-    "email": "sayantan.biswas@experian.com"
+    "name": "Your Name (exactly as Jira displays it)",
+    "accountId": "YOUR_CORP_ID",
+    "email": "you@your-company.example"
   },
 
   "endpoints": {
-    "jiraBase": "https://agile.experian.com",
-    "confluenceBase": "https://pages.experian.local",
-    "bitbucketBase": "https://code.experian.local"
+    "jiraBase": "https://jira.your-company.example",
+    "confluenceBase": "https://confluence.your-company.example",
+    "bitbucketBase": "https://bitbucket.your-company.example"
   },
+
+  "_excludeProjects": "Project keys to DROP from the board AND the completed archive entirely — even if a ticket was once assigned to you. The daily fetch and the weekly archive both honour this list. Leave [] to keep everything.",
+  "excludeProjects": [],
 
   "connector": {
     "active": "cursor",
@@ -70,9 +73,9 @@
     "requiredApprovals": 2,
     "branding": {
       "tagline": "Built to dodge JIRA · made with ☕ + a refresh button",
-      "badgeText": "Sayantan.dev",
-      "badgeUrl": "https://tinyurl.com/sayantan-myportfolio",
-      "badgeTitle": "Made by Sayantan — sayantan.dev"
+      "badgeText": "your-name.dev",
+      "badgeUrl": "https://your-portfolio.example",
+      "badgeTitle": "Made by You"
     }
   }
 }

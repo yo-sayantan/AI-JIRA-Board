@@ -8,8 +8,10 @@
 // file://; Refresh there just reloads the latest dump.
 import { createServer } from 'node:http'
 import { readFile, stat, unlink } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { extname, join, normalize } from 'node:path'
+import { homedir } from 'node:os'
 
 const ROOT = import.meta.dirname // the jira-board/ project — everything lives inside it
 const INTERN = join(ROOT, 'jira-intern')
@@ -148,10 +150,20 @@ async function pumpRefreshQueue() {
   }
 }
 const BOARD = '/dist/index.html'
-// Port: env PORT > jira-intern/config.json app.servePort > 4321.
+// Same precedence as jira-intern/local-runner/config.mjs (kept in sync manually — this file
+// is intentionally zero-dependency, so it doesn't import that ESM module): personal config
+// outside the repo wins over the tracked, sanitized template.
+//   1. $AI_CONFIG_FILE            2. ~/.ai/config.json            3. jira-intern/config.json
+function configPath() {
+  if (process.env.AI_CONFIG_FILE) return process.env.AI_CONFIG_FILE
+  const personal = join(homedir(), '.ai', 'config.json')
+  if (existsSync(personal)) return personal
+  return join(INTERN, 'config.json')
+}
+// Port: env PORT > resolved config.json → app.servePort > 4321.
 async function configuredPort() {
   try {
-    const cfg = JSON.parse(await readFile(join(INTERN, 'config.json'), 'utf8'))
+    const cfg = JSON.parse(await readFile(configPath(), 'utf8'))
     const p = Number(cfg?.app?.servePort)
     if (Number.isInteger(p) && p > 0) return p
   } catch {}

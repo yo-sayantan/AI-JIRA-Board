@@ -26,11 +26,16 @@ def atomic_dump(path, obj):
     atomic_write(path, json.dumps(obj, indent=2))
 
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _config import endpoints, identity  # noqa: E402
+
 INTERN = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(INTERN, "cache")
-JIRA_BASE = "https://agile.experian.com"
-BB_BASE = "https://code.experian.local/rest/api/1.0"
-USER = {"name": "Biswas, Sayantan", "accountId": "C22014E", "jiraBase": JIRA_BASE}
+# Identity and endpoints come from config.json (see _config.py) — never hardcoded.
+JIRA_BASE, _CONFLUENCE_BASE, BITBUCKET_BASE = endpoints(INTERN)
+BB_BASE = f"{BITBUCKET_BASE}/rest/api/1.0" if BITBUCKET_BASE else ""
+_ME = identity(INTERN)
+USER = {"name": _ME["name"], "accountId": _ME["accountId"], "jiraBase": JIRA_BASE}
 
 REPO_HINTS = {
     "FIDM": ["pidclientadm", "preciseid", "preciseid_eks", "pidadmin", "fraudadmin"],
@@ -301,7 +306,7 @@ def pr_to_obj(pr, bb_proj=None):
     repo = from_ref.get("repository") or {}
     project = bb_proj or (repo.get("project") or {}).get("key", "FRAUD")
     slug = repo.get("slug", "")
-    url = f"https://code.experian.local/projects/{project}/repos/{slug}/pull-requests/{pid}" if slug else None
+    url = f"{BITBUCKET_BASE}/projects/{project}/repos/{slug}/pull-requests/{pid}" if slug and BITBUCKET_BASE else None
     merged = st == "MERGED"
     declined = st in ("DECLINED", "REJECTED")
     reviewers_raw = pr.get("reviewers") or []
@@ -540,7 +545,7 @@ def main():
     pr_overrides["FIDM-6048"] = {
         "state": "approved", "id": 362,
         "title": "FIDM-6048 - Force base image refresh",
-        "url": "https://code.experian.local/projects/FRAUD/repos/pidclientadm/pull-requests/362",
+        "url": f"{BITBUCKET_BASE}/projects/EXAMPLE/repos/example-repo/pull-requests/362",
         "approvals": 2, "openComments": 0,
         "sourceBranch": "feature/FIDM-6048_jboss_container_vulnerabilities_stg",
         "destinationBranch": "dev-eks-eksa", "merged": False, "mergedAt": None,

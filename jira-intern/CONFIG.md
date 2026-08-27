@@ -1,9 +1,43 @@
 # config.json — the one file to edit when porting this setup
 
-`jira-board/jira-intern/config.json` is the **single source of truth** for everything user-,
-company- and machine-specific in the jira-board + jira-intern system. A new user clones the
-repo, edits **only this file**, and everything follows: the agent prompts, the runner
-scripts, the local server, and the app UI all read from it.
+`config.json` is the **single source of truth** for everything user-, company- and
+machine-specific in the jira-board + jira-intern system. A new user creates **one file**
+and everything follows: the agent prompts, the runner scripts, the local server, and the
+app UI all read from it.
+
+## Where it lives — and which copy wins
+
+Your **real** values (your name, corporate id, internal company hostnames) must NOT sit in
+the repo — this project is meant to be publishable. So the file is resolved at runtime, in
+this order, first match wins:
+
+| # | Location | Purpose |
+|---|---|---|
+| 1 | `$AI_CONFIG_FILE` | Explicit override — any path. Handy for CI or testing. |
+| 2 | `~/.ai/config.json` | **Your personal config.** Outside every repo. This is the one you edit. |
+| 3 | `jira-intern/config.json` | The tracked **template/fallback** — placeholders only, safe to commit. |
+
+Create yours once:
+
+```bash
+mkdir -p ~/.ai
+cp jira-intern/config.json ~/.ai/config.json   # then edit it with your real values
+chmod 600 ~/.ai/config.json
+```
+
+Check which file is actually in effect at any time:
+
+```bash
+node jira-intern/local-runner/config.mjs path
+```
+
+Every consumer implements the same order: `local-runner/config.mjs` (`resolveConfigPath()`),
+`jira-intern/_config.py` (`config_path()`), `local-runner/sync-datajs.mjs`, and `serve.mjs`.
+Docker mounts `~/.ai/config.json` read-only at `/root/.ai/config.json` so the container
+resolves it identically.
+
+> **Note:** no API tokens live in `config.json` — those go in your secrets env file
+> (see `setup/mcp-secrets.env.template`).
 
 Consumed by:
 - `local-runner/config.mjs` — resolver. Runners call it for shell vars (`shellenv`), rendered
@@ -24,7 +58,7 @@ through `config.mjs`, and the runners refuse to launch the agent with an unrende
 | key | meaning |
 |---|---|
 | `name` | Your display name exactly as Jira shows it (used to match "assigned to me"). |
-| `accountId` | Your corporate user id (e.g. `C22014E`). Matched case-insensitively against assignee strings. |
+| `accountId` | Your corporate user id (e.g. `ABC1234`). Matched case-insensitively against assignee strings. |
 | `email` | Informational. |
 
 ## `endpoints` — your company's servers
@@ -94,7 +128,9 @@ absolute path of this folder), so the prompts are path-portable with zero config
 ---
 
 ## Porting checklist (new user)
-1. Edit `config.json`: your `user`, your `endpoints`, your `connector.active` (+ its
+0. `mkdir -p ~/.ai && cp jira-intern/config.json ~/.ai/config.json` — your personal copy,
+   outside the repo. Everything below edits **that** file, never the tracked template.
+1. Edit `~/.ai/config.json`: your `user`, your `endpoints`, your `connector.active` (+ its
    `secretsFile` with your API key/tokens), your `app.branding`.
 2. Make sure your connector CLI has the three MCP servers (jira / confluence / bitbucket)
    configured (e.g. `~/.cursor/mcp.json` for cursor).

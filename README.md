@@ -47,9 +47,10 @@ React 19 · Vite 6 · Tailwind v4 · Motion · a Python fetch pipeline · one se
 git clone https://github.com/yo-sayantan/AI-JIRA-Board.git
 cd AI-JIRA-Board
 
-# 1. one-time setup — your token + your details (see setup/)
+# 1. one-time setup — your token + your details (see setup/). Both live OUTSIDE the repo.
+mkdir -p ~/.cursor ~/.ai
 cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env   # then add your Jira token
-cp setup/config.example.json      jira-intern/config.json     # then add your name + URLs
+cp jira-intern/config.json        ~/.ai/config.json           # then add your name + URLs
 
 # 2. build, fetch, and serve
 docker compose up -d --build
@@ -90,9 +91,18 @@ AI-JIRA-Board/
 
 ## Setup
 
-You need **one Jira Personal Access Token**; everything else is optional. Tokens live in a single
-file **outside this repo** (`~/.cursor/mcp-secrets.env`) — nothing here is ever committed with a
-real value in it. Walk through it in [`setup/README.md`](setup/README.md).
+You need **one Jira Personal Access Token**; everything else is optional. Nothing personal is ever
+committed — both of your files live **outside this repo**:
+
+| File | Holds | Resolution |
+|---|---|---|
+| `~/.cursor/mcp-secrets.env` | Your API tokens | referenced by path from `config.json` |
+| `~/.ai/config.json` | Your name, corporate id, company URLs, branding | `$AI_CONFIG_FILE` → `~/.ai/config.json` → the tracked `jira-intern/config.json` template |
+
+The `jira-intern/config.json` in this repo contains **placeholders only** and acts as the fallback,
+so a fresh clone runs without breaking and your real values never enter git. Check which file is in
+effect with `node jira-intern/local-runner/config.mjs path`. Full walkthrough:
+[`setup/README.md`](setup/README.md) · key-by-key reference: [`jira-intern/CONFIG.md`](jira-intern/CONFIG.md).
 
 ## Develop
 
@@ -104,7 +114,7 @@ npm run typecheck  # tsc --noEmit
 ```
 
 `src/types.ts` is the **data contract** — the single source of truth for the ticket shape, mirrored
-in prose by `jira-intern/intern-prompt.md`. Keep the two in sync. See
+in prose by `jira-intern/prompts/intern-prompt.md`. Keep the two in sync. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full picture.
 
 ## Publishing this repo

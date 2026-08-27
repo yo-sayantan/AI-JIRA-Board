@@ -17,7 +17,7 @@ from `data.js`, so just reopen/refresh after a run — no rebuild. See `git/jira
 - **`data.js`**   — `window.__JIRA_DATA__ = <that json>;` so the board loads it from `file://`.
 - **`.state.json`** — hidden memory (incremental briefing + "done once"). You never open it.
 
-The full output spec lives in **`intern-prompt.md`** — edit that to change what the intern collects,
+The full output spec lives in **`prompts/intern-prompt.md`** — edit that to change what the intern collects,
 and keep its schema block in sync with `jira-board/src/types.ts`.
 
 ## Two runners (Cursor CLI, headless)
@@ -29,8 +29,8 @@ Both run `cursor-agent` with your Cursor model + the `jira`/`confluence`/`bitbuc
 | **`local-runner/run-intern.sh`** | ACTIVE tickets (fast) | `tickets[]` (+ preserves `completed[]`) | **daily** (e.g. 9:00) |
 | **`local-runner/update-completed.sh`** | the full COMPLETED archive (slow) | `completed[]` (+ leaves `tickets[]` alone) | **weekly** |
 
-- Daily: Shortcut → Run Shell Script → `bash /Users/c22014e/git/jira-board/jira-intern/local-runner/run-intern.sh` → Automation → Time of Day → 9:00 Daily.
-- Weekly: Shortcut → Run Shell Script → `bash /Users/c22014e/git/jira-board/jira-intern/local-runner/update-completed.sh` → Automation → Day of Week (once/week). It pages through every closed ticket, fetches **real** branches + all PRs, caches each in `cache/<KEY>.json`, and is **resumable** (a timeout just continues next run).
+- Daily: Shortcut → Run Shell Script → `bash /path/to/AI-JIRA-Board/jira-intern/local-runner/run-intern.sh` → Automation → Time of Day → 9:00 Daily.
+- Weekly: Shortcut → Run Shell Script → `bash /path/to/AI-JIRA-Board/jira-intern/local-runner/update-completed.sh` → Automation → Day of Week (once/week). It pages through every closed ticket, fetches **real** branches + all PRs, caches each in `cache/<KEY>.json`, and is **resumable** (a timeout just continues next run).
 - `FRESH=1 bash …/update-completed.sh` wipes the cache and rebuilds the archive from scratch (use it once now to replace any fabricated branch names / missing PRs with real Bitbucket data). `TIMEOUT_SEC=10800` raises the 2h ceiling.
 - They share one `data.json` (daily owns `tickets[]`, weekly owns `completed[]`); each re-syncs `data.js` after running.
 

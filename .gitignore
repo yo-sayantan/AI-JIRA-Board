@@ -18,6 +18,11 @@ mcp-secrets.env
 # Build output (rebuild with: npm run build)
 dist/
 
+# Superseded legacy fetcher, kept locally but never published: it predates the
+# config.json indirection and still has hardcoded identity/endpoints inside it.
+# daily_fetch.py replaced it.
+jira-intern/.fetch-intern.py
+
 # ── jira-intern runtime data — company ticket content, NEVER commit ──
 jira-intern/data.json
 jira-intern/data.js

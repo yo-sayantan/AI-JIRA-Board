@@ -5,7 +5,7 @@
 # nothing is stored or read by this repo.
 #
 # Trigger from a Mac Shortcut ("Run Shell Script") or any scheduler:
-#     bash /Users/c22014e/git/jira-board/jira-intern/local-runner/run-intern.sh
+#     bash /path/to/AI-JIRA-Board/jira-intern/local-runner/run-intern.sh
 # Optional model override:  MODEL="auto" bash run-intern.sh
 set -o pipefail
 
@@ -29,7 +29,7 @@ command -v node >/dev/null 2>&1 && eval "$(node "$HERE/config.mjs" shellenv 2>/d
 # Load the connector's secrets so headless auth works and MCP tokens are present.
 # set -a exports everything to the agent child process.
 if [ -f "$AGENT_SECRETS" ]; then set -a; . "$AGENT_SECRETS"; set +a; fi
-PROMPT_FILE="$HERE/../intern-prompt.md"
+PROMPT_FILE="$HERE/../prompts/intern-prompt.md"
 GIT_ROOT="$(cd "$HERE/../../.." && pwd)"          # jira-board/jira-intern/local-runner -> git/
 INTERN_DIR="$(cd "$HERE/.." && pwd)"              # jira-board/jira-intern
 LOG_DIR="$HERE/../logs"; mkdir -p "$LOG_DIR"

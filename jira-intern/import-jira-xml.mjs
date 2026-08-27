@@ -114,7 +114,7 @@ const isoDate = (s) => {
   return d.toISOString().slice(0, 10)
 }
 
-// status → board column (mirrors intern-prompt.md)
+// status → board column (mirrors prompts/intern-prompt.md)
 function toColumn(status) {
   const s = (status || '').toLowerCase()
   if (/(^|\b)(done|closed|resolved|released|complete)/.test(s)) return 'done'

@@ -7,8 +7,9 @@
 //   node sync-datajs.mjs <intern-dir>
 //
 // Exit 0 on success, non-zero (with a message on stderr) if data.json is missing/invalid.
-import { readFileSync, writeFileSync, renameSync, rmSync } from 'fs'
+import { readFileSync, writeFileSync, renameSync, rmSync, existsSync } from 'fs'
 import { join } from 'path'
+import { homedir } from 'os'
 
 const dir = process.argv[2]
 if (!dir) {
@@ -18,7 +19,16 @@ if (!dir) {
 const src = join(dir, 'data.json')
 const dst = join(dir, 'data.js')
 const tmp = join(dir, '.data.js.swap')
-const cfgPath = join(dir, 'config.json')
+// Same precedence as local-runner/config.mjs → resolveConfigPath(): personal config outside
+// the repo wins over the tracked, sanitized template, so branding follows YOUR config even
+// though this script only ever sees the repo's <intern-dir>.
+function configPath() {
+  if (process.env.AI_CONFIG_FILE) return process.env.AI_CONFIG_FILE
+  const personal = join(homedir(), '.ai', 'config.json')
+  if (existsSync(personal)) return personal
+  return join(dir, 'config.json')
+}
+const cfgPath = configPath()
 try {
   const obj = JSON.parse(readFileSync(src, 'utf8'))
   // Also expose the app-facing config section (branding, requiredApprovals, …) so the
