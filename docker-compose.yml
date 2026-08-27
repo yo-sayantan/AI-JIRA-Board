@@ -1,0 +1,41 @@
+# My Jira Board — one-command local deploy.
+#
+#   docker compose up -d --build      # build + start in the background
+#   docker compose logs -f            # watch fetch + server logs
+#   docker compose down               # stop
+#
+# `restart: unless-stopped` means it comes back automatically whenever Docker starts,
+# so once it's up you never have to touch the command line again.
+# Published host port is fixed via PORT (default 4321). The desktop launcher and
+# start-jira-board.sh always set the same PORT so every redeploy lands on one
+# dedicated port — never auto-incremented.
+services:
+  jira-board:
+    build: .
+    image: jira-board:latest
+    container_name: jira-board
+    ports:
+      - "${PORT:-4321}:4321"
+    environment:
+      BIND_HOST: 0.0.0.0
+      PORT: "4321"
+      REFRESH_ON_START: "1"     # fetch once the moment the container starts
+      REFRESH_INTERVAL: "900"   # ...then re-fetch every 15 min (0 = off)
+      SKIP_SUMMARY: "1"         # no LLM agent in the container; deterministic fetch only
+    volumes:
+      # Tokens: reuse your existing connector secrets file, read-only. It just needs
+      # JIRA_PERSONAL_TOKEN (and optionally BITBUCKET_PAT / ATLASSIAN_TOKEN).
+      - ${HOME}/.cursor/mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro
+      # Persist fetched data on the host (and reuse your current dump). Remove this
+      # line for a fully self-contained, ephemeral container that uses the baked data.
+      - ./jira-intern:/app/jira-intern
+    restart: unless-stopped
+    # If auto-refresh / archive logs show "Name or service not known" for
+    # agile.experian.com, Docker's DNS proxy is flapping (common with VPN).
+    # Uncomment one of these and recreate the container:
+    # dns:
+    #   - 8.8.8.8
+    #   - 1.1.1.1
+    # Alternative to the secrets mount above — pass tokens directly instead:
+    # env_file:
+    #   - .env

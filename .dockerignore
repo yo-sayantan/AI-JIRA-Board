@@ -1,0 +1,29 @@
+# Keep the build context small and reproducible. dist/ and node_modules are
+# rebuilt inside the image, so never ship the host copies.
+.git
+.gitignore
+node_modules
+dist
+
+# Editor / OS noise
+.DS_Store
+*.swap
+*.log
+**/__pycache__
+
+# Cursor / agent local state (never needed in the image)
+.cursor
+.claude
+agent-transcripts
+
+# jira-intern runtime cruft — regenerated at runtime, must not be baked in.
+# NOTE: data.json / data.js / config.json / *.py / prompts ARE kept on purpose so
+# the board has content and the fetch scripts work the moment the container starts.
+jira-intern/logs
+jira-intern/cache
+jira-intern/*.lock
+jira-intern/.*.lock
+jira-intern/.data.*
+jira-intern/.tmp-*
+jira-intern/.state.json
+jira-intern/_STATUS.md
