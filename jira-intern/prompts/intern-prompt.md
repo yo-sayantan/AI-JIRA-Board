@@ -159,7 +159,14 @@ B) COMPLETED ARCHIVE — NOT fetched in this daily run. *** PRESERVE IT, DON'T R
 INCREMENTAL BEHAVIOR (use .state.json memory)
 - New active assignment with no state entry -> full brief; updateLog "Assigned — initial brief".
 - Already briefed, still active, with a NEW comment or status change -> refresh fields + PREPEND an updateLog entry.
-- Nothing changed -> keep the previous rich object as-is.
+- Nothing changed -> keep the previous rich object as-is, EXCEPT: ALWAYS re-read and overwrite `sprint` and
+  the PR/branch fields (`pr`, `prs`, `branch`, `branches`) from what Jira/Bitbucket report RIGHT NOW, even on
+  an otherwise-unchanged ticket. Both can change with NO comment and NO status transition on the issue itself:
+    • Starting or closing a SPRINT edits the sprint, not the tickets in it — an issue's `updated` timestamp
+      never moves when its sprint goes future -> active -> closed, but re-reading the issue still reports the
+      sprint's CURRENT state. Skipping this traps a ticket in the dashboard's "Next Sprint" bar forever, even
+      after its sprint has started and it should have moved onto the board as ordinary To Do work.
+    • A PR can be approved, get new comments, or merge entirely in Bitbucket without ever touching the ticket.
 - Reached QA -> this is STILL in-flight: keep column "qa", do NOT set done, do NOT add to completed[]. (QA is its own board column.)
 - Reached Done / Closed / Resolved (statusCategory = Done) -> PREPEND one "Marked DONE — <date>" entry, set
   state.done=true, keep it in `tickets[]` as column "done". ALWAYS set `resolved` (the resolution date) —

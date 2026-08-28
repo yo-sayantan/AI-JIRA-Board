@@ -679,10 +679,17 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
 
     # ── Unchanged short-circuit — skips the expensive Jira side (comments, links, changelog).
     # Jira bumps `updated` on every edit/comment/transition, so matching (status, updated)
-    # means the ticket text is identical to what we already have.
-    # Code state is refreshed regardless of column: approving, declining or merging a PR
-    # happens in Bitbucket and never touches Jira's `updated`, and a PR can still land after
-    # the ticket itself is closed.
+    # means the ticket TEXT is identical to what we already have. But some fields are driven
+    # by an object that mutates independently of the issue, so `updated` says nothing about
+    # them — each needs its own carve-out to stay live on this fast path:
+    #   • Code state: approving, declining or merging a PR happens in Bitbucket and never
+    #     touches Jira's `updated`, and a PR can still land after the ticket itself is closed.
+    #   • Sprint: starting/closing a SPRINT edits the sprint object, not the issues in it, so
+    #     an issue's `updated` never moves when its sprint goes future → active → closed. Jira
+    #     still reports the sprint's CURRENT state on every read of customfield_10404 though —
+    #     it's already in `f` from this run's search, so refreshing it here costs nothing.
+    #     (Without this, a ticket can get stuck in the Next Sprint bar forever once its sprint
+    #     starts, because the fast path was returning a stale, deep-copied `prior["sprint"]`.)
     prev = state_entry or {}
     if (
         prior and not force_refresh
@@ -692,6 +699,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         ticket = copy.deepcopy(prior)
         if ticket.get("resolved") and column != "done":
             ticket["resolved"] = None  # self-heal: a reopened ticket must not keep a resolved date
+        ticket["sprint"] = parse_sprint(f.get("customfield_10404"))
         return refresh_prs_only(ticket, key)
 
     inline = comments_from_issue(f)
