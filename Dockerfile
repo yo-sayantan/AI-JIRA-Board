@@ -15,7 +15,7 @@
 # Then open http://localhost:4321
 
 # ── Stage 1: build the board ───────────────────────────────────────────────────
-FROM node:20-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 # Install deps first so this layer is cached until the lockfile changes.
 COPY package.json package-lock.json ./
@@ -25,7 +25,7 @@ COPY . .
 RUN npm run build
 
 # ── Stage 2: runtime ───────────────────────────────────────────────────────────
-FROM node:20-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 # Container-friendly defaults; override any of these at `docker run`/compose time.
 ENV NODE_ENV=production \
     BIND_HOST=0.0.0.0 \
