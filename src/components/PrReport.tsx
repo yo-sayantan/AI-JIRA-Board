@@ -13,6 +13,7 @@ import { toneColor, worstTone } from '../lib/reportTypes'
 import { fmtDateTime, hexToRgba } from '../lib/format'
 import { SafeHtml } from './ui'
 import { PrinterIcon, RefreshIcon, SparkleIcon } from './Icons'
+import { PrReportPrintDoc } from './PrReportPrint'
 
 /**
  * PR Readiness Report overlay — renders a report GENERICALLY from its block kinds, so the
@@ -32,27 +33,19 @@ export function PrReportOverlay({
   generating?: boolean
 }) {
   const [tabId, setTabId] = useState<string | null>(null)
-  // While printing, every tab is rendered at once so the PDF carries the whole report instead of
-  // whichever tab happened to be open. Reset by the browser's afterprint event (also fires when
-  // the dialog is cancelled), so the on-screen view always returns to a single tab.
-  const [printing, setPrinting] = useState(false)
   // Reset to the first tab whenever a different report opens.
   useEffect(() => {
     setTabId(report?.tabs?.[0]?.id ?? null)
   }, [report?.key])
 
-  useEffect(() => {
-    const done = () => setPrinting(false)
-    window.addEventListener('afterprint', done)
-    return () => window.removeEventListener('afterprint', done)
-  }, [])
-
-  // Two frames, not one: React must commit the all-tabs render and the browser must lay it out
-  // before print() snapshots the page, or the PDF captures the single-tab view.
+  // The print document is ALWAYS mounted while a report is open (CSS hides it off-paper) rather
+  // than being rendered in response to the print button. Gating it on state raced the print
+  // engine: afterprint could unmount it while the preview was still being generated, and the
+  // export came out blank. A permanently mounted, display:none subtree has no such window.
   //
-  // The save dialog takes its default filename from document.title, so every report was arriving
-  // as "My Jira Board". Swapping the title for the duration of the print names the file after the
-  // ticket it is about; afterprint puts it back (it fires on cancel too).
+  // The save dialog takes its default filename from document.title, so every report arrived as
+  // "My Jira Board". The title carries the ticket for the duration of the print; afterprint puts
+  // it back, and fires on cancel too.
   const handlePrint = () => {
     if (!report) return
     const restore = document.title
@@ -62,8 +55,7 @@ export function PrReportOverlay({
       window.removeEventListener('afterprint', onDone)
     }
     window.addEventListener('afterprint', onDone)
-    setPrinting(true)
-    requestAnimationFrame(() => requestAnimationFrame(() => window.print()))
+    window.print()
   }
 
   // Esc closes the report BEFORE the drawer beneath gets to pop (capture + stopImmediatePropagation).
@@ -115,8 +107,12 @@ export function PrReportOverlay({
           aria-modal
           aria-label={`PR readiness report for ${report.key}`}
         >
+          {/* Paper gets its own document, not this one restyled — see PrReportPrintDoc. Hidden on
+              screen and shown in @media print, where the screen view is hidden instead. */}
+          <PrReportPrintDoc report={report} tabs={tabs} />
+
           <motion.section
-            className="w-full max-w-[1600px] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
+            className="jb-report-screen w-full max-w-[1600px] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
             initial={{ y: 24, scale: 0.98 }}
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 16, scale: 0.98 }}
@@ -236,39 +232,14 @@ export function PrReportOverlay({
                 card grids, stats, callouts) stays full-width so no block is ever left stranded
                 next to blank space. */}
             <div className="px-5 py-5 lg:px-8" role="tabpanel">
-              {printing ? (
-                tabs.map((t, ti) => {
-                  const printBlocks = visibleBlocks(t.blocks, report.stats)
-                  const flags = halfWidthFlags(printBlocks)
-                  return (
-                    <section key={t.id} className={ti > 0 ? 'jb-print-tab mt-6' : 'jb-print-tab'}>
-                      <h3 className="mb-3 flex items-center gap-2 text-[14px] font-extrabold" style={{ color: toneColor(t.tone) }}>
-                        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: toneColor(t.tone) }} />
-                        {t.title}
-                      </h3>
-                      {t.summary && <p className="mb-3 text-[13px] text-[var(--ink-soft)]">{t.summary}</p>}
-                      <div className="jb-blocks grid gap-4 lg:grid-cols-2 lg:gap-5">
-                        {printBlocks.map((b, i) => (
-                          <div key={`${t.id}:${i}`} className={flags[i] ? '' : 'jb-block-full lg:col-span-2'}>
-                            <Block block={b} />
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )
-                })
-              ) : (
-                <>
-                  {active?.summary && <p className="mb-3 text-[13px] text-[var(--ink-soft)]">{active.summary}</p>}
-                  <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
-                    {blocks.map((b, i) => (
-                      <div key={`${active?.id}:${i}`} className={blockHalfWidth[i] ? '' : 'lg:col-span-2'}>
-                        <Block block={b} />
-                      </div>
-                    ))}
+              {active?.summary && <p className="mb-3 text-[13px] text-[var(--ink-soft)]">{active.summary}</p>}
+              <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
+                {blocks.map((b, i) => (
+                  <div key={`${active?.id}:${i}`} className={blockHalfWidth[i] ? '' : 'lg:col-span-2'}>
+                    <Block block={b} />
                   </div>
-                </>
-              )}
+                ))}
+              </div>
             </div>
 
             {/* Footer */}

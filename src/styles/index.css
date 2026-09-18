@@ -360,10 +360,16 @@ a {
 }
 
 /* ── PR Readiness Report → PDF ────────────────────────────────────────────────
-   The on-screen report is a dark, glassy web UI. On paper it should read as a
-   document someone wrote: white, quiet rules instead of filled boxes, one accent
-   colour carrying the verdict, and generous but purposeful spacing. Everything
-   below is print-only — the screen view is untouched. */
+   Styles the purpose-built print document (PrReportPrint.tsx), not the screen
+   overlay. Because the markup is written for paper, almost nothing here needs
+   !important — it is describing a layout rather than overriding one.
+
+   The cover is sized to the @page content box exactly (A4 landscape less the
+   margins) so it fills its page and the body starts on page two. */
+.jb-pdf {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4 landscape;
@@ -372,35 +378,14 @@ a {
 
   html,
   body {
-    background: #fff !important;
+    background: #fff;
     height: auto !important;
     overflow: visible !important;
   }
 
-  body {
-    --bg: #ffffff;
-    --surface-solid: #ffffff;
-    --surface-2: #f7f8fa;
-    --line: #dfe3ea;
-    --ink: #10151f;
-    --ink-soft: #37415a;
-    --muted: #6b7690;
-    font-size: 11px;
-  }
-
-  *,
-  *::before,
-  *::after {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    animation: none !important;
-    transition: none !important;
-    box-shadow: none !important;
-  }
-
-  /* Print ONLY the report. It is portalled to <body>, so its siblings can be removed from the
-     layout outright — hiding them by visibility would leave the board's full height in the
-     document and paginate around pages that have no ink on them. */
+  /* Print the document and nothing else. It is portalled to <body>, so its siblings can be
+     removed from the layout outright; hiding them by visibility would keep the board's height
+     and paginate around pages with no ink on them. */
   body > *:not(.jb-report-overlay) {
     display: none !important;
   }
@@ -413,167 +398,417 @@ a {
     background: none !important;
     backdrop-filter: none !important;
   }
-  .jb-report-overlay > section {
-    max-width: none !important;
-    width: 100% !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    transform: none !important;
-    opacity: 1 !important;
-    overflow: visible !important;
-  }
-
-  /* Interactive chrome has no meaning on paper. */
-  .jb-no-print,
-  [role='tablist'],
-  .jb-report-overlay > section > div:first-child {
+  .jb-report-screen {
     display: none !important;
   }
 
-  /* ── Masthead ── ticket, title, and the verdict as a line of type rather than a pill. */
-  .jb-report-overlay > section > header {
-    padding: 0 0 8px 0 !important;
-    border-bottom: 1.5px solid var(--ink) !important;
-    margin-bottom: 10px !important;
+  /* Specific enough that nothing can out-rank it and leave the export blank. */
+  .jb-report-overlay .jb-pdf {
     display: block !important;
+    color: #10151f;
+    font-size: 10px;
+    line-height: 1.5;
   }
-  .jb-report-overlay h2 {
-    font-size: 17px !important;
-    line-height: 1.25 !important;
-    letter-spacing: -0.01em;
-    margin: 3px 0 4px !important;
-  }
-  .jb-report-overlay header p {
-    font-size: 10.5px !important;
-    line-height: 1.55 !important;
-    max-width: 62em;
-  }
-  /* "measured" / "AI-enriched" is workflow provenance — it belongs on screen, not in the masthead
-     of a document going to someone who just wants the answer. */
-  .jb-report-overlay > section > header [title*='Computed directly'],
-  .jb-report-overlay > section > header [title*='Concluded by'],
-  .jb-report-overlay > section > header [title*='Could not be verified'] {
-    display: none !important;
+  .jb-pdf *,
+  .jb-pdf *::before,
+  .jb-pdf *::after {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    box-shadow: none;
   }
 
-  /* ── Figures strip ── plain measurements under a rule, not tinted cards. */
-  .jb-report-stats {
-    padding: 0 0 8px 0 !important;
-    border-bottom: 1px solid var(--line) !important;
-    margin-bottom: 2px !important;
-    gap: 0 !important;
-    break-after: avoid;
-    page-break-after: avoid;
+  /* ── Cover ───────────────────────────────────────────────────────────────── */
+  .jb-pdf-cover {
+    height: 182mm; /* 210mm page − 28mm of vertical margin */
+    display: flex;
+    flex-direction: column;
+    break-after: page;
+    page-break-after: always;
   }
-
-  /* ── Tab sections ── a small caps heading with a hairline, then its blocks. */
-  [role='tabpanel'] {
-    padding: 0 !important;
+  .jb-pdf-mast {
+    border-bottom: 2px solid #10151f;
+    padding-bottom: 9mm;
   }
-  .jb-print-tab {
-    margin-top: 13px !important;
-  }
-  .jb-print-tab > h3 {
-    font-size: 8.5px !important;
-    font-weight: 700 !important;
+  .jb-pdf-eyebrow {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--muted) !important;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 3px;
-    margin: 0 0 7px !important;
+    color: #6b7690;
+  }
+  .jb-pdf-eyebrow-right {
+    letter-spacing: 0.08em;
+  }
+  .jb-pdf-key {
+    margin-top: 7mm;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #37415a;
+  }
+  .jb-pdf-title {
+    margin: 2mm 0 0;
+    font-size: 33px;
+    line-height: 1.12;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    max-width: 24em;
+  }
+
+  /* Verdict owns the middle of the cover — it is the answer the reader came for. */
+  .jb-pdf-verdict {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-left: 4px solid;
+    padding: 0 0 0 7mm;
+    margin: 8mm 0;
+  }
+  .jb-pdf-verdict-head {
+    display: flex;
+    align-items: baseline;
+    gap: 7mm;
+  }
+  .jb-pdf-verdict-label {
+    font-size: 25px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .jb-pdf-score {
+    font-size: 25px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .jb-pdf-score-of {
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.55;
+  }
+  .jb-pdf-headline {
+    margin: 4mm 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+    max-width: 46em;
+  }
+  .jb-pdf-summary {
+    margin: 2.5mm 0 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #37415a;
+    max-width: 52em;
+  }
+
+  /* ── Figures ── large numerals reading across the sheet. */
+  .jb-pdf-figures {
+    display: flex;
+    flex-wrap: wrap;
+    border-top: 1px solid #dfe3ea;
+    border-bottom: 1px solid #dfe3ea;
+    padding: 5mm 0;
+  }
+  .jb-pdf-fig {
+    flex: 1 1 0;
+    min-width: 34mm;
+    padding-right: 6mm;
+  }
+  .jb-pdf-fig-value {
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+  }
+  .jb-pdf-fig-label {
+    margin-top: 1.5mm;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: #6b7690;
+  }
+  .jb-pdf-fig-hint {
+    margin-top: 0.8mm;
+    font-size: 8.5px;
+    color: #6b7690;
+  }
+  /* Inside a block the same figures are supporting detail, not a headline. */
+  .jb-pdf-figures-inline {
+    border: 0;
+    padding: 1mm 0 0;
+  }
+  .jb-pdf-figures-inline .jb-pdf-fig-value {
+    font-size: 13px;
+  }
+
+  .jb-pdf-cover-foot {
+    display: flex;
+    gap: 12mm;
+    padding-top: 5mm;
+  }
+  .jb-pdf-foot-label {
+    display: block;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: #6b7690;
+    margin-bottom: 2mm;
+  }
+  .jb-pdf-contents {
+    flex: 0 0 62mm;
+  }
+  .jb-pdf-contents ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .jb-pdf-contents li {
+    display: flex;
+    align-items: center;
+    gap: 2mm;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1mm 0;
+    border-bottom: 1px solid #f0f2f6;
+  }
+  .jb-pdf-contents-count {
+    margin-left: auto;
+    font-weight: 500;
+    font-size: 8.5px;
+    color: #6b7690;
+  }
+  .jb-pdf-colophon {
+    flex: 1;
+  }
+  .jb-pdf-colophon p {
+    margin: 0 0 1.5mm;
+    font-size: 9.5px;
+    line-height: 1.5;
+    color: #37415a;
+    max-width: 44em;
+  }
+  .jb-pdf-colophon-meta {
+    font-size: 8.5px !important;
+    color: #6b7690 !important;
+  }
+  .jb-pdf-warn {
+    color: #b45309 !important;
+    font-weight: 600;
+  }
+
+  .jb-pdf-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    flex: none;
+  }
+  .jb-pdf-dot-sm {
+    width: 5px;
+    height: 5px;
+    margin-right: 2mm;
+  }
+
+  /* ── Body pages ──────────────────────────────────────────────────────────── */
+  .jb-pdf-part {
+    margin-bottom: 9mm;
+  }
+  .jb-pdf-part-title {
+    display: flex;
+    align-items: center;
+    gap: 2.5mm;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 0 0 1.5mm;
+    padding-bottom: 2mm;
+    border-bottom: 1.5px solid #10151f;
     break-after: avoid;
     page-break-after: avoid;
   }
-  .jb-print-tab > h3 span {
-    display: none !important;
+  .jb-pdf-part-summary {
+    margin: 0 0 3mm;
+    font-size: 10px;
+    color: #37415a;
   }
 
-  .jb-blocks {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 9px !important;
+  .jb-pdf-blocks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5mm 8mm;
     align-items: start;
   }
-  .jb-block-full {
-    grid-column: 1 / -1 !important;
+  .jb-pdf-wide {
+    grid-column: 1 / -1;
   }
 
-  /* A section is never split. If it does not fit alongside what is already on the page it moves
-     to the next one whole — a half table continued overleaf is worse than a shorter page. */
-  [role='tabpanel'] section,
-  tr {
+  /* A section is never split. If it does not fit with what is already on the page it moves to
+     the next one whole — a table continued overleaf is worse than a shorter page. */
+  .jb-pdf-block {
+    border-left: 2.5px solid;
+    padding-left: 4mm;
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  thead {
+  .jb-pdf-block-title {
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    margin: 0 0 2mm;
+  }
+  .jb-pdf-note {
+    margin: 2mm 0 0;
+    font-size: 8.5px;
+    color: #6b7690;
+  }
+  .jb-pdf-prose {
+    font-size: 10px !important;
+    line-height: 1.55 !important;
+    color: #37415a !important;
+  }
+
+  /* ── Tables ── hairlines; the failing row keeps its colour as a left edge. */
+  .jb-pdf-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5px;
+  }
+  .jb-pdf-table th {
+    text-align: left;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: #6b7690;
+    border-bottom: 1px solid #37415a;
+    padding: 0 6px 2mm 0;
+  }
+  .jb-pdf-table td {
+    vertical-align: top;
+    padding: 1.6mm 6px 1.6mm 0;
+    border-bottom: 1px solid #eceff4;
+    color: #37415a;
+  }
+  .jb-pdf-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .jb-pdf-table thead {
     display: table-header-group;
   }
-
-  /* ── Blocks ── drop the card. An accent rule on the left carries the tone. */
-  [role='tabpanel'] section {
-    border: 0 !important;
-    border-left: 2.5px solid currentColor !important;
-    border-radius: 0 !important;
-    padding-left: 8px !important;
-    background: none !important;
-  }
-  [role='tabpanel'] section > div:first-child {
-    background: none !important;
-    border: 0 !important;
-    border-bottom: 1px solid var(--line) !important;
-    padding: 0 0 3px 0 !important;
-    margin-bottom: 5px !important;
-  }
-  [role='tabpanel'] section > div:first-child span:first-child {
-    display: none !important;
-  }
-  [role='tabpanel'] section > div:first-child > span:nth-child(2) {
-    font-size: 10px !important;
-    letter-spacing: 0.02em;
-  }
-  /* Provenance chips are workflow metadata, not something a reader needs on paper. */
-  [role='tabpanel'] section > div:first-child > span:last-child {
-    display: none !important;
-  }
-  /* Tone tints are set as inline styles, so they need reaching at every depth — a filled panel is
-     the single thing that makes this read as a web card rather than a page. The left accent rule
-     already carries the same information. */
-  [role='tabpanel'] section div,
-  [role='tabpanel'] section dl,
-  [role='tabpanel'] section ol,
-  [role='tabpanel'] section ul {
-    background: none !important;
-  }
-  [role='tabpanel'] section > div {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
+  .jb-pdf-td-lead {
+    font-weight: 700;
+    color: #10151f;
+    padding-left: 2mm;
   }
 
-  /* ── Tables ── hairlines only; tone survives as a left edge on the row that failed. */
-  [role='tabpanel'] table {
-    font-size: 10px !important;
+  /* ── Cards / lists / kv / timeline / links ───────────────────────────────── */
+  .jb-pdf-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4mm;
   }
-  [role='tabpanel'] th {
-    font-size: 8px !important;
-    letter-spacing: 0.1em;
-    border-bottom: 1px solid var(--ink-soft) !important;
-    padding: 0 8px 3px 0 !important;
+  .jb-pdf-card {
+    border-left: 2px solid;
+    padding-left: 3mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
-  [role='tabpanel'] td {
-    padding: 3.5px 8px 3.5px 0 !important;
-    border-bottom: 1px solid var(--line) !important;
+  .jb-pdf-card-head {
+    display: flex;
+    align-items: baseline;
+    gap: 3mm;
   }
-  [role='tabpanel'] tbody tr {
-    background: none !important;
+  .jb-pdf-card-title {
+    font-size: 10px;
+    font-weight: 700;
+    flex: 1;
+  }
+  .jb-pdf-card-badge {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .jb-pdf-card-detail {
+    margin: 1mm 0 0;
+    font-size: 8.5px;
+    color: #6b7690;
   }
 
-  /* ── Footer ── a colophon line, not a toolbar. */
-  .jb-report-overlay > section > footer {
-    padding: 7px 0 0 0 !important;
-    margin-top: 14px !important;
-    border-top: 1px solid var(--line) !important;
-    font-size: 8.5px !important;
-    color: var(--muted) !important;
+  .jb-pdf-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .jb-pdf-list li {
+    display: flex;
+    align-items: baseline;
+    font-size: 10px;
+    line-height: 1.5;
+    padding: 0.8mm 0;
+    color: #37415a;
+  }
+
+  .jb-pdf-timeline {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .jb-pdf-timeline li {
+    display: flex;
+    gap: 4mm;
+    font-size: 9.5px;
+    padding: 1mm 0;
+    border-bottom: 1px solid #f0f2f6;
+    color: #37415a;
+  }
+  .jb-pdf-when {
+    flex: 0 0 26mm;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    color: #6b7690;
+  }
+
+  .jb-pdf-links {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .jb-pdf-links li {
+    font-size: 9.5px;
+    padding: 1mm 0;
+    border-bottom: 1px solid #f0f2f6;
+  }
+  .jb-pdf-url {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: #6b7690;
+    word-break: break-all;
+  }
+
+  .jb-pdf-kv {
+    margin: 0;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 1mm 5mm;
+    font-size: 9.5px;
+  }
+  .jb-pdf-kv > div {
+    display: contents;
+  }
+  .jb-pdf-kv dt {
+    color: #6b7690;
+  }
+  .jb-pdf-kv dd {
+    margin: 0;
+    font-weight: 600;
+    color: #37415a;
   }
 }
