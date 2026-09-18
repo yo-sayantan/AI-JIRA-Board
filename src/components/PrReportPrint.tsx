@@ -19,6 +19,7 @@ export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: Rep
   const v = report.verdict
   const vc = toneColor(v?.tone)
   const stats = report.stats ?? []
+  const { lead, next } = splitHeadline(v?.headline, v?.label)
 
   return (
     <div className="jb-pdf">
@@ -34,20 +35,28 @@ export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: Rep
           <h1 className="jb-pdf-title">{report.title}</h1>
         </header>
 
-        <div className="jb-pdf-verdict" style={{ borderLeftColor: vc }}>
-          <div className="jb-pdf-verdict-head">
-            <span className="jb-pdf-verdict-label" style={{ color: vc }}>
+        <div className="jb-pdf-verdict">
+          <div className="jb-pdf-verdict-main" style={{ borderLeftColor: vc }}>
+            <div className="jb-pdf-verdict-label" style={{ color: vc }}>
               {v?.label ?? 'No verdict'}
-            </span>
-            {typeof v?.score === 'number' && (
-              <span className="jb-pdf-score" style={{ color: vc }}>
-                {v.score}
-                <span className="jb-pdf-score-of">/100</span>
-              </span>
+            </div>
+            {lead && <p className="jb-pdf-lead">{lead}</p>}
+            {next && (
+              <p className="jb-pdf-next">
+                <span className="jb-pdf-next-label">Next</span>
+                {next}
+              </p>
             )}
           </div>
-          {v?.headline && <p className="jb-pdf-headline">{v.headline}</p>}
-          {v?.summary && <p className="jb-pdf-summary">{v.summary}</p>}
+          {typeof v?.score === 'number' && (
+            <div className="jb-pdf-scorebox">
+              <span className="jb-pdf-foot-label">Readiness</span>
+              <span className="jb-pdf-score" style={{ color: vc }}>
+                {v.score}
+              </span>
+              <span className="jb-pdf-score-of">out of 100</span>
+            </div>
+          )}
         </div>
 
         {stats.length > 0 && (
@@ -88,7 +97,10 @@ export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: Rep
             </p>
             {report.sources && <p className="jb-pdf-colophon-meta">Sources: {report.sources}</p>}
             {report.warnings && report.warnings.length > 0 && (
-              <p className="jb-pdf-warn">{report.warnings.join(' · ')}</p>
+              <p className="jb-pdf-warn">
+                <span className="jb-pdf-warn-label">Not covered</span>
+                {report.warnings.join(' · ')}
+              </p>
             )}
           </div>
         </footer>
@@ -117,6 +129,32 @@ export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: Rep
   )
 }
 
+/**
+ * The generator packs three different things into one headline string: the verdict label, the
+ * evidence behind it, and the action that follows. Printed as a single paragraph under a heading
+ * that repeats its own opening clause, they all read as equally (un)important. Splitting them lets
+ * the cover rank them — the label is already the headline, the evidence is supporting, and the
+ * action is the one line a reader has to act on.
+ */
+function splitHeadline(headline?: string | null, label?: string | null): { lead: string; next: string | null } {
+  let rest = (headline ?? '').trim()
+  if (label) {
+    for (const sep of [' — ', ' – ', ' - ', ': ']) {
+      if (rest.startsWith(label + sep)) {
+        rest = rest.slice(label.length + sep.length)
+        break
+      }
+    }
+  }
+  let next: string | null = null
+  const at = rest.lastIndexOf('Next:')
+  if (at > 0) {
+    next = rest.slice(at + 'Next:'.length).trim()
+    rest = rest.slice(0, at).trim()
+  }
+  return { lead: rest, next }
+}
+
 /** The cover repeats the header strip's figures, so an identical stats block is dropped. */
 function visibleBlocks(all: ReportBlock[], headerStats: ReportStat[]): ReportBlock[] {
   const digest = (items: ReportStat[]) => items.map((s) => `${s.label}=${s.value}`).join('|')
@@ -125,15 +163,21 @@ function visibleBlocks(all: ReportBlock[], headerStats: ReportStat[]): ReportBlo
   return all.filter((b) => !(b.kind === 'stats' && digest(b.items) === head))
 }
 
+/**
+ * Label first, value under it. With the label below, a value long enough to wrap (a pull-request
+ * tally, say) pushed its own label down a line and knocked it out of alignment with every other
+ * label in the row. Leading with the label puts them all on one baseline and lets values wrap
+ * freely underneath.
+ */
 function Figure({ stat }: { stat: ReportStat }) {
   const c = toneColor(stat.tone)
   const toned = stat.tone && stat.tone !== 'neutral'
   return (
     <div className="jb-pdf-fig">
+      <div className="jb-pdf-fig-label">{stat.label}</div>
       <div className="jb-pdf-fig-value" style={toned ? { color: c } : undefined}>
         {stat.value}
       </div>
-      <div className="jb-pdf-fig-label">{stat.label}</div>
       {stat.hint && <div className="jb-pdf-fig-hint">{stat.hint}</div>}
     </div>
   )

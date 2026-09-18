@@ -408,6 +408,20 @@ a {
     color: #10151f;
     font-size: 10px;
     line-height: 1.5;
+
+    /* Rebind the theme inside the document. Ticket prose is rendered by .prose-mini, which reaches
+       for these variables — and in dark mode --ink is near-white, so every bold run inside a
+       callout or table came out white-on-white on paper. Scoping them here fixes the whole subtree
+       at once instead of chasing each rule. */
+    --ink: #10151f;
+    --ink-soft: #37415a;
+    --muted: #6b7690;
+    --line: #dfe3ea;
+    --line-strong: #c9cfda;
+    --surface-solid: #ffffff;
+    --surface-2: #f4f6f9;
+    --link: #1a4fd0;
+    --pr-link: #6d28d9;
   }
   .jb-pdf *,
   .jb-pdf *::before,
@@ -459,80 +473,115 @@ a {
     max-width: 24em;
   }
 
-  /* Verdict owns the middle of the cover — it is the answer the reader came for. */
+  /* Verdict owns the middle of the cover — it is the answer the reader came for. The score sits
+     in its own cell rather than beside the label, so the two stop competing for the same rank. */
   .jb-pdf-verdict {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    gap: 10mm;
+    margin: 7mm 0;
+  }
+  .jb-pdf-verdict-main {
     flex: 1;
     display: flex;
     flex-direction: column;
     justify-content: center;
     border-left: 4px solid;
-    padding: 0 0 0 7mm;
-    margin: 8mm 0;
-  }
-  .jb-pdf-verdict-head {
-    display: flex;
-    align-items: baseline;
-    gap: 7mm;
+    padding-left: 7mm;
+    min-width: 0;
   }
   .jb-pdf-verdict-label {
-    font-size: 25px;
+    font-size: 29px;
     font-weight: 800;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
+    line-height: 1.1;
+  }
+  .jb-pdf-lead {
+    margin: 4mm 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #37415a;
+    max-width: 50em;
+  }
+  /* The one line a reader has to act on, so it is set apart rather than buried in the prose. */
+  .jb-pdf-next {
+    margin: 5mm 0 0;
+    padding-top: 3mm;
+    border-top: 1px solid #dfe3ea;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.45;
+    color: #10151f;
+    max-width: 50em;
+  }
+  .jb-pdf-next-label {
+    display: inline-block;
+    margin-right: 3mm;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #6b7690;
+    vertical-align: 1.5px;
+  }
+  .jb-pdf-scorebox {
+    flex: 0 0 32mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+    text-align: right;
+    border-left: 1px solid #dfe3ea;
+    padding-left: 7mm;
   }
   .jb-pdf-score {
-    font-size: 25px;
+    font-size: 44px;
     font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
   }
   .jb-pdf-score-of {
-    font-size: 12px;
-    font-weight: 600;
-    opacity: 0.55;
-  }
-  .jb-pdf-headline {
-    margin: 4mm 0 0;
-    font-size: 14px;
-    line-height: 1.45;
-    max-width: 46em;
-  }
-  .jb-pdf-summary {
-    margin: 2.5mm 0 0;
-    font-size: 11px;
-    line-height: 1.5;
-    color: #37415a;
-    max-width: 52em;
+    margin-top: 1.5mm;
+    font-size: 8.5px;
+    color: #6b7690;
   }
 
-  /* ── Figures ── large numerals reading across the sheet. */
+  /* ── Figures ── label leads, value beneath. With the label below, a value long enough to wrap
+     (a pull-request tally, say) pushed its own label down a line and knocked it out of alignment
+     with every other label in the row. Leading with the label puts them all on one baseline. */
   .jb-pdf-figures {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    align-items: flex-start;
     border-top: 1px solid #dfe3ea;
     border-bottom: 1px solid #dfe3ea;
     padding: 5mm 0;
+    gap: 6mm;
   }
   .jb-pdf-fig {
     flex: 1 1 0;
-    min-width: 34mm;
-    padding-right: 6mm;
-  }
-  .jb-pdf-fig-value {
-    font-size: 19px;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-    font-variant-numeric: tabular-nums;
-    line-height: 1.15;
+    min-width: 0;
   }
   .jb-pdf-fig-label {
-    margin-top: 1.5mm;
     font-size: 8px;
     font-weight: 700;
     letter-spacing: 0.13em;
     text-transform: uppercase;
     color: #6b7690;
+    line-height: 1.2;
+  }
+  .jb-pdf-fig-value {
+    margin-top: 2mm;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25;
   }
   .jb-pdf-fig-hint {
-    margin-top: 0.8mm;
+    margin-top: 1mm;
     font-size: 8.5px;
     color: #6b7690;
   }
@@ -540,9 +589,11 @@ a {
   .jb-pdf-figures-inline {
     border: 0;
     padding: 1mm 0 0;
+    flex-wrap: wrap;
   }
   .jb-pdf-figures-inline .jb-pdf-fig-value {
-    font-size: 13px;
+    font-size: 12px;
+    margin-top: 1mm;
   }
 
   .jb-pdf-cover-foot {
@@ -597,8 +648,20 @@ a {
     color: #6b7690 !important;
   }
   .jb-pdf-warn {
-    color: #b45309 !important;
-    font-weight: 600;
+    margin-top: 2.5mm !important;
+    padding-top: 2mm;
+    border-top: 1px solid #f0e3cf;
+    color: #7c4a06 !important;
+    font-size: 8.5px !important;
+  }
+  .jb-pdf-warn-label {
+    display: inline-block;
+    margin-right: 2.5mm;
+    font-size: 7.5px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #b45309;
   }
 
   .jb-pdf-dot {
@@ -701,7 +764,9 @@ a {
   .jb-pdf-table thead {
     display: table-header-group;
   }
-  .jb-pdf-td-lead {
+  /* Qualified by the table: a bare .jb-pdf-td-lead loses to .jb-pdf-table td and the lead column
+     ends up the same grey as the rest of the row. */
+  .jb-pdf-table td.jb-pdf-td-lead {
     font-weight: 700;
     color: #10151f;
     padding-left: 2mm;
