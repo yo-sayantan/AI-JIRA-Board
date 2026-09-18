@@ -491,7 +491,7 @@ bash jira-intern/local-runner/update-completed.sh  <span class="cmt"># full Comp
           <tr><td><code class="inl">docker: cannot connect to the Docker daemon</code></td><td>Docker Desktop isn't running. Launch it and wait for "Engine running".</td></tr>
           <tr><td>Port 4321 already in use</td><td><code class="inl">docker compose down</code>, or run on another port: <code class="inl">PORT=8080 docker compose up -d --build</code>.</td></tr>
           <tr><td><code class="inl">Name or service not known</code> for your Jira host</td><td>Docker DNS, common on VPN. Uncomment the <code class="inl">dns:</code> block in <code class="inl">docker-compose.yml</code> and recreate.</td></tr>
-          <tr><td>Container exits immediately</td><td><code class="inl">docker logs jira-board</code> — usually a bad token or an unreachable host.</td></tr>
+          <tr><td>Container exits immediately</td><td><code class="inl">docker logs JIRA-Board</code> — usually a bad token or an unreachable host.</td></tr>
           <tr><td>Changed <code class="inl">src/</code> but the UI looks old</td><td>Rebuild: <code class="inl">docker compose up -d --build</code>.</td></tr>
           <tr><td>Permission denied running <code class="inl">docker</code> on Linux</td><td><code class="inl">sudo usermod -aG docker "$USER"</code>, then log out and back in.</td></tr>
           <tr><td><code class="inl">./start-jira-board.sh: Permission denied</code></td><td><code class="inl">chmod +x start-jira-board.sh</code></td></tr>

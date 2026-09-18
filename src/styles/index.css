@@ -349,3 +349,104 @@ a {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Settings → "Motion & animations" off. Same effect as the OS reduce-motion preference, applied
+   by choice rather than by system setting. */
+.jb-no-anim *,
+.jb-no-anim *::before,
+.jb-no-anim *::after {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* ── PR Readiness Report → PDF ────────────────────────────────────────────────
+   The report overlay is the ONLY thing that prints. The board behind it is hidden
+   rather than re-rendered, so what lands in the PDF is exactly the component that
+   was verified on screen. Colour is the whole point of this report, so the tone
+   tints are forced through instead of being dropped by the browser's ink-saving
+   default. */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Keep the report's own palette legible on white paper. */
+  body {
+    --bg: #ffffff;
+    --surface-solid: #ffffff;
+    --surface-2: #f6f7f9;
+    --line: #d6dae1;
+    --ink: #0b1220;
+    --ink-soft: #2b3444;
+    --muted: #5b6676;
+  }
+
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Print ONLY the report overlay. Visibility (not display) so this works at any nesting depth
+     without assuming where the overlay sits in the tree — and note the ticket drawer is also a
+     role=dialog, hence the explicit class rather than a role selector. */
+  body * {
+    visibility: hidden;
+  }
+  .jb-report-overlay,
+  .jb-report-overlay * {
+    visibility: visible;
+  }
+  .jb-report-overlay {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    display: block !important;
+    overflow: visible !important;
+    background: none !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+  }
+  .jb-report-overlay > section {
+    max-width: none !important;
+    width: 100% !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    overflow: visible !important;
+  }
+
+  /* Controls and tab chrome are meaningless on paper — every tab is printed in full. */
+  .jb-no-print,
+  [role='tablist'] {
+    display: none !important;
+  }
+
+  /* One tab per page, and never split a block across the fold. */
+  .jb-print-page {
+    break-before: page;
+    page-break-before: always;
+  }
+  [role='tabpanel'] section,
+  table,
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+}

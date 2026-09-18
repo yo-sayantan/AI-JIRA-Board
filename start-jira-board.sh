@@ -13,7 +13,7 @@ set -euo pipefail
 
 # ── Fixed port — never auto-increment. Change here (or via env) only. ─────────
 PORT="${PORT:-4321}"
-CONTAINER_NAME="jira-board"
+CONTAINER_NAME="JIRA-Board"
 IMAGE_NAME="jira-board:latest"
 APP_URL="http://localhost:${PORT}/dist/index.html"
 

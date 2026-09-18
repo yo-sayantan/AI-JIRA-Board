@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { loadData, loadArchivedKeys, persistArchivedKeys } from './data'
 import { completedToTicket, type ColumnKey, type Ticket } from './types'
-import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, type PrReportsIndex } from './lib/runner'
+import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, startBulkReportGeneration, saveServerSettings, type PrReportsIndex, type ReportScope } from './lib/runner'
 import type { PrReport } from './lib/reportTypes'
 import { PrReportOverlay } from './components/PrReport'
 import { Header } from './components/Header'
@@ -19,7 +19,9 @@ import { NoticesDock } from './components/NoticesDock'
 import { StaleBanner } from './components/StaleBanner'
 import { Footer } from './components/Footer'
 import { EyeOffIcon } from './components/Icons'
-import { freshness, isNextSprint } from './lib/format'
+import { freshness, isNextSprint, prListOf } from './lib/format'
+import { applySettings, loadSettings, resolveDark, saveSettings, type Settings } from './lib/settings'
+import { SettingsPanel } from './components/Settings'
 import { matches, parseQuery } from './lib/search'
 
 /** Flatten tickets + their nested sub-tasks into a key→ticket map (recursive). */
@@ -60,6 +62,8 @@ export default function App() {
   const [stack, setStack] = useState<string[]>([])
   const anyDrawer = stack.length > 0
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
+  const [settings, setSettings] = useState<Settings>(loadSettings)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [archiveRefreshing, setArchiveRefreshing] = useState(false)
   const [runProgress, setRunProgress] = useState<{ done: number; total: number; pct: number; current?: string | null; phase?: string } | null>(null)
@@ -133,8 +137,9 @@ export default function App() {
   // Heartbeat: load once; in served mode poll (cheap: a directory read) so background/cron
   // generations surface without a reload. Faster while something is in flight.
   useEffect(() => {
+    if (!settings.features.prReports) return
     void refreshReportsIndex()
-    if (!served) return
+    if (!served || !settings.features.autoRefresh) return
     let timer: ReturnType<typeof setTimeout>
     const tick = async () => {
       await refreshReportsIndex()
@@ -142,7 +147,7 @@ export default function App() {
     }
     timer = setTimeout(tick, 4000)
     return () => clearTimeout(timer)
-  }, [served, refreshReportsIndex])
+  }, [served, refreshReportsIndex, settings.features.prReports, settings.features.autoRefresh])
 
   const handleOpenReport = useCallback(
     async (key: string) => {
@@ -176,6 +181,41 @@ export default function App() {
     [served, toast],
   )
 
+  const handleBulkReports = useCallback(
+    async (target: ReportScope, force: boolean) => {
+      if (!served) {
+        toast('Bulk generation needs the server or Docker — run: bash jira-intern/local-runner/pr-reports-backfill.sh --all-years', 'info', 6000)
+        return
+      }
+      const start = await startBulkReportGeneration(target, force)
+      if (!start?.ok) {
+        toast("Couldn't start the report run — is the server running?", 'error', 4000)
+        return
+      }
+      if (start.queuedKeys.length === 0) {
+        toast(
+          start.matched === 0
+            ? 'No tickets with a pull request matched that scope.'
+            : 'Every matching report is already current or queued — tick "Force rebuild" to redo them.',
+          'info',
+          5000,
+        )
+        return
+      }
+      setReportsGenerating((s) => {
+        const next = new Set(s)
+        for (const k of start.queuedKeys) next.add(k)
+        return next
+      })
+      toast(
+        `Queued ${start.queuedKeys.length} PR readiness report${start.queuedKeys.length === 1 ? '' : 's'} — they generate one at a time in the background.`,
+        'loading',
+        4500,
+      )
+    },
+    [served, toast],
+  )
+
   // Move a Done ticket to the Completed archive NOW, instead of waiting out the
   // DONE_BOARD_DAYS window. Persisted locally; undoable via the strip under the board.
   const archiveTicket = useCallback(
@@ -205,16 +245,31 @@ export default function App() {
     })
   }, [])
 
+  // Settings own the theme now. Applying them is the single place <html> gets its classes, so the
+  // header toggle and the settings panel can't disagree about what's on screen.
+  useEffect(() => {
+    applySettings(settings)
+    setDark(resolveDark(settings))
+    saveSettings(settings)
+  }, [settings])
+
+  // In schedule mode the right theme changes with the clock, so re-evaluate on the minute tick.
+  useEffect(() => {
+    if (settings.themeMode !== 'schedule') return
+    applySettings(settings)
+    setDark(resolveDark(settings))
+  }, [now, settings])
+
+  // Mirror the AI level to the server so the shell runners see it (served mode only).
+  useEffect(() => {
+    if (!served) return
+    void saveServerSettings({ aiLevel: settings.aiLevel })
+  }, [served, settings.aiLevel])
+
+  // The header's sun/moon flips the theme directly; doing so pins it, since "auto" or a schedule
+  // would otherwise override the click on the next evaluation.
   const toggleTheme = () => {
-    const el = document.documentElement
-    const next = !el.classList.contains('dark')
-    el.classList.toggle('dark', next)
-    try {
-      localStorage.setItem('jb-theme', next ? 'dark' : 'light')
-    } catch {
-      /* file:// localStorage may be blocked */
-    }
-    setDark(next)
+    setSettings((s) => ({ ...s, themeMode: 'fixed', theme: resolveDark(s) ? 'light' : 'dark' }))
   }
 
   // Poll the server until the in-flight intern run finishes, then reload to show fresh data.
@@ -494,7 +549,7 @@ export default function App() {
       const typing = tag === 'INPUT' || tag === 'TEXTAREA'
       // Don't hijack "/" or "r" while a drawer/archive overlay is open — pressing "r"
       // would reload the page (file://) and blow the open drawer stack away.
-      if (anyDrawer || completedOpen) return
+      if (anyDrawer || completedOpen || !settings.features.shortcuts) return
       if (e.key === '/' && !typing) {
         e.preventDefault()
         document.getElementById('jb-search')?.focus()
@@ -504,7 +559,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleRefresh, anyDrawer, completedOpen])
+  }, [handleRefresh, anyDrawer, completedOpen, settings.features.shortcuts])
 
   const terms = useMemo(() => parseQuery(query), [query])
   const filtered = useMemo(() => data.tickets.filter((t) => matches(t, terms)), [data.tickets, terms])
@@ -521,6 +576,19 @@ export default function App() {
     [data.tickets, now],
   )
   const myCompletedCount = useMemo(() => data.completed.filter((c) => c.mine !== false).length, [data.completed])
+
+  // Tickets a report can be built for. Mirrors pr_report.py's iter_tickets — active tickets,
+  // their sub-tasks that carry their own PR, and the completed archive — so the count the menu
+  // shows matches the number of reports a bulk run would actually produce.
+  const ticketsWithPrCount = useMemo(() => {
+    const keys = new Set<string>()
+    for (const t of data.tickets) {
+      if (prListOf(t).length > 0) keys.add(t.key)
+      for (const s of t.subtasks ?? []) if (s.key && prListOf(s).length > 0) keys.add(s.key)
+    }
+    for (const c of data.completed) if (prListOf(c).length > 0) keys.add(c.key)
+    return keys.size
+  }, [data.tickets, data.completed])
   const fr = freshness(data.generatedAt, now)
 
   // Index every ticket — top-level, completed parents, and all nested sub-tasks — so clicking
@@ -597,6 +665,27 @@ export default function App() {
         served={served}
         onRefresh={handleRefresh}
         onArchiveRefresh={handleArchiveRefresh}
+        onOpenSettings={() => setSettingsOpen(true)}
+        reports={
+          settings.features.prReports
+            ? {
+                served,
+                generating: reportsGenerating,
+                withPrCount: ticketsWithPrCount,
+                reportCount: Object.keys(reportsIndex?.reports ?? {}).length,
+                onBulk: handleBulkReports,
+                onOne: handleGenerateReport,
+              }
+            : undefined
+        }
+      />
+
+      <SettingsPanel
+        open={settingsOpen}
+        settings={settings}
+        onChange={setSettings}
+        onClose={() => setSettingsOpen(false)}
+        aiLevelSynced={served}
       />
 
       {fr.stale && <StaleBanner label={fr.label} served={served} refreshing={refreshing} onRefresh={handleRefresh} />}
@@ -606,11 +695,11 @@ export default function App() {
           sub-tickets for context, and it opens on the same "Mine" scope. */}
       <Stats
         tickets={filtered.filter((t) => !isNextSprint(t, now))}
-        completedCount={myCompletedCount}
-        nextSprintCount={nextSprintTickets.length}
+        completedCount={settings.features.completedArchive ? myCompletedCount : null}
+        nextSprintCount={settings.features.nextSprint ? nextSprintTickets.length : 0}
         active={sel}
         onSelect={setSel}
-        onOpenCompleted={() => setCompletedOpen(true)}
+        onOpenCompleted={settings.features.completedArchive ? () => setCompletedOpen(true) : undefined}
       />
 
       {!hasAnyActive ? (
@@ -648,13 +737,15 @@ export default function App() {
 
       {/* Next sprint's queue — hidden until its top chip (or "All") is picked. 'all' opens it
           fully; 'next' reveals the minimal corner icon to expand on demand. */}
-      <NextSprint
-        tickets={nextSprintTickets}
-        now={now}
-        onOpen={openTicket}
-        visible={nextSprintVisible}
-        forceOpen={sel === 'all'}
-      />
+      {settings.features.nextSprint && (
+        <NextSprint
+          tickets={nextSprintTickets}
+          now={now}
+          onOpen={openTicket}
+          visible={nextSprintVisible}
+          forceOpen={sel === 'all'}
+        />
+      )}
 
       <Footer />
 
@@ -693,7 +784,8 @@ export default function App() {
               onRefreshTicket={handleRefreshTicket}
               refreshing={refreshingKeys.has(t.key)}
               user={data.user}
-              report={reportsIndex?.reports[t.key] ?? null}
+              report={settings.features.prReports ? (reportsIndex?.reports[t.key] ?? null) : null}
+              reportsEnabled={settings.features.prReports}
               reportGenerating={reportsGenerating.has(t.key)}
               reportLoading={reportLoadingKey === t.key}
               onOpenReport={handleOpenReport}

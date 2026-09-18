@@ -125,5 +125,5 @@ PR/Jira content never leaves the machine. In Docker the container runs the deter
 | "no JIRA_PERSONAL_TOKEN found — skipping fetch" | Your secrets file isn't mounted/readable. Check `~/.cursor/mcp-secrets.env` exists and has `JIRA_PERSONAL_TOKEN`. |
 | Port 4321 in use | `start-jira-board.sh` frees it automatically; otherwise `docker compose down` or stop the process on that port. |
 | `Name or service not known` for your Jira host | Docker DNS (common on VPN). Uncomment the `dns:` block in `docker-compose.yml` and recreate. |
-| Container exits immediately | `docker logs jira-board` — usually a bad token or unreachable host. |
+| Container exits immediately | `docker logs JIRA-Board` — usually a bad token or unreachable host. |
 | Changed `src/` but UI looks old | Rebuild the image: `docker compose up -d --build`. |

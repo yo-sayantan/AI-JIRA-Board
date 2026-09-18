@@ -12,7 +12,7 @@ an enriched file that changed anything derived. Nothing here touches the network
 
   pr_report.py base <KEY>                 write the deterministic report; print fingerprint; exit 2 if no PR
   pr_report.py uptodate <KEY>             exit 0 if reports/<KEY>.json matches the ticket's PR fingerprint
-  pr_report.py needs-report [--year Y] [--force] [--max N]      keys whose report is missing/stale
+  pr_report.py needs-report [--year Y] [--since D] [--force] [--max N]   keys missing/stale reports
   pr_report.py context <KEY>              ticket + settings the AI pass needs (JSON, stdout)
   pr_report.py validate <KEY> [--base <path>]   exit 0 if well-formed (and derived parts preserved)
   pr_report.py mark-enriched <KEY>        stamp enriched=true / enrichedAt / generator
@@ -80,6 +80,15 @@ def year_of(t):
         v = t.get(k)
         if isinstance(v, str) and len(v) >= 4 and v[:4].isdigit():
             return int(v[:4])
+    return None
+
+
+def date_of(t):
+    """YYYY-MM-DD from the same field precedence as year_of — ISO strings sort as dates."""
+    for k in ("created", "resolved", "lastUpdate"):
+        v = t.get(k)
+        if isinstance(v, str) and len(v) >= 10 and v[:4].isdigit():
+            return v[:10]
     return None
 
 
@@ -693,14 +702,24 @@ def main(argv):
     if cmd == "needs-report":
         year = int(args[args.index("--year") + 1]) if "--year" in args else None
         mx = int(args[args.index("--max") + 1]) if "--max" in args else None
+        since = args[args.index("--since") + 1] if "--since" in args else None
         force = "--force" in args
+        # --needs-ai: a deterministic-only report has a CURRENT fingerprint, so the normal
+        # staleness check skips it forever and it never gets upgraded. This selects those too,
+        # which is what makes an interrupted AI backfill resumable without redoing finished work.
+        needs_ai = "--needs-ai" in args
         out = []
         for t, src in iter_tickets(data):
             if not prs_of(t) or (year and year_of(t) != year):
                 continue
+            if since:
+                d = date_of(t)
+                if not d or d < since:
+                    continue
             rep = None if force else read_json(report_path(t["key"]))
             if rep and rep.get("fingerprint") == fingerprint(t) and rep.get("schemaVersion") == SCHEMA_VERSION:
-                continue
+                if not (needs_ai and not rep.get("enriched")):
+                    continue
             out.append(t["key"])
         print("\n".join(out[:mx] if mx is not None else out))
         return 0

@@ -33,7 +33,8 @@ export function Stats({
 }: {
   /** Board + On Hold tickets only — next-sprint work is counted separately. */
   tickets: Ticket[]
-  completedCount: number
+  /** null hides the Completed chip entirely (Settings → Completed archive off). */
+  completedCount: number | null
   /** To Do tickets whose sprint hasn't started (rendered in the Next Sprint section). */
   nextSprintCount?: number
   active: StatSelection
@@ -136,21 +137,23 @@ export function Stats({
         )
       })()}
 
-      <motion.button
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-        onClick={onOpenCompleted}
-        title="View all completed tickets"
-        className="gold-sheen ml-auto inline-flex items-center rounded-full border-[3px] px-4 py-2 text-[13.5px] font-extrabold text-[#5b3d00]"
-        style={{ borderColor: '#b45309' }}
-      >
-        <span className="relative z-[1] inline-flex items-center gap-2">
-          <TrophyIcon size={16} glint /> Completed{' '}
-          <b>
-            <AnimatedNumber value={completedCount} />
-          </b>
-        </span>
-      </motion.button>
+      {completedCount != null && (
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+          onClick={onOpenCompleted}
+          title="View all completed tickets"
+          className="gold-sheen ml-auto inline-flex items-center rounded-full border-[3px] px-4 py-2 text-[13.5px] font-extrabold text-[#5b3d00]"
+          style={{ borderColor: '#b45309' }}
+        >
+          <span className="relative z-[1] inline-flex items-center gap-2">
+            <TrophyIcon size={16} glint /> Completed{' '}
+            <b>
+              <AnimatedNumber value={completedCount} />
+            </b>
+          </span>
+        </motion.button>
+      )}
     </div>
   )
 }

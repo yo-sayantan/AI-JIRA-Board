@@ -7,7 +7,7 @@
 // and reloads when fresh data lands. Without the server the board still works from
 // file://; Refresh there just reloads the latest dump.
 import { createServer } from 'node:http'
-import { readFile, readdir, stat, unlink } from 'node:fs/promises'
+import { readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { extname, join, normalize } from 'node:path'
@@ -157,6 +157,7 @@ async function pumpRefreshQueue() {
 const REPORT_SCRIPT = join(INTERN, 'local-runner/pr-report.sh')
 const REPORTS_DIR = join(INTERN, 'reports')
 const REPORTS_STATUS = join(REPORTS_DIR, '.status.json')
+const SETTINGS_FILE = join(INTERN, '.settings.json')
 let reportActive = null
 const reportQueue = []
 const reportExits = new Map()
@@ -195,6 +196,39 @@ async function pumpReportQueue() {
   } catch {
     done(1)
   }
+}
+
+/**
+ * Which tickets should a bulk run cover? pr_report.py already owns that decision (it knows which
+ * tickets have a PR and whether a stored report still matches the PR fingerprint), so we ask it
+ * rather than re-implementing the rules here. Spawned with an ARGUMENT ARRAY and pre-validated
+ * values — never a shell string — so a crafted `since`/`year` can't turn into a command.
+ */
+function resolveReportKeys({ year, since, force }) {
+  const args = [join(INTERN, 'pr_report.py'), 'needs-report']
+  if (year) args.push('--year', String(year))
+  if (since) args.push('--since', since)
+  if (force) args.push('--force')
+  return new Promise((resolve) => {
+    let out = ''
+    try {
+      const child = spawn('python3', args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
+      child.stdout.on('data', (d) => {
+        out += d
+      })
+      child.on('error', () => resolve([]))
+      child.on('close', () =>
+        resolve(
+          out
+            .split('\n')
+            .map((s) => s.trim().toUpperCase())
+            .filter((s) => KEY_RE.test(s)),
+        ),
+      )
+    } catch {
+      resolve([])
+    }
+  })
 }
 
 /** Keys some OTHER process is generating right now (reports/.status.json) — dead PIDs ignored. */
@@ -406,6 +440,81 @@ const server = createServer(async (req, res) => {
       json(res, 404, { ok: false, error: 'no report yet' })
     }
     return
+  }
+  // Board settings the shell runners need. Written to jira-intern/.settings.json (git-ignored)
+  // rather than into config.json — that file may resolve to the user's personal ~/.ai/config.json,
+  // which the board has no business rewriting.
+  if (path === '/api/settings' && req.method === 'POST') {
+    let body = ''
+    for await (const chunk of req) {
+      body += chunk
+      if (body.length > 4096) return json(res, 413, { ok: false, error: 'too large' })
+    }
+    let patch
+    try {
+      patch = JSON.parse(body || '{}')
+    } catch {
+      return json(res, 400, { ok: false, error: 'bad json' })
+    }
+    const LEVELS = ['none', 'low', 'moderate', 'full']
+    if (patch.aiLevel !== undefined && !LEVELS.includes(patch.aiLevel)) {
+      return json(res, 400, { ok: false, error: 'bad aiLevel' })
+    }
+    let current = {}
+    try {
+      current = JSON.parse(await readFile(SETTINGS_FILE, 'utf8'))
+    } catch {}
+    const next = { ...current }
+    if (patch.aiLevel !== undefined) next.aiLevel = patch.aiLevel
+    try {
+      await writeFile(SETTINGS_FILE, JSON.stringify(next, null, 2) + '\n')
+    } catch (e) {
+      return json(res, 500, { ok: false, error: String(e?.message ?? e) })
+    }
+    return json(res, 200, { ok: true, settings: next })
+  }
+  if (path === '/api/settings' && req.method === 'GET') {
+    try {
+      return json(res, 200, { ok: true, settings: JSON.parse(await readFile(SETTINGS_FILE, 'utf8')) })
+    } catch {
+      return json(res, 200, { ok: true, settings: {} })
+    }
+  }
+
+  // Bulk generation — every ticket with a PR, a year, a date window, or an explicit selection.
+  // Queued one at a time through the same pump as single reports, so a 40-ticket run never
+  // stampedes the agent or collides with a data fetch.
+  if (path === '/api/reports/bulk' && req.method === 'POST') {
+    const scope = (url.searchParams.get('scope') || 'all').trim()
+    const force = url.searchParams.get('force') === '1'
+    let keys = []
+    if (scope === 'keys') {
+      keys = (url.searchParams.get('keys') || '')
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter((s) => KEY_RE.test(s))
+    } else {
+      const yearRaw = (url.searchParams.get('year') || '').trim()
+      const sinceRaw = (url.searchParams.get('since') || '').trim()
+      const year = scope === 'year' && /^\d{4}$/.test(yearRaw) ? yearRaw : null
+      const since = scope === 'since' && /^\d{4}-\d{2}-\d{2}$/.test(sinceRaw) ? sinceRaw : null
+      if (scope === 'year' && !year) return json(res, 400, { ok: false, error: 'bad year' })
+      if (scope === 'since' && !since) return json(res, 400, { ok: false, error: 'bad since date' })
+      keys = await resolveReportKeys({ year, since, force })
+    }
+    // Skip anything already in flight — ours OR a terminal/cron backfill's. Two agents writing
+    // the same reports/<KEY>.json would race, and the loser's half-written file is what sticks.
+    const pending = new Set([...reportPendingKeys(), ...(await externalGenerating())])
+    const queued = []
+    for (const key of keys) {
+      if (pending.has(key)) continue
+      pending.add(key)
+      reportExits.delete(key)
+      reportQueue.push(key)
+      queued.push(key)
+    }
+    void pumpReportQueue()
+    return json(res, 202, { ok: true, scope, matched: keys.length, queued, pending: reportPendingKeys() })
   }
   // Generate (or regenerate) one ticket's report in the background. Idempotent while queued.
   if (path === '/api/report' && req.method === 'POST') {

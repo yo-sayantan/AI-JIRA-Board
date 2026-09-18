@@ -28,6 +28,8 @@ jira-intern/data.json
 jira-intern/data.js
 # PR Readiness Reports — generated per ticket from real PR/Jira/Bitbucket content. Local only.
 jira-intern/reports/
+# Written by the board's Settings panel (AI usage level) — per-machine, not project config.
+jira-intern/.settings.json
 jira-intern/.report.lock
 jira-intern/cache/
 jira-intern/logs/

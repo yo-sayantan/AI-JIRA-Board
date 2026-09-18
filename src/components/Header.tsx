@@ -2,8 +2,9 @@ import { motion } from 'motion/react'
 import type { ReactNode } from 'react'
 import type { JiraData } from '../types'
 import { currentSprint, fmtDate, fmtDateShort, freshness, hexToRgba, sprintStatus } from '../lib/format'
-import { CalendarIcon, QuestionIcon, RefreshIcon, SearchIcon, SunIcon, MoonIcon, TicketGlyph, TrophyIcon } from './Icons'
+import { CalendarIcon, GearIcon, QuestionIcon, RefreshIcon, SearchIcon, SunIcon, MoonIcon, TicketGlyph, TrophyIcon } from './Icons'
 import { guideUrl } from '../lib/runner'
+import { ReportsMenu, type ReportsMenuProps } from './ReportsMenu'
 
 export type RunProgress = {
   done: number
@@ -152,6 +153,8 @@ export function Header({
   served,
   onRefresh,
   onArchiveRefresh,
+  reports,
+  onOpenSettings,
 }: {
   data: JiraData
   now: number
@@ -166,6 +169,9 @@ export function Header({
   served: boolean
   onRefresh: () => void
   onArchiveRefresh: () => void
+  /** Bulk PR Readiness Report controls — grouped so the header keeps one prop, not five. */
+  reports?: ReportsMenuProps
+  onOpenSettings?: () => void
 }) {
   const fr = freshness(data.generatedAt, now)
   const name = data.user?.name?.split(',')[1]?.trim() || data.user?.name || 'you'
@@ -303,6 +309,22 @@ export function Header({
               shadow="rgba(16,185,129,0.5)"
               idleIcon={<TrophyIcon size={15} />}
             />
+          )}
+
+          {reports && <ReportsMenu {...reports} />}
+
+          {onOpenSettings && (
+            <motion.button
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+              onClick={onOpenSettings}
+              aria-label="Board settings"
+              title="Settings — appearance, features, AI usage"
+              className="grid h-9 w-9 place-items-center rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] text-[var(--ink-soft)] card-shadow hover:border-[var(--muted)] hover:text-[var(--ink)]"
+            >
+              <GearIcon size={16} />
+            </motion.button>
           )}
 
           {/* Help — opens the Setup & Deployment guide. An <a>, not a fetch/route, so it still works

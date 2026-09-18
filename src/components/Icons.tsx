@@ -453,6 +453,31 @@ export function DocIcon({ size = 14, color = 'currentColor' }: IP) {
     </svg>
   )
 }
+/** Gear — opens the board settings. */
+export function GearIcon({ size = 16, color = 'currentColor' }: IP) {
+  return (
+    <svg {...svg(size, '')}>
+      <circle cx="12" cy="12" r="3.2" stroke={color} strokeWidth="1.9" fill="none" />
+      <path
+        d="M12 2.6l1.5 2.3 2.7-.5.5 2.7 2.3 1.5-1.4 2.4 1.4 2.4-2.3 1.5-.5 2.7-2.7-.5L12 21.4l-1.5-2.3-2.7.5-.5-2.7-2.3-1.5L6.4 13 5 10.6l2.3-1.5.5-2.7 2.7.5L12 2.6z"
+        stroke={color}
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  )
+}
+/** Printer — exports the readiness report to a paginated PDF via the browser's print dialog. */
+export function PrinterIcon({ size = 14, color = 'currentColor' }: IP) {
+  return (
+    <svg {...svg(size, '')}>
+      <path d="M7 9V3h10v6" stroke={color} strokeWidth="1.9" strokeLinejoin="round" />
+      <path d="M5 9h14a2 2 0 0 1 2 2v5h-4v4H7v-4H3v-5a2 2 0 0 1 2-2z" stroke={color} strokeWidth="1.9" strokeLinejoin="round" />
+      <path d="M7 16h10" {...line(color, 1.7)} />
+    </svg>
+  )
+}
 /** Sparkle — marks the AI-generated summary. */
 export function SparkleIcon({ size = 14, color = 'currentColor' }: IP) {
   return (

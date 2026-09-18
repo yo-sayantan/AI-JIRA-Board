@@ -13,7 +13,7 @@ services:
   jira-board:
     build: .
     image: jira-board:latest
-    container_name: jira-board
+    container_name: JIRA-Board
     ports:
       - "${PORT:-4321}:4321"
     environment:

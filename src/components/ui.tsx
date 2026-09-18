@@ -69,6 +69,24 @@ export function PriorityBadge({ priority }: { priority?: string | null }) {
   )
 }
 
+/** Icon-only urgency signal for board cards — no "Low"/"Medium"/"High" text, just the glyph
+ *  (six tiers by shape+colour: chevrons pointing down = calmer, up = more urgent, filled+! =
+ *  critical). The label survives as a tooltip/aria-label so the information isn't lost, only
+ *  the always-on text is. Ticket detail keeps the full labelled `PriorityBadge` — this is
+ *  deliberately card-only. */
+export function PriorityGlyph({ priority, size = 16 }: { priority?: string | null; size?: number }) {
+  const m = priorityMeta(priority)
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center"
+      title={`Priority: ${m.label}`}
+      aria-label={`${m.label} priority`}
+    >
+      <PriorityIcon rank={m.rank} color={m.color} size={size} />
+    </span>
+  )
+}
+
 export function TypeBadge({ type }: { type?: string | null }) {
   if (!type) return null
   const m = typeMeta(type)

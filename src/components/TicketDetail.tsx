@@ -71,30 +71,44 @@ function PrReportButton({
     const c = toneColor(v?.tone)
     const when = report.enrichedAt ?? report.generatedAt
     return (
-      <button
-        type="button"
-        onClick={() => onOpen?.(ticketKey)}
-        disabled={loading}
-        className="mb-4 flex w-full flex-wrap items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-[transform,filter] hover:-translate-y-px hover:brightness-105 disabled:opacity-70"
-        style={{ borderColor: hexToRgba(c, 0.5), background: `linear-gradient(135deg, ${hexToRgba(c, 0.16)}, ${hexToRgba(c, 0.04)})` }}
-        title={v?.headline ?? 'Open the PR readiness report'}
-      >
-        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: c }} />
-        <span className="text-[12.5px] font-extrabold" style={{ color: c }}>
-          PR Readiness Report
-        </span>
-        {v && (
-          <span className="rounded-full px-2 py-[2px] text-[10.5px] font-bold" style={{ color: c, background: hexToRgba(c, 0.18) }}>
-            {v.label}
+      <div className="mb-4 flex items-stretch gap-1.5">
+        <button
+          type="button"
+          onClick={() => onOpen?.(ticketKey)}
+          disabled={loading}
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-[transform,filter] hover:-translate-y-px hover:brightness-105 disabled:opacity-70"
+          style={{ borderColor: hexToRgba(c, 0.5), background: `linear-gradient(135deg, ${hexToRgba(c, 0.16)}, ${hexToRgba(c, 0.04)})` }}
+          title={v?.headline ?? 'Open the PR readiness report'}
+        >
+          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: c }} />
+          <span className="text-[12.5px] font-extrabold" style={{ color: c }}>
+            PR Readiness Report
           </span>
+          {v && (
+            <span className="rounded-full px-2 py-[2px] text-[10.5px] font-bold" style={{ color: c, background: hexToRgba(c, 0.18) }}>
+              {v.label}
+            </span>
+          )}
+          {typeof v?.score === 'number' && <span className="text-[11px] font-bold tabular-nums text-[var(--ink-soft)]">{v.score}/100</span>}
+          <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            {report.enriched ? 'AI-enriched' : 'derived'}
+            {when ? ` · ${fmtDate(when)}` : ''}
+          </span>
+          <ChevronIcon size={11} className="text-[var(--muted)]" />
+        </button>
+        {served && onGenerate && (
+          <button
+            type="button"
+            onClick={() => onGenerate(ticketKey)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-[11px] font-bold transition-colors hover:bg-[var(--surface-2)]"
+            style={{ borderColor: hexToRgba(ai, 0.45), color: ai }}
+            title="Rebuild this report from the latest Jira / Bitbucket state (runs in the background)"
+          >
+            <RefreshIcon size={12} color={ai} />
+            Regenerate
+          </button>
         )}
-        {typeof v?.score === 'number' && <span className="text-[11px] font-bold tabular-nums text-[var(--ink-soft)]">{v.score}/100</span>}
-        <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
-          {report.enriched ? 'AI-enriched' : 'derived'}
-          {when ? ` · ${fmtDate(when)}` : ''}
-        </span>
-        <ChevronIcon size={11} className="text-[var(--muted)]" />
-      </button>
+      </div>
     )
   }
   if (served && onGenerate) {
@@ -135,6 +149,7 @@ export function TicketDetail({
   refreshing,
   user,
   report,
+  reportsEnabled,
   reportGenerating,
   reportLoading,
   onOpenReport,
@@ -143,6 +158,8 @@ export function TicketDetail({
 }: {
   /** PR Readiness Report header for this ticket (null/undefined = none yet). */
   report?: PrReportSummary | null
+  /** Turned off in Settings → the whole report section disappears from the drawer. */
+  reportsEnabled?: boolean
   reportGenerating?: boolean
   reportLoading?: boolean
   onOpenReport?: (key: string) => void
@@ -329,7 +346,7 @@ export function TicketDetail({
 
           {/* 0. PR Readiness Report — above the brief on purpose: once code exists, "can this ship?"
               is the first question. Only for tickets that have a pull request. */}
-          {prs.length > 0 && (
+          {prs.length > 0 && reportsEnabled !== false && (
             <PrReportButton
               ticketKey={ticket.key}
               report={report}

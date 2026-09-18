@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type {
   PrReport,
@@ -11,7 +11,7 @@ import type {
 import { toneColor, worstTone } from '../lib/reportTypes'
 import { fmtDateTime, hexToRgba } from '../lib/format'
 import { SafeHtml } from './ui'
-import { RefreshIcon, SparkleIcon } from './Icons'
+import { PrinterIcon, RefreshIcon, SparkleIcon } from './Icons'
 
 /**
  * PR Readiness Report overlay — renders a report GENERICALLY from its block kinds, so the
@@ -31,10 +31,27 @@ export function PrReportOverlay({
   generating?: boolean
 }) {
   const [tabId, setTabId] = useState<string | null>(null)
+  // While printing, every tab is rendered at once so the PDF carries the whole report instead of
+  // whichever tab happened to be open. Reset by the browser's afterprint event (also fires when
+  // the dialog is cancelled), so the on-screen view always returns to a single tab.
+  const [printing, setPrinting] = useState(false)
   // Reset to the first tab whenever a different report opens.
   useEffect(() => {
     setTabId(report?.tabs?.[0]?.id ?? null)
   }, [report?.key])
+
+  useEffect(() => {
+    const done = () => setPrinting(false)
+    window.addEventListener('afterprint', done)
+    return () => window.removeEventListener('afterprint', done)
+  }, [])
+
+  // Two frames, not one: React must commit the all-tabs render and the browser must lay it out
+  // before print() snapshots the page, or the PDF captures the single-tab view.
+  const handlePrint = () => {
+    setPrinting(true)
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()))
+  }
 
   // Esc closes the report BEFORE the drawer beneath gets to pop (capture + stopImmediatePropagation).
   useEffect(() => {
@@ -58,6 +75,13 @@ export function PrReportOverlay({
     [report],
   )
   const active = tabs.find((t) => t.id === tabId) ?? tabs[0]
+
+  // The generator emits the same figures as both the header strip and an "At a glance" stats
+  // block on the verdict tab. Rendering both puts identical numbers twice within one screen, so
+  // the block yields to the strip. Compared by content, not title, so a tab that happens to carry
+  // a genuinely different stats block still shows it.
+  const blocks = useMemo(() => visibleBlocks(active?.blocks ?? [], report?.stats), [active, report?.stats])
+  const blockHalfWidth = useMemo(() => halfWidthFlags(blocks), [blocks])
   const v = report?.verdict
   const vc = toneColor(v?.tone)
 
@@ -66,7 +90,7 @@ export function PrReportOverlay({
       {report && (
         <motion.div
           key="jb-report"
-          className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm md:p-8"
+          className="jb-report-overlay fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm md:p-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -76,7 +100,7 @@ export function PrReportOverlay({
           aria-label={`PR readiness report for ${report.key}`}
         >
           <motion.section
-            className="w-full max-w-6xl overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
+            className="w-full max-w-[1600px] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
             initial={{ y: 24, scale: 0.98 }}
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 16, scale: 0.98 }}
@@ -87,7 +111,7 @@ export function PrReportOverlay({
             <div className="h-1.5 w-full" style={{ background: `linear-gradient(90deg, ${vc}, ${hexToRgba(vc, 0.2)})` }} />
 
             {/* Header */}
-            <header className="flex flex-wrap items-start gap-3 border-b border-[var(--line)] px-5 py-4">
+            <header className="flex flex-wrap items-start gap-3 border-b border-[var(--line)] px-5 py-4 lg:px-8">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[var(--muted)]">
                   <span>PR readiness report</span>
@@ -115,7 +139,16 @@ export function PrReportOverlay({
                   )}
                   {typeof v?.score === 'number' && <ScoreRing score={v.score} color={vc} />}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 jb-no-print">
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--line)] bg-[var(--surface-solid)] text-[var(--ink-soft)] hover:border-[var(--muted)] hover:text-[var(--ink)]"
+                    title="Export this report as a PDF — every tab, colour-coded, ready to share (choose “Save as PDF” in the print dialog)"
+                    aria-label="Export report as PDF"
+                  >
+                    <PrinterIcon size={14} color="currentColor" />
+                  </button>
                   {onRegenerate && (
                     <button
                       type="button"
@@ -144,15 +177,15 @@ export function PrReportOverlay({
 
             {/* At-a-glance stats */}
             {report.stats?.length > 0 && (
-              <div className="grid grid-cols-2 gap-px border-b border-[var(--line)] bg-[var(--line)] sm:grid-cols-3 lg:grid-cols-6">
+              <div className="flex flex-wrap items-center border-b border-[var(--line)] px-3 py-1.5 lg:px-6">
                 {report.stats.map((s, i) => (
-                  <StatCell key={i} stat={s} />
+                  <StatChip key={i} stat={s} first={i === 0} />
                 ))}
               </div>
             )}
 
             {/* Coloured tabs */}
-            <nav className="flex gap-1 overflow-x-auto border-b border-[var(--line)] px-3 pt-2" role="tablist">
+            <nav className="flex gap-1 overflow-x-auto border-b border-[var(--line)] px-3 pt-2 lg:px-6" role="tablist">
               {tabs.map((t) => {
                 const c = toneColor(t.tone)
                 const on = t.id === active?.id
@@ -181,18 +214,49 @@ export function PrReportOverlay({
               })}
             </nav>
 
-            {/* Tab body */}
-            <div className="px-5 py-4" role="tabpanel">
-              {active?.summary && <p className="mb-3 text-[13px] text-[var(--ink-soft)]">{active.summary}</p>}
-              <div className="grid gap-4">
-                {active?.blocks.map((b, i) => (
-                  <Block key={`${active.id}:${i}`} block={b} />
-                ))}
-              </div>
+            {/* Tab body — a 2-column grid on wide screens so the extra width gets used instead of
+                turning into scroll. Only blocks that genuinely pair well (kv/list/links) go
+                half-width, and only when there's an adjacent partner — everything else (tables,
+                card grids, stats, callouts) stays full-width so no block is ever left stranded
+                next to blank space. */}
+            <div className="px-5 py-5 lg:px-8" role="tabpanel">
+              {printing ? (
+                tabs.map((t, ti) => {
+                  const printBlocks = visibleBlocks(t.blocks, report.stats)
+                  const flags = halfWidthFlags(printBlocks)
+                  return (
+                    <section key={t.id} className={ti > 0 ? 'jb-print-page mt-6' : ''}>
+                      <h3 className="mb-3 flex items-center gap-2 text-[14px] font-extrabold" style={{ color: toneColor(t.tone) }}>
+                        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: toneColor(t.tone) }} />
+                        {t.title}
+                      </h3>
+                      {t.summary && <p className="mb-3 text-[13px] text-[var(--ink-soft)]">{t.summary}</p>}
+                      <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
+                        {printBlocks.map((b, i) => (
+                          <div key={`${t.id}:${i}`} className={flags[i] ? '' : 'lg:col-span-2'}>
+                            <Block block={b} />
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )
+                })
+              ) : (
+                <>
+                  {active?.summary && <p className="mb-3 text-[13px] text-[var(--ink-soft)]">{active.summary}</p>}
+                  <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
+                    {blocks.map((b, i) => (
+                      <div key={`${active?.id}:${i}`} className={blockHalfWidth[i] ? '' : 'lg:col-span-2'}>
+                        <Block block={b} />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Footer */}
-            <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--line)] px-5 py-3 text-[11px] text-[var(--muted)]">
+            <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--line)] px-5 py-3 text-[11px] text-[var(--muted)] lg:px-8">
               <span>
                 Generated {fmtDateTime(report.generatedAt)}
                 {report.enriched && report.enrichedAt ? ` · AI-enriched ${fmtDateTime(report.enrichedAt)}` : ' · deterministic only'}
@@ -212,6 +276,61 @@ export function PrReportOverlay({
 
 // ── pieces ────────────────────────────────────────────────────────────────────
 
+/**
+ * Elastic tiling for the stat strips and card grids.
+ *
+ * A fixed column count (`lg:grid-cols-6`) is what makes these sections look broken: six columns
+ * holding four stats leave two dead cells, and seven cards become 6 + 1 orphan. Instead we pick
+ * the column count that splits `count` items as EVENLY as possible without exceeding `maxCols`
+ * (7 → 4+3, not 6+1), then let every tile flex-grow from that basis, so a short last row
+ * stretches to fill the width rather than leaving holes. `minWidth` is the only breakpoint we
+ * need: once the ideal basis would squeeze a tile below it, the row wraps on its own.
+ */
+/**
+ * The generator emits the same figures as both the header strip and an "At a glance" stats block
+ * on the verdict tab. Rendering both puts identical numbers twice within one screen, so the block
+ * yields to the strip. Compared by content, not title, so a tab carrying a genuinely different
+ * stats block still shows it.
+ */
+function visibleBlocks(all: ReportBlock[], headerStats?: ReportStat[] | null): ReportBlock[] {
+  const digest = (items: ReportStat[]) => items.map((s) => `${s.label}=${s.value}`).join('|')
+  const headerDigest = digest(headerStats ?? [])
+  if (!headerDigest) return all
+  return all.filter((b) => !(b.kind === 'stats' && digest(b.items) === headerDigest))
+}
+
+function balancedColumns(count: number, maxCols: number): number {
+  if (count <= 1) return 1
+  const rows = Math.ceil(count / maxCols)
+  return Math.ceil(count / rows)
+}
+
+/** Flex sizing for one tile in a `balancedColumns` row. */
+function tileStyle(cols: number, minWidth: number, gap = 1): CSSProperties {
+  return { flex: `1 1 calc(100% / ${cols} - ${gap}px)`, minWidth: `${minWidth}px` }
+}
+
+/** kv/list/links are compact enough to sit two-up; table/cards/stats/callout/timeline keep the
+ *  full row (tables need the width, callouts read better unbroken, card grids/timelines already
+ *  lay themselves out internally). Adjacent pairable blocks are paired left-to-right so a lone
+ *  one never ends up stranded half-width beside empty space. */
+const HALF_WIDTH_KINDS = new Set<ReportBlock['kind']>(['kv', 'list', 'links'])
+
+function halfWidthFlags(blocks: ReportBlock[]): boolean[] {
+  const half = new Array(blocks.length).fill(false)
+  let i = 0
+  while (i < blocks.length) {
+    if (HALF_WIDTH_KINDS.has(blocks[i].kind) && i + 1 < blocks.length && HALF_WIDTH_KINDS.has(blocks[i + 1].kind)) {
+      half[i] = true
+      half[i + 1] = true
+      i += 2
+    } else {
+      i += 1
+    }
+  }
+  return half
+}
+
 function ScoreRing({ score, color }: { score: number; color: string }) {
   const r = 15
   const c = 2 * Math.PI * r
@@ -229,16 +348,26 @@ function ScoreRing({ score, color }: { score: number; color: string }) {
   )
 }
 
-function StatCell({ stat }: { stat: ReportStat }) {
+/**
+ * One stat as an inline `label value` chip. Stacking the label above the value and stretching
+ * each tile to an equal share of the width wasted most of the strip — a handful of short values
+ * spread across 1600px. Sized to its content instead, the whole set fits on one line, and the
+ * hint moves to the tooltip where it isn't competing for space.
+ */
+function StatChip({ stat, first }: { stat: ReportStat; first?: boolean }) {
   const c = toneColor(stat.tone)
+  const active = stat.tone && stat.tone !== 'neutral'
   return (
-    <div className="bg-[var(--bg)] px-4 py-3" title={stat.hint ?? undefined}>
-      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[var(--muted)]">{stat.label}</div>
-      <div className="mt-0.5 truncate text-[15px] font-extrabold tabular-nums" style={{ color: stat.tone && stat.tone !== 'neutral' ? c : 'var(--ink)' }}>
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1 ${first ? '' : 'border-l border-[var(--line)]'}`}
+      title={stat.hint ? `${stat.label}: ${stat.value} — ${stat.hint}` : `${stat.label}: ${stat.value}`}
+    >
+      {active && <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: c }} />}
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{stat.label}</span>
+      <span className="text-[13px] font-extrabold tabular-nums" style={{ color: active ? c : 'var(--ink)' }}>
         {stat.value}
-      </div>
-      {stat.hint && <div className="truncate text-[10.5px] text-[var(--muted)]">{stat.hint}</div>}
-    </div>
+      </span>
+    </span>
   )
 }
 
@@ -287,18 +416,23 @@ const toneText = (t?: ReportTone | null) => (t && t !== 'neutral' ? toneColor(t)
 
 function Block({ block }: { block: ReportBlock }) {
   switch (block.kind) {
-    case 'callout':
+    case 'callout': {
+      const c = toneColor(block.tone)
+      const tinted = block.tone && block.tone !== 'neutral'
       return (
         <BlockShell block={block}>
-          <SafeHtml html={block.body} className="px-3.5 py-3 text-[13.5px] leading-relaxed text-[var(--ink-soft)]" />
+          <div style={tinted ? { background: hexToRgba(c, 0.05) } : undefined}>
+            <SafeHtml html={block.body} className="px-3.5 py-3 text-[13.5px] leading-relaxed text-[var(--ink-soft)]" />
+          </div>
         </BlockShell>
       )
+    }
     case 'stats':
       return (
         <BlockShell block={block}>
-          <div className="grid grid-cols-2 gap-px bg-[var(--line)] sm:grid-cols-3 lg:grid-cols-4">
+          <div className="flex flex-wrap items-center px-1 py-1.5">
             {block.items.map((s, i) => (
-              <StatCell key={i} stat={s} />
+              <StatChip key={i} stat={s} first={i === 0} />
             ))}
           </div>
         </BlockShell>
@@ -335,10 +469,11 @@ function Block({ block }: { block: ReportBlock }) {
           </div>
         </BlockShell>
       )
-    case 'cards':
+    case 'cards': {
+      const cols = balancedColumns(block.items.length, 3)
       return (
         <BlockShell block={block}>
-          <div className="grid gap-3 p-3 sm:grid-cols-2">
+          <div className="flex flex-wrap gap-3 p-3">
             {block.items.map((card, i) => {
               const c = toneColor(card.badgeTone)
               const body = (
@@ -356,7 +491,7 @@ function Block({ block }: { block: ReportBlock }) {
                 </>
               )
               const cls = 'block rounded-lg border p-3 transition'
-              const style = { borderColor: hexToRgba(c, 0.35), background: hexToRgba(c, 0.05) }
+              const style = { ...tileStyle(cols, 260, 12), borderColor: hexToRgba(c, 0.35), background: hexToRgba(c, 0.05) }
               return card.href ? (
                 <a key={i} href={card.href} target="_blank" rel="noopener noreferrer" className={`${cls} hover:-translate-y-px hover:brightness-105`} style={style}>
                   {body}
@@ -370,6 +505,7 @@ function Block({ block }: { block: ReportBlock }) {
           </div>
         </BlockShell>
       )
+    }
     case 'list': {
       const Tag = block.ordered ? 'ol' : 'ul'
       return (
@@ -419,20 +555,24 @@ function Block({ block }: { block: ReportBlock }) {
       return (
         <BlockShell block={block}>
           <dl className="grid grid-cols-[minmax(120px,max-content)_1fr] gap-x-4 gap-y-1.5 px-3.5 py-3 text-[12.5px]">
-            {block.items.map((kv, i) => (
-              <div key={i} className="contents">
-                <dt className="text-[var(--muted)]">{kv.label}</dt>
-                <dd className="font-semibold" style={{ color: toneText(kv.tone) }}>
-                  {kv.href ? (
-                    <a href={kv.href} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--link)' }}>
-                      {kv.value} ↗
-                    </a>
-                  ) : (
-                    kv.value
-                  )}
-                </dd>
-              </div>
-            ))}
+            {block.items.map((kv, i) => {
+              const flagged = kv.tone && kv.tone !== 'neutral'
+              return (
+                <div key={i} className="contents">
+                  <dt className="text-[var(--muted)]">{kv.label}</dt>
+                  <dd className="flex items-center gap-1.5 font-semibold" style={{ color: toneText(kv.tone) }}>
+                    {flagged && <span aria-hidden className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: toneColor(kv.tone) }} />}
+                    {kv.href ? (
+                      <a href={kv.href} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--link)' }}>
+                        {kv.value} ↗
+                      </a>
+                    ) : (
+                      kv.value
+                    )}
+                  </dd>
+                </div>
+              )
+            })}
           </dl>
         </BlockShell>
       )

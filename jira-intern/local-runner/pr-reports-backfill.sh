@@ -5,6 +5,8 @@
 #   bash pr-reports-backfill.sh --year 2025     # a different year
 #   bash pr-reports-backfill.sh --all-years
 #   bash pr-reports-backfill.sh --force         # regenerate even if the report is current
+#   bash pr-reports-backfill.sh --needs-ai      # only reports that are still deterministic-only —
+#                                               #   resumes an interrupted AI pass without redoing work
 #   bash pr-reports-backfill.sh --no-ai         # deterministic base only (fast, no agent)
 #   bash pr-reports-backfill.sh --auto          # what run-intern.sh launches in the background:
 #                                               #   honours config.reports.autoGenerate, caps the
@@ -25,11 +27,12 @@ PY="$INTERN_DIR/pr_report.py"
 REPORTS_AUTO=1; REPORTS_YEAR=2026; REPORTS_MAX_PER_RUN=5
 command -v node >/dev/null 2>&1 && eval "$(node "$HERE/config.mjs" shellenv 2>/dev/null)"
 
-AUTO=0; FORCE=0; YEAR="$REPORTS_YEAR"; MAX=""; EXTRA=()
+AUTO=0; FORCE=0; NEEDS_AI=0; YEAR="$REPORTS_YEAR"; MAX=""; EXTRA=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --auto) AUTO=1 ;;
     --force) FORCE=1 ;;
+    --needs-ai) NEEDS_AI=1 ;;
     --no-ai) EXTRA+=(--no-ai) ;;
     --year) shift; YEAR="${1:-$YEAR}" ;;
     --max) shift; MAX="${1:-}" ;;
@@ -58,6 +61,7 @@ trap 'rm -f "$LOCK"' EXIT INT TERM
 ARGS=(needs-report)
 [ -n "$YEAR" ] && ARGS+=(--year "$YEAR")
 [ "$FORCE" = "1" ] && ARGS+=(--force)
+[ "$NEEDS_AI" = "1" ] && ARGS+=(--needs-ai)
 [ -n "$MAX" ] && ARGS+=(--max "$MAX")
 KEYS="$(python3 "$PY" "${ARGS[@]}" 2>>"$LOG")"
 if [ -z "$KEYS" ]; then

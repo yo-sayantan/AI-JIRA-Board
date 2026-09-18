@@ -3,7 +3,7 @@ import type { Ticket } from '../types'
 import { COLUMN_META } from '../lib/columns'
 import { DONE_BOARD_DAYS } from '../data'
 import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, branchesOf, relTime, shortBranch, hexToRgba } from '../lib/format'
-import { Pill, PriorityBadge, PrBadge, Approvals, PointsTag } from './ui'
+import { Pill, PriorityGlyph, PrBadge, Approvals, PointsTag } from './ui'
 import { TypeIcon, CommentIcon, RefreshIcon, TrophyIcon } from './Icons'
 
 /** Days until this Done card auto-retires from the board into the Completed archive. */
@@ -141,7 +141,7 @@ export function TicketCard({
       </div>
 
       <div className="relative mt-2.5 flex flex-wrap items-center gap-1.5">
-        <PriorityBadge priority={ticket.priority} />
+        <PriorityGlyph priority={ticket.priority} />
         {pr && (prKnownState ? <PrBadge state={pr.state} /> : <Pill color="#94a3b8" title="Pull request linked">⊙ PR</Pill>)}
         {pr && !isClosedPr(pr) && <Approvals approvals={pr.approvals} />}
         {prs.length > 1 && (

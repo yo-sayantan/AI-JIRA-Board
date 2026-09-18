@@ -73,6 +73,13 @@ node "$HERE/sync-reports.mjs" "$INTERN_DIR" >>"$LOG" 2>&1 || true   # base is vi
 if [ "$NO_AI" = "1" ] || [ -n "${SKIP_REPORT_AI:-}" ] || [ -n "${SKIP_SUMMARY:-}" ]; then
   echo "$(date): AI enrichment skipped (flag/env) — deterministic report kept" | tee -a "$LOG"; exit 0
 fi
+# AI usage level from the board's Settings panel (none | low | moderate | full). "none" is the
+# same contract as --no-ai; the others only scale how long the agent is allowed to think.
+case "${REPORTS_AI_LEVEL:-moderate}" in
+  none)     echo "$(date): AI usage is set to None — deterministic report kept" | tee -a "$LOG"; exit 0 ;;
+  low)      TIMEOUT_REPORT=$(( TIMEOUT_REPORT / 2 )) ;;
+  full)     TIMEOUT_REPORT=$(( TIMEOUT_REPORT * 2 )) ;;
+esac
 AGENT="$(command -v "$AGENT_BIN")"
 if [ -z "$AGENT" ]; then
   IFS=':' read -r -a FBS <<< "$AGENT_BIN_FALLBACKS"
@@ -100,8 +107,23 @@ cd "$GIT_ROOT"
 echo "$(date): enriching $KEY via $AGENT (connector=$AGENT_CONNECTOR, model=$REPORT_MODEL)" | tee -a "$LOG"
 RUN=( "$AGENT" "$AGENT_PROMPT_FLAG" "$PROMPT_TEXT" $AGENT_EXTRA_ARGS )
 [ -n "$REPORT_MODEL" ] && [ "$REPORT_MODEL" != "auto" ] && RUN+=( "$AGENT_MODEL_FLAG" "$REPORT_MODEL" )
+# A stock macOS has neither timeout nor gtimeout (they ship with GNU coreutils), which would
+# leave a backfill of dozens of tickets with no ceiling at all — one wedged agent stalls the
+# whole queue. perl is always present, and alarm+exec gives the same "kill it at N seconds,
+# exit 124" contract without adding a dependency.
 TIMEOUT_BIN="$(command -v timeout || command -v gtimeout)"
-if [ -n "$TIMEOUT_BIN" ]; then "$TIMEOUT_BIN" "$TIMEOUT_REPORT" "${RUN[@]}" >>"$LOG" 2>&1; else "${RUN[@]}" >>"$LOG" 2>&1; fi
+if [ -n "$TIMEOUT_BIN" ]; then
+  "$TIMEOUT_BIN" "$TIMEOUT_REPORT" "${RUN[@]}" >>"$LOG" 2>&1
+elif command -v perl >/dev/null 2>&1; then
+  # Fork rather than exec: exec would replace perl itself, losing the ALRM handler (the alarm
+  # would still fire, but as an uncaught signal — exit 142, not timeout's 124).
+  perl -e 'my $t=shift; my $p=fork; if(!$p){ exec @ARGV or exit 127 }
+           $SIG{ALRM}=sub{ kill 9,$p; waitpid $p,0; exit 124 }; alarm $t;
+           waitpid $p,0; exit $?>>8' \
+    "$TIMEOUT_REPORT" "${RUN[@]}" >>"$LOG" 2>&1
+else
+  "${RUN[@]}" >>"$LOG" 2>&1
+fi
 code=$?
 [ "$code" = "124" ] && echo "$(date): enrichment TIMED OUT after ${TIMEOUT_REPORT}s" | tee -a "$LOG"
 

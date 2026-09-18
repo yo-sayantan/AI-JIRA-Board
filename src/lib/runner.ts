@@ -117,6 +117,64 @@ export async function startReportGeneration(key: string): Promise<ReportStart | 
   }
 }
 
+/**
+ * Push the settings the shell runners care about to the server. Only the AI level matters to
+ * them; everything else is presentation and stays in localStorage.
+ */
+export async function saveServerSettings(patch: { aiLevel?: string }): Promise<boolean> {
+  try {
+    const r = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    return r.ok
+  } catch {
+    return false
+  }
+}
+
+/** Which tickets a bulk report run should cover. */
+export type ReportScope =
+  | { scope: 'all' }
+  | { scope: 'year'; year: number }
+  | { scope: 'since'; since: string }
+  | { scope: 'keys'; keys: string[] }
+
+export interface BulkReportStart {
+  ok: boolean
+  /** Tickets the scope matched, before anything already queued was skipped. */
+  matched: number
+  /** Tickets this call actually added to the queue. */
+  queuedKeys: string[]
+  pending?: string[]
+}
+
+/**
+ * Queue a whole scope of reports. Every ticket with a pull request is eligible; `force` also
+ * rebuilds ones whose stored report still matches the current PR fingerprint.
+ */
+export async function startBulkReportGeneration(target: ReportScope, force = false): Promise<BulkReportStart | null> {
+  const q = new URLSearchParams({ scope: target.scope })
+  if (target.scope === 'year') q.set('year', String(target.year))
+  if (target.scope === 'since') q.set('since', target.since)
+  if (target.scope === 'keys') q.set('keys', target.keys.join(','))
+  if (force) q.set('force', '1')
+  try {
+    const r = await fetch(`/api/reports/bulk?${q}`, { method: 'POST' })
+    if (!r.ok) return null
+    const body = (await r.json()) as { ok?: boolean; matched?: number; queued?: string[]; pending?: string[] }
+    return {
+      ok: body.ok !== false,
+      matched: body.matched ?? 0,
+      queuedKeys: Array.isArray(body.queued) ? body.queued : [],
+      pending: body.pending,
+    }
+  } catch {
+    return null
+  }
+}
+
 export interface TicketRefreshStart {
   ok: boolean
   already?: boolean

@@ -26,6 +26,15 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_CONFIG_PATH = join(HERE, '..', 'config.json')
 const PERSONAL_CONFIG_PATH = join(homedir(), '.ai', 'config.json')
 
+/** Settings the board writes from its Settings panel. Absent/unreadable → {} (config.json wins). */
+function boardSettings() {
+  try {
+    return JSON.parse(readFileSync(join(HERE, '..', '.settings.json'), 'utf8')) || {}
+  } catch {
+    return {}
+  }
+}
+
 /** Same precedence documented above — exported so callers can report which file won. */
 export function resolveConfigPath() {
   if (process.env.AI_CONFIG_FILE) return process.env.AI_CONFIG_FILE
@@ -178,6 +187,9 @@ function shellenv() {
   out.push(`REPORTS_AUTO=${shq(cfg.reports?.autoGenerate === false ? 0 : 1)}`)
   out.push(`REPORTS_YEAR=${shq(cfg.reports?.year ?? 2026)}`)
   out.push(`REPORTS_MAX_PER_RUN=${shq(cfg.reports?.maxPerRun ?? 5)}`)
+  // The board's Settings panel writes jira-intern/.settings.json; it overrides config.json so a
+  // UI change takes effect without editing (or exposing) the user's personal config file.
+  out.push(`REPORTS_AI_LEVEL=${shq(boardSettings().aiLevel ?? cfg.reports?.aiLevel ?? 'moderate')}`)
   return out.join('\n')
 }
 
