@@ -35,7 +35,7 @@ STATUS → COLUMN MAPPING (case-insensitive). Set `column` on every ticket:
   "To Do" / Open / Backlog / Reopened / Selected for Development        -> "todo"
   "In Progress" / Dev in Progress / Work in Progress / In Development   -> "prog"
   "In Review" / Code Review / Ready4Review / Ready for Review / Review  -> "rev"   (these all fold together)
-  "QA" / In QA / Testing / Verification                                -> "qa"
+  "QA" / In QA / Under QA / Ready for QA / Testing / Verification      -> "qa"
   "Done" / Completed / Closed / Resolved / Released                    -> "done"
   "On Hold" / Hold / Blocked / Waiting / Parked / Impeded              -> "hold"  (also set onHold:true)
 The board shows columns: To Do · In Progress · In Review · QA · Done. On Hold renders as its own section
@@ -68,13 +68,18 @@ De-dupe by key. That is the WHOLE working set for this run. Do not expand it.
 
 KEEP IT LIGHT — to stay fast, this daily run deliberately SKIPS the expensive enrichment that the weekly deep
 job does. Per active ticket:
-  • Bitbucket: do ONE search by ticket KEY to get its PRs (see PULL REQUESTS). Do NOT loop a separate search
-    per branch, and do NOT scan whole repos for branches — derive branches from the PRs you already got.
+  • Code state: ONE Jira dev-status call per ticket (and per sub-task) gives branches + PRs + reviewers in one
+    shot (see PULL REQUESTS). Do NOT loop per branch, and do NOT scan repos — that guessing is both slow and
+    incomplete. Touch Bitbucket only to count review comments on a PR that is still open.
   • Links: RECORD confluence/external links as {title, url} only. *** Do NOT fetch/open each page to build an
     excerpt in the daily run *** (that network I/O is the slow part — the weekly job enriches excerpts).
   • Do NOT do repo/code mapping or file-level analysis here (that's weekly). proposedSolution/openQuestions:
     only if trivially known, else omit.
-This keeps the daily run to Jira + one Bitbucket KEY-search per active ticket — quick.
+This keeps the daily run to Jira plus one dev-status call per ticket — quick.
+
+REFRESH CODE STATE EVERY RUN, even for a ticket Jira says is unchanged. Approving, declining or merging a PR
+happens in Bitbucket and never bumps Jira's `updated`, and a PR can land after the ticket is already closed —
+so a "nothing changed" short-circuit may skip the Jira side but must never skip branches/PRs.
 
 ═══════════════════════════════════════════════════════════════════════════════
 WHAT TO FETCH
@@ -107,32 +112,40 @@ A) ACTIVE + RECENT — `tickets[]` (rich objects). All issues where assignee = c
      *** DAILY = list links only. Do NOT open/fetch each page to build an `excerpt` here *** — that page-fetching
      is the slow part and is done by the WEEKLY deep job. (If an excerpt already exists on the ticket from a
      prior weekly run, you may carry it forward, but never fetch pages in this daily run.)
-   - PULL REQUESTS (bitbucket) — do ONE search by ticket KEY to find its PRs (this single query returns every
-     PR that references the key, with its state + source branch — no per-branch loops needed). A ticket may have
-     SEVERAL (some merged, some declined, some still open). Put EVERY one in `prs[]`; also set `pr` to the single
-     most-relevant one (open if any, else the merged one) for the at-a-glance badge. Each PR object:
-     {state, id, url, approvals, openComments, commentsTotal, commentsResolved, sourceBranch,
-      destinationBranch, merged, mergedAt}.
+   - PULL REQUESTS — ASK JIRA, DON'T GUESS REPOS.
+     GET /rest/dev-status/latest/issue/detail?issueId=<numeric id>&applicationType=stash&dataType=pullrequest
+     returns exactly what the Development panel shows on the Jira issue: every branch and PR Bitbucket has
+     indexed against that key, in ANY repository. Scanning a hardcoded list of repo slugs and grepping PR
+     titles (the old way) misses everything outside those repos — which is where most sub-task work lives.
+     A ticket may have SEVERAL PRs (merged, declined, still open). Put EVERY one in `prs[]`; also set `pr` to
+     the single most-relevant one (open if any, else the newest merged) for the at-a-glance badge. Each PR:
+     {state, id, url, title, repo, approvals, reviewers[], openComments, commentsTotal, commentsResolved,
+      sourceBranch, destinationBranch, merged, mergedAt}.
+     `repo` is REQUIRED — one ticket's PRs can sit in different repositories, so "#53" on its own is ambiguous.
      COMMENTS: `commentsTotal` = ALL review comments ever added on the PR; `commentsResolved` = how many are
      resolved; `openComments` = unresolved (total − resolved). A PR can only merge after every comment is
      resolved, so a merged PR has commentsResolved == commentsTotal and openComments 0. If the PR has NO comments,
-     set commentsTotal 0 (the app then hides the comment stats). Report the real counts from Bitbucket.
+     set commentsTotal 0 (the app then hides the comment stats). dev-status does not report review comments,
+     so for a STILL-OPEN PR call Bitbucket directly using the project/repo/id parsed out of the dev-status URL
+     (exact addressing, no repo guessing). Merged/declined PRs need no such call.
      state = "approved" (>={{REQUIRED_APPROVALS}} approvals, none unresolved) | "comments" (open, awaiting review) | "changes"
      (changes requested) | "declined" (rejected / closed without merge) | "merged" (merged) | "none" (no PR).
      A PR is truly "approved" ONLY with >= {{REQUIRED_APPROVALS}} approvals — report `approvals` accurately. ALWAYS include each PR's
      url so it's clickable. Set `merged:true` + `mergedAt` for merged PRs. Never use "none" for a PR that exists.
-   - BRANCHES — DERIVE from the PRs you just fetched: `branches[]` = the distinct `sourceBranch` values of those
-     PRs (real names, straight from Bitbucket). Set `branch` to the primary PR's sourceBranch. *** NEVER predict,
-     construct, guess, or template a branch name *** (no "feature/<KEY>_<KEY>" / "feature/<KEY>_<desc>"). Do NOT
-     scan whole repos for branches in this daily run (that's slow / weekly). If there are no PRs, leave `branches`
-     empty and `branch` null — a blank branch is correct; a made-up branch is unacceptable.
-   - SUB-TASKS — fetch this ticket's sub-tasks / children (Jira sub-tasks, or issues whose parent = this KEY).
-     Put them in `subtasks[]`; set `subtaskCount` = subtasks.length. DEPTH depends on who it's assigned to:
+   - BRANCHES — from the SAME dev-status response: its `branches[]` plus the `sourceBranch` of every PR.
+     Set `branch` to the primary PR's sourceBranch, else the first branch. *** NEVER predict, construct, guess,
+     or template a branch name *** (no "feature/<KEY>_<KEY>" / "feature/<KEY>_<desc>"). If Jira reports nothing,
+     leave `branches` empty and `branch` null — a blank branch is correct; a made-up branch is unacceptable.
+   - SUB-TASKS — fetch this ticket's sub-tasks / children (Jira sub-tasks, or issues whose parent = this KEY)
+     in ONE batched `parent in (…)` search, then ONE dev-status call per child. Put them in `subtasks[]`; set
+     `subtaskCount` = subtasks.length. DEPTH depends on who it's assigned to:
        • Sub-task assigned to ME (currentUser) → FULL detail (description, ALL comments, pr/prs, branches[],
          updateLog, related, etc.) — same as a top-level ticket, so it opens a complete detail page.
-       • Sub-task assigned to SOMEONE ELSE (or unassigned) → BASIC only: key, title, status, column, type,
-         priority, url, and `assignee` (their name). Do NOT pull the full description, comments, related,
-         confluence, externalLinks, PRs, or updateLog for these — skip that work. ALWAYS include `assignee`.
+       • Sub-task assigned to SOMEONE ELSE (or unassigned) → BASIC + PR data: key, title, status, column,
+         type, priority, url, `assignee` (their name), created/lastUpdate/resolved, sprint, storyPoints,
+         AND its pr/prs[]/branches[]. A master ticket is delivered through team-mates' sub-tasks, and their
+         review state is the single thing that used to force a trip to Jira — never skip it. Do NOT pull the
+         full description, comments, related, confluence, externalLinks, or updateLog for these.
      A ticket with no children: omit subtasks or use [].
    - Your own analysis: proposedSolution (light HTML), openQuestions[], sources[].
    - updateLog[] — the status LIFECYCLE from the changelog, NEWEST entry FIRST. Each entry is exactly
@@ -159,14 +172,14 @@ B) COMPLETED ARCHIVE — NOT fetched in this daily run. *** PRESERVE IT, DON'T R
 INCREMENTAL BEHAVIOR (use .state.json memory)
 - New active assignment with no state entry -> full brief; updateLog "Assigned — initial brief".
 - Already briefed, still active, with a NEW comment or status change -> refresh fields + PREPEND an updateLog entry.
-- Nothing changed -> keep the previous rich object as-is, EXCEPT: ALWAYS re-read and overwrite `sprint` and
-  the PR/branch fields (`pr`, `prs`, `branch`, `branches`) from what Jira/Bitbucket report RIGHT NOW, even on
-  an otherwise-unchanged ticket. Both can change with NO comment and NO status transition on the issue itself:
-    • Starting or closing a SPRINT edits the sprint, not the tickets in it — an issue's `updated` timestamp
-      never moves when its sprint goes future -> active -> closed, but re-reading the issue still reports the
-      sprint's CURRENT state. Skipping this traps a ticket in the dashboard's "Next Sprint" bar forever, even
-      after its sprint has started and it should have moved onto the board as ordinary To Do work.
-    • A PR can be approved, get new comments, or merge entirely in Bitbucket without ever touching the ticket.
+- Nothing changed -> keep the previous rich object as-is, EXCEPT: ALWAYS re-read and overwrite `sprint`
+  and the PR/branch fields (`pr`, `prs`, `branch`, `branches`) from what Jira/Bitbucket report RIGHT NOW,
+  even on an otherwise-unchanged ticket. Both change with NO comment and NO status transition on the issue:
+    - Starting or closing a SPRINT edits the sprint, not the tickets in it, so an issue's `updated` never
+      moves when its sprint goes future -> active -> closed. Re-reading the issue still reports the sprint's
+      CURRENT state. Skipping this traps a ticket in the dashboard's "Next Sprint" bar forever, even after
+      its sprint has started and it should have moved onto the board as ordinary To Do work.
+    - A PR can be approved, commented on, or merged in Bitbucket without ever touching the ticket.
 - Reached QA -> this is STILL in-flight: keep column "qa", do NOT set done, do NOT add to completed[]. (QA is its own board column.)
 - Reached Done / Closed / Resolved (statusCategory = Done) -> PREPEND one "Marked DONE — <date>" entry, set
   state.done=true, keep it in `tickets[]` as column "done". ALWAYS set `resolved` (the resolution date) —
@@ -193,12 +206,15 @@ data.json SCHEMA (match git/jira-board/src/types.ts EXACTLY — same keys, same 
       "branch": "feature/FIDM-6048_…",           // primary real branch
       "branches": ["feature/FIDM-6048_…", "bugfix/FIDM-6048_…"],  // all real sourceBranches from the PRs
       "estDays": "1d + vendor wait",
-      "pr": { "state": "merged", "id": 362, "url": "{{BITBUCKET_BASE}}/…/pull-requests/362", "approvals": 2,
+      "pr": { "state": "merged", "id": 362, "url": "{{BITBUCKET_BASE}}/…/pull-requests/362", "title": "…",
+              "repo": "pidclientadm",              // REQUIRED — PRs for one ticket may span repos
+              "approvals": 2, "reviewers": ["…"],
               "openComments": 0, "commentsTotal": 4, "commentsResolved": 4,
               "sourceBranch": "feature/FIDM-6048_…", "destinationBranch": "develop",
               "merged": true, "mergedAt": "<ISO>" },   // the at-a-glance PR (open if any, else merged)
       "prs": [                                     // EVERY PR (merged / declined / open) — same shape as `pr`
-        { "state": "merged", "id": 362, "url": "{{BITBUCKET_BASE}}/…/pull-requests/362", "approvals": 2,
+        { "state": "merged", "id": 362, "url": "{{BITBUCKET_BASE}}/…/pull-requests/362", "title": "…",
+          "repo": "pidclientadm", "approvals": 2, "reviewers": ["…"],
           "openComments": 0, "commentsTotal": 4, "commentsResolved": 4,
           "sourceBranch": "feature/FIDM-6048_…", "destinationBranch": "develop",
           "merged": true, "mergedAt": "<ISO>" }

@@ -1,7 +1,10 @@
 #!/bin/bash
-# Targeted SINGLE-ticket refresh. Re-fetches ONE Jira ticket via cursor-agent and merges it into
+# Targeted SINGLE-ticket refresh. Re-fetches ONE Jira ticket and merges it into
 # data.json (then re-syncs data.js). Invoked by serve.mjs  POST /api/refresh-ticket?key=<KEY>.
 #   bash refresh-ticket.sh <KEY>
+#
+# PRIMARY path: deterministic daily_fetch.py --key (works in Docker; no agent CLI).
+# FALLBACK: cursor-agent prompt (local Mac with the Cursor CLI installed).
 set -o pipefail
 KEY="$1"
 [ -z "$KEY" ] && { echo "usage: refresh-ticket.sh <KEY>"; exit 2; }
@@ -12,6 +15,8 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/us
 [ -f "$HOME/.zshrc" ]    && . "$HOME/.zshrc"    2>/dev/null
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lock-util.sh
+. "$HERE/lock-util.sh"
 
 # Portable config (single source of truth: ../config.json) — see run-intern.sh for the pattern.
 AGENT_CONNECTOR=cursor; AGENT_BIN=cursor-agent; AGENT_BIN_FALLBACKS="$HOME/.local/bin/cursor-agent"
@@ -28,8 +33,10 @@ mkdir -p "$INTERN_DIR/cache"
 # This rewrites the SHARED data.json. Refuse to run while a daily run (.intern.lock) or the weekly
 # archive (.completed.lock) is mid-write, and take our own .refresh.lock so two refreshes don't
 # clobber each other — otherwise concurrent writers cause lost updates on the canonical file.
+# Stale locks (dead PID / leftover from a Docker recreate) are cleared, not treated as held.
 for L in "$INTERN_DIR/.intern.lock" "$INTERN_DIR/.completed.lock" "$INTERN_DIR/.refresh.lock"; do
-  if [ -f "$L" ]; then
+  lock_clear_stale "$L"
+  if lock_is_held "$L"; then
     echo "$(date): another intern job holds $(basename "$L") — skipping refresh of $KEY" | tee -a "$LOG"
     exit 3
   fi
@@ -38,12 +45,49 @@ REFRESH_LOCK="$INTERN_DIR/.refresh.lock"
 echo "$$ $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REFRESH_LOCK"
 trap 'rm -f "$REFRESH_LOCK"' EXIT INT TERM
 
+cd "$GIT_ROOT"
+# Snapshot for the deterministic aiSummary carry-forward (the fresh single-ticket fetch omits it
+# only on the agent path; the Python path carries it itself — snapshot still harmless).
+PREV_DATA="$INTERN_DIR/.data.prev.$KEY.json"
+[ -f "$INTERN_DIR/data.json" ] && cp "$INTERN_DIR/data.json" "$PREV_DATA" 2>/dev/null
+
+TIMEOUT_BIN="$(command -v timeout || command -v gtimeout)"
+code=1
+FAST_OK=""
+
+# ── FAST PATH ─────────────────────────────────────────────────────────────────
+# daily_fetch.py --key is the PRIMARY path (same contract as the daily board refresh).
+# Debug the agent path with FORCE_AGENT=1.
+if [ -z "$FORCE_AGENT" ] && command -v python3 >/dev/null 2>&1 && [ -f "$INTERN_DIR/daily_fetch.py" ]; then
+  echo "$(date): fast path — daily_fetch.py --key $KEY (LLM agent is the fallback)…" | tee -a "$LOG"
+  if [ -n "$TIMEOUT_BIN" ]; then
+    "$TIMEOUT_BIN" 300 python3 "$INTERN_DIR/daily_fetch.py" --key "$KEY" >> "$LOG" 2>&1
+  else
+    python3 "$INTERN_DIR/daily_fetch.py" --key "$KEY" >> "$LOG" 2>&1
+  fi
+  fast_code=$?
+  if [ "$fast_code" = "0" ]; then
+    FAST_OK=1
+    code=0
+    echo "$(date): fast path OK — skipping the agent run" | tee -a "$LOG"
+  else
+    echo "$(date): fast path failed (exit $fast_code) — falling back to the $AGENT_CONNECTOR agent" | tee -a "$LOG"
+  fi
+fi
+
+if [ "$FAST_OK" != "1" ]; then
+# The agent CLI is located ONLY inside the fallback — Docker has no cursor-agent and must
+# succeed on the Python path above instead of exiting 127 here.
 AGENT="$(command -v "$AGENT_BIN")"
 if [ -z "$AGENT" ]; then
   IFS=':' read -r -a FBS <<< "$AGENT_BIN_FALLBACKS"
   for f in "${FBS[@]}"; do [ -x "$f" ] && AGENT="$f" && break; done
 fi
-[ -z "$AGENT" ] && { echo "$(date): $AGENT_BIN not found (connector: $AGENT_CONNECTOR)" | tee -a "$LOG"; exit 127; }
+if [ -z "$AGENT" ]; then
+  echo "$(date): fast path failed and $AGENT_BIN not found (connector: $AGENT_CONNECTOR)" | tee -a "$LOG"
+  rm -f "$PREV_DATA"
+  exit 127
+fi
 
 # MCP allow/read-write policy comes from config.json (falls back to the classic read-only trio).
 MCP_POLICY="$(node "$HERE/config.mjs" policy 2>/dev/null || echo 'Use ONLY the jira, confluence and bitbucket MCP servers, read-only.')"
@@ -65,33 +109,33 @@ STEPS:
     Do NOT modify any OTHER ticket; keep the rest of data.json the same, only updating generatedAt to now.
 Do NOT write data.js — the runner re-syncs it. If Jira is unavailable, leave data.json unchanged and stop."
 
-cd "$GIT_ROOT"
-# Snapshot for the deterministic aiSummary carry-forward (the fresh single-ticket fetch omits it).
-PREV_DATA="$INTERN_DIR/.data.prev.$KEY.json"
-[ -f "$INTERN_DIR/data.json" ] && cp "$INTERN_DIR/data.json" "$PREV_DATA" 2>/dev/null
 echo "$(date): refreshing $KEY via $AGENT (connector=$AGENT_CONNECTOR)" | tee -a "$LOG"
 RUN=( "$AGENT" "$AGENT_PROMPT_FLAG" "$PROMPT" $AGENT_EXTRA_ARGS )
 EFFECTIVE_MODEL="${MODEL:-$MODEL_MAIN}"
 [ -n "$EFFECTIVE_MODEL" ] && [ "$EFFECTIVE_MODEL" != "auto" ] && RUN+=( "$AGENT_MODEL_FLAG" "$EFFECTIVE_MODEL" )
-TIMEOUT_BIN="$(command -v timeout || command -v gtimeout)"
 if [ -n "$TIMEOUT_BIN" ]; then "$TIMEOUT_BIN" "$TIMEOUT_REFRESH" "${RUN[@]}" >> "$LOG" 2>&1; else "${RUN[@]}" >> "$LOG" 2>&1; fi
 code=$?
 
-# Restore aiSummary onto the refreshed ticket (carry-forward, independent of the agent), then drop the snapshot.
+# Restore aiSummary onto the refreshed ticket (carry-forward, independent of the agent).
 if [ -f "$PREV_DATA" ] && [ -f "$INTERN_DIR/data.json" ] && command -v node >/dev/null 2>&1; then
   node "$HERE/carry-aisummary.mjs" "$PREV_DATA" "$INTERN_DIR/data.json" >>"$LOG" 2>&1 || true
 fi
+fi
+
 rm -f "$PREV_DATA"
 
 # Deterministically re-sync data.js from data.json so the board picks up the change. Atomic.
+# (Python write_outputs already wrote data.js; this is a no-op safety net for the agent path.)
 if [ -f "$INTERN_DIR/data.json" ] && command -v node >/dev/null 2>&1; then
   node "$HERE/sync-datajs.mjs" "$INTERN_DIR" 2>>"$LOG" \
     && echo "$(date): re-synced data.js" | tee -a "$LOG"
 fi
+
 # The refresh may have surfaced a new or changed PR — (re)generate this ticket's PR Readiness Report
 # in the background if its fingerprint moved. Never delays or fails the refresh.
 if [ "${REPORTS_AUTO:-1}" != "0" ] && [ -f "$HERE/pr-report.sh" ]; then
-  nohup bash "$HERE/pr-report.sh" "$KEY" --if-needed >>"$(dirname "$LOG")/reports-auto.log" 2>&1 &
+  nohup bash "$HERE/pr-report.sh" "$KEY" --if-needed >>"$LOG_DIR/reports-auto.log" 2>&1 &
 fi
+
 echo "$(date): refresh $KEY finished (exit $code) — log: $LOG" | tee -a "$LOG"
 exit "$code"

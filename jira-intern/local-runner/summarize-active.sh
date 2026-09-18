@@ -19,6 +19,8 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/us
 [ -f "$HOME/.zshrc" ]    && . "$HOME/.zshrc"    2>/dev/null
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lock-util.sh
+. "$HERE/lock-util.sh"
 PROMPT_FILE="$HERE/../prompts/intern-summary-prompt.md"
 GIT_ROOT="$(cd "$HERE/../../.." && pwd)"
 INTERN_DIR="$(cd "$HERE/.." && pwd)"
@@ -51,8 +53,10 @@ cd "$GIT_ROOT"
 
 # Refuse to run while the weekly archive or a single-ticket refresh is mid-write — all of them
 # rewrite the same data.json (lost-update hazard). Same guard as the other writers.
+# Stale locks (dead PID / leftover from a Docker recreate) are cleared, not treated as held.
 for L in "$INTERN_DIR/.completed.lock" "$INTERN_DIR/.refresh.lock"; do
-  if [ -f "$L" ]; then
+  lock_clear_stale "$L"
+  if lock_is_held "$L"; then
     echo "$(date): $(basename "$L") held by another intern job — skipping summary pass" | tee -a "$LOG"
     exit 3
   fi
@@ -61,7 +65,8 @@ done
 # Take the run-lock if it isn't already held, so the board shows "running" and other writers don't
 # interleave. When chained from run-intern.sh the parent already holds it — leave it to the parent.
 LOCK="$INTERN_DIR/.intern.lock"; OWN_LOCK=0
-if [ ! -f "$LOCK" ]; then echo "$$ $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$LOCK"; OWN_LOCK=1; trap '[ "$OWN_LOCK" = 1 ] && rm -f "$LOCK"' EXIT INT TERM; fi
+lock_clear_stale "$LOCK"
+if ! lock_is_held "$LOCK"; then echo "$$ $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$LOCK"; OWN_LOCK=1; trap '[ "$OWN_LOCK" = 1 ] && rm -f "$LOCK"' EXIT INT TERM; fi
 
 # Snapshot so a mid-write timeout can't leave data.json truncated/corrupted.
 SNAP="$INTERN_DIR/.data.summary-snap.json"

@@ -104,13 +104,19 @@ def status_column(name):
         (("to do", "open", "backlog", "reopened", "selected for development"), "todo", False),
         (("in progress", "dev in progress", "work in progress", "in development"), "prog", False),
         (("in review", "code review", "ready4review", "ready for review", "review"), "rev", False),
-        (("qa", "in qa", "testing", "verification"), "qa", False),
+        (("qa", "in qa", "under qa", "ready for qa", "ready4qa", "awaiting qa",
+          "testing", "in test", "in testing", "verification", "verify"), "qa", False),
         (("done", "completed", "closed", "resolved", "released"), "done", False),
         (("on hold", "hold", "blocked", "waiting", "parked", "impeded"), "hold", True),
     ]
     for keys, col, hold in mapping:
         if n in keys:
             return col, hold
+    tokens = set(re.findall(r"[a-z0-9]+", n))
+    if "qa" in tokens or "testing" in tokens or "verification" in tokens:
+        return "qa", False
+    if "review" in tokens:
+        return "rev", False
     return "prog", False
 
 

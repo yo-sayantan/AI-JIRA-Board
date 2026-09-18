@@ -13,6 +13,8 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/us
 [ -f "$HOME/.zshrc" ]    && . "$HOME/.zshrc"    2>/dev/null
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lock-util.sh
+. "$HERE/lock-util.sh"
 
 # Portable config (single source of truth: ../config.json) — see run-intern.sh for the pattern.
 AGENT_CONNECTOR=cursor; AGENT_BIN=cursor-agent; AGENT_BIN_FALLBACKS="$HOME/.local/bin/cursor-agent"
@@ -31,8 +33,10 @@ mkdir -p "$INTERN_DIR/cache"
 # Both this job and the daily run rewrite the SAME data.json. Refuse to start if the daily run
 # (.intern.lock) or a single-ticket refresh (.refresh.lock) is in flight — otherwise this long job
 # reads data.json, they finish, and our write-back reverts their fresh tickets[] (lost update).
+# Stale locks (dead PID / leftover from a Docker recreate) are cleared, not treated as held.
 for L in "$INTERN_DIR/.intern.lock" "$INTERN_DIR/.refresh.lock"; do
-  if [ -f "$L" ]; then
+  lock_clear_stale "$L"
+  if lock_is_held "$L"; then
     echo "$(date): $(basename "$L") held by another intern job — skipping this archive run" | tee -a "$LOG"
     exit 3
   fi
@@ -48,6 +52,33 @@ if [ -n "$FRESH" ]; then
   echo "$(date): FRESH=1 — cleared per-ticket cache; rebuilding the whole archive" | tee -a "$LOG"
 fi
 
+cd "$GIT_ROOT"
+SECS="${TIMEOUT_SEC:-$TIMEOUT_WEEKLY}"
+TIMEOUT_BIN="$(command -v timeout || command -v gtimeout)"
+
+# ── FAST PATH ─────────────────────────────────────────────────────────────────
+# completed_archive.py implements the same archive contract deterministically
+# (per-ticket cache + merge completed[] only) in a fraction of the agent's time.
+# The LLM agent below is the fallback. Debug the agent path with FORCE_AGENT=1.
+FAST_OK=""
+if [ -z "$FORCE_AGENT" ] && command -v python3 >/dev/null 2>&1 && [ -f "$INTERN_DIR/completed_archive.py" ]; then
+  echo "$(date): fast path — deterministic completed_archive.py (LLM agent is the fallback)…" | tee -a "$LOG"
+  if [ -n "$TIMEOUT_BIN" ]; then
+    "$TIMEOUT_BIN" "$SECS" python3 "$INTERN_DIR/completed_archive.py" >> "$LOG" 2>&1
+  else
+    python3 "$INTERN_DIR/completed_archive.py" >> "$LOG" 2>&1
+  fi
+  fast_code=$?
+  if [ "$fast_code" = "0" ]; then
+    FAST_OK=1
+    code=0
+    echo "$(date): fast path OK — skipping the agent run" | tee -a "$LOG"
+  else
+    echo "$(date): fast path failed (exit $fast_code) — falling back to the $AGENT_CONNECTOR agent" | tee -a "$LOG"
+  fi
+fi
+
+if [ "$FAST_OK" != "1" ]; then
 AGENT="$(command -v "$AGENT_BIN")"
 if [ -z "$AGENT" ]; then
   IFS=':' read -r -a FBS <<< "$AGENT_BIN_FALLBACKS"
@@ -55,7 +86,6 @@ if [ -z "$AGENT" ]; then
 fi
 [ -z "$AGENT" ] && { echo "$(date): $AGENT_BIN not found (connector: $AGENT_CONNECTOR). Install: $AGENT_INSTALL_HINT" | tee -a "$LOG"; exit 127; }
 
-cd "$GIT_ROOT"
 echo "$(date): completed-archive run via $AGENT (connector=$AGENT_CONNECTOR, cwd=$GIT_ROOT)" | tee -a "$LOG"
 PROMPT_TEXT="$(node "$HERE/config.mjs" render "$PROMPT_FILE" 2>>"$LOG" || cat "$PROMPT_FILE")"
 # NEVER launch with an unrendered prompt — no identity + no MCP read-only policy. Fail loud.
@@ -68,8 +98,6 @@ EFFECTIVE_MODEL="${MODEL:-$MODEL_MAIN}"
 [ -n "$EFFECTIVE_MODEL" ] && [ "$EFFECTIVE_MODEL" != "auto" ] && RUN+=( "$AGENT_MODEL_FLAG" "$EFFECTIVE_MODEL" )
 
 # Longer ceiling than the daily run — this walks the whole history. Resumable, so a timeout is fine.
-SECS="${TIMEOUT_SEC:-$TIMEOUT_WEEKLY}"
-TIMEOUT_BIN="$(command -v timeout || command -v gtimeout)"
 if [ -n "$TIMEOUT_BIN" ]; then
   "$TIMEOUT_BIN" "$SECS" "${RUN[@]}" >> "$LOG" 2>&1
 else
@@ -77,6 +105,7 @@ else
 fi
 code=$?
 [ "$code" = "124" ] && echo "$(date): TIMED OUT after ${SECS}s — resumes next run (cache persists)" | tee -a "$LOG"
+fi
 
 # Re-sync data.js from data.json (deterministic — never rely on the agent to write both). Atomic.
 if [ -f "$INTERN_DIR/data.json" ] && command -v node >/dev/null 2>&1; then
