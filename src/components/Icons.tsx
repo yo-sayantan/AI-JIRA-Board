@@ -453,17 +453,16 @@ export function DocIcon({ size = 14, color = 'currentColor' }: IP) {
     </svg>
   )
 }
-/** Gear — opens the board settings. */
+/** Gear — opens the board settings. A plain ring with eight radial teeth: at 16px a cogged
+ *  outline turns to mush, while a circle plus straight spokes stays legible. */
 export function GearIcon({ size = 16, color = 'currentColor' }: IP) {
   return (
     <svg {...svg(size, '')}>
-      <circle cx="12" cy="12" r="3.2" stroke={color} strokeWidth="1.9" fill="none" />
+      <circle cx="12" cy="12" r="6.5" stroke={color} strokeWidth="1.8" fill="none" />
+      <circle cx="12" cy="12" r="2.4" stroke={color} strokeWidth="1.8" fill="none" />
       <path
-        d="M12 2.6l1.5 2.3 2.7-.5.5 2.7 2.3 1.5-1.4 2.4 1.4 2.4-2.3 1.5-.5 2.7-2.7-.5L12 21.4l-1.5-2.3-2.7.5-.5-2.7-2.3-1.5L6.4 13 5 10.6l2.3-1.5.5-2.7 2.7.5L12 2.6z"
-        stroke={color}
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-        fill="none"
+        d="M18.5 12h2.7M16.6 16.6l1.9 1.9M12 18.5v2.7M7.4 16.6l-1.9 1.9M5.5 12H2.8M7.4 7.4L5.5 5.5M12 5.5V2.8M16.6 7.4l1.9-1.9"
+        {...line(color, 1.8)}
       />
     </svg>
   )

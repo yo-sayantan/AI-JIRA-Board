@@ -177,7 +177,7 @@ export function PrReportOverlay({
 
             {/* At-a-glance stats */}
             {report.stats?.length > 0 && (
-              <div className="flex flex-wrap items-center border-b border-[var(--line)] px-3 py-1.5 lg:px-6">
+              <div className="jb-report-stats flex flex-wrap items-center border-b border-[var(--line)] px-3 py-1.5 lg:px-6">
                 {report.stats.map((s, i) => (
                   <StatChip key={i} stat={s} first={i === 0} />
                 ))}
@@ -225,15 +225,15 @@ export function PrReportOverlay({
                   const printBlocks = visibleBlocks(t.blocks, report.stats)
                   const flags = halfWidthFlags(printBlocks)
                   return (
-                    <section key={t.id} className={ti > 0 ? 'jb-print-page mt-6' : ''}>
+                    <section key={t.id} className={ti > 0 ? 'jb-print-tab mt-6' : 'jb-print-tab'}>
                       <h3 className="mb-3 flex items-center gap-2 text-[14px] font-extrabold" style={{ color: toneColor(t.tone) }}>
                         <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: toneColor(t.tone) }} />
                         {t.title}
                       </h3>
                       {t.summary && <p className="mb-3 text-[13px] text-[var(--ink-soft)]">{t.summary}</p>}
-                      <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
+                      <div className="jb-blocks grid gap-4 lg:grid-cols-2 lg:gap-5">
                         {printBlocks.map((b, i) => (
-                          <div key={`${t.id}:${i}`} className={flags[i] ? '' : 'lg:col-span-2'}>
+                          <div key={`${t.id}:${i}`} className={flags[i] ? '' : 'jb-block-full lg:col-span-2'}>
                             <Block block={b} />
                           </div>
                         ))}

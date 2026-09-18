@@ -435,10 +435,30 @@ a {
     display: none !important;
   }
 
-  /* One tab per page, and never split a block across the fold. */
-  .jb-print-page {
-    break-before: page;
-    page-break-before: always;
+  /* Two columns, stated outright. The lg: breakpoint the screen layout uses is 1024px and the
+     A4 landscape content area is ~1031px, so whether blocks paired up came down to the margin
+     and scale chosen in the print dialog — one notch either way and every block fell into a
+     single column with half the sheet blank. */
+  .jb-blocks {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 7px !important;
+    align-items: start;
+  }
+  .jb-block-full {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* Tabs flow into each other instead of each claiming a fresh sheet. A tab holding two short
+     blocks was costing a whole page. Blocks still never split across the fold, and a heading
+     never strands itself at the bottom of one. */
+  .jb-print-tab {
+    margin-top: 10px !important;
+  }
+  .jb-print-tab > h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+    margin-bottom: 5px !important;
   }
   [role='tabpanel'] section,
   table,
@@ -448,5 +468,25 @@ a {
   }
   thead {
     display: table-header-group;
+  }
+
+  /* Screen padding is generous on purpose; on paper it is just margin inside a margin. */
+  [role='tabpanel'] {
+    padding: 6px 0 0 0 !important;
+  }
+  .jb-report-overlay > section > header {
+    padding: 0 0 6px 0 !important;
+  }
+  .jb-report-overlay > section > footer,
+  .jb-report-stats {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  .jb-report-stats {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .jb-report-overlay h2 {
+    margin-top: 2px !important;
   }
 }
