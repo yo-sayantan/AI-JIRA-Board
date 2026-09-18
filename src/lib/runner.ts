@@ -1,5 +1,6 @@
 // Talks to the optional local server (serve.mjs). On file:// none of this is reachable,
 // so callers fall back to a plain reload.
+import { summarizeReport, type PrReport, type PrReportSummary } from './reportTypes'
 
 export const RUN_COMMAND = 'bash .ai/jira-intern/local-runner/run-intern.sh'
 
@@ -48,6 +49,72 @@ export interface InternStatus {
   refreshExits?: Record<string, number>
   /** Live ticket-count progress for the button fill (null when idle). */
   progress?: InternProgress | null
+  /** PR Readiness Reports being generated right now (server queue ∪ cron/terminal runs). */
+  reportsGenerating?: string[]
+  /** Exit codes for recently finished report generations (key → code). */
+  reportExits?: Record<string, number>
+}
+
+// ── PR Readiness Reports ──────────────────────────────────────────────────────
+// Served mode talks to /api/reports*. file:// mode reads window.__JIRA_PR_REPORTS__, written by
+// local-runner/sync-reports.mjs and injected by the build next to data.js (see vite.config.ts).
+
+export interface PrReportsIndex {
+  reports: Record<string, PrReportSummary>
+  generating: string[]
+  exits?: Record<string, number>
+}
+
+type ReportsGlobal = { __JIRA_PR_REPORTS__?: { reports?: Record<string, PrReport>; generating?: string[] } }
+
+/** Every report on disk, keyed by ticket. Header fields only in served mode; full reports on file://. */
+export async function getReportsIndex(): Promise<PrReportsIndex | null> {
+  if (!isServed()) {
+    const g = (window as unknown as ReportsGlobal).__JIRA_PR_REPORTS__
+    if (!g?.reports) return null
+    const reports: Record<string, PrReportSummary> = {}
+    for (const [k, r] of Object.entries(g.reports)) reports[k] = summarizeReport(r)
+    return { reports, generating: g.generating ?? [] }
+  }
+  try {
+    const r = await fetch('/api/reports', { cache: 'no-store' })
+    if (!r.ok) return null
+    return (await r.json()) as PrReportsIndex
+  } catch {
+    return null
+  }
+}
+
+/** One full report, or null when none exists yet. */
+export async function getReport(key: string): Promise<PrReport | null> {
+  if (!isServed()) {
+    return (window as unknown as ReportsGlobal).__JIRA_PR_REPORTS__?.reports?.[key] ?? null
+  }
+  try {
+    const r = await fetch(`/api/reports/${encodeURIComponent(key)}`, { cache: 'no-store' })
+    if (!r.ok) return null
+    return (await r.json()) as PrReport
+  } catch {
+    return null
+  }
+}
+
+export interface ReportStart {
+  ok: boolean
+  already?: boolean
+  queued?: boolean
+  pending?: string[]
+}
+
+/** Ask the server to (re)generate one ticket's report in the background (served mode only). */
+export async function startReportGeneration(key: string): Promise<ReportStart | null> {
+  try {
+    const r = await fetch(`/api/report?key=${encodeURIComponent(key)}`, { method: 'POST' })
+    if (!r.ok) return null
+    return (await r.json()) as ReportStart
+  } catch {
+    return null
+  }
 }
 
 export interface TicketRefreshStart {

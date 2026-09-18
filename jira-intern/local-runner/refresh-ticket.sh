@@ -88,5 +88,10 @@ if [ -f "$INTERN_DIR/data.json" ] && command -v node >/dev/null 2>&1; then
   node "$HERE/sync-datajs.mjs" "$INTERN_DIR" 2>>"$LOG" \
     && echo "$(date): re-synced data.js" | tee -a "$LOG"
 fi
+# The refresh may have surfaced a new or changed PR — (re)generate this ticket's PR Readiness Report
+# in the background if its fingerprint moved. Never delays or fails the refresh.
+if [ "${REPORTS_AUTO:-1}" != "0" ] && [ -f "$HERE/pr-report.sh" ]; then
+  nohup bash "$HERE/pr-report.sh" "$KEY" --if-needed >>"$(dirname "$LOG")/reports-auto.log" 2>&1 &
+fi
 echo "$(date): refresh $KEY finished (exit $code) — log: $LOG" | tee -a "$LOG"
 exit "$code"

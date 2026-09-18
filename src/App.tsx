@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { loadData, loadArchivedKeys, persistArchivedKeys } from './data'
 import { completedToTicket, type ColumnKey, type Ticket } from './types'
-import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND } from './lib/runner'
+import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, type PrReportsIndex } from './lib/runner'
+import type { PrReport } from './lib/reportTypes'
+import { PrReportOverlay } from './components/PrReport'
 import { Header } from './components/Header'
 import { Stats, type StatSelection } from './components/Stats'
 import { Board } from './components/Board'
@@ -64,6 +66,12 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const [refreshingKeys, setRefreshingKeys] = useState<Set<string>>(new Set())
   const [completedOpen, setCompletedOpen] = useState(false)
+  // PR Readiness Reports: header index (served: /api/reports; file://: window.__JIRA_PR_REPORTS__),
+  // the keys being generated right now (server queue ∪ cron/terminal runs), and the open overlay.
+  const [reportsIndex, setReportsIndex] = useState<PrReportsIndex | null>(null)
+  const [reportsGenerating, setReportsGenerating] = useState<Set<string>>(new Set())
+  const [openReport, setOpenReport] = useState<PrReport | null>(null)
+  const [reportLoadingKey, setReportLoadingKey] = useState<string | null>(null)
 
   // Stable handlers so the panel/overlay effects mount once (no churn).
   // openTicket = fresh open (from the board/on-hold/completed); pushTicket = drill
@@ -91,6 +99,81 @@ export default function App() {
       return id
     },
     [dismiss],
+  )
+
+  // ── PR Readiness Reports ────────────────────────────────────────────────────
+  const reportsGeneratingRef = useRef(reportsGenerating)
+  reportsGeneratingRef.current = reportsGenerating
+  const openReportRef = useRef<PrReport | null>(null)
+  openReportRef.current = openReport
+
+  // Re-read the index and announce transitions — including generations started by the cron/auto
+  // pass, not just ones clicked here — so "report in progress" is visible however it was triggered.
+  const refreshReportsIndex = useCallback(async () => {
+    const idx = await getReportsIndex()
+    if (!idx) return null
+    setReportsIndex(idx)
+    const next = new Set(idx.generating ?? [])
+    const prev = reportsGeneratingRef.current
+    for (const k of prev) {
+      if (next.has(k)) continue
+      if (idx.reports[k]) {
+        toast(`PR readiness report ready for ${k}.`, 'success', 3500)
+        // Refresh the overlay if it's showing the report that just got rebuilt.
+        if (openReportRef.current?.key === k) void getReport(k).then((r) => r && setOpenReport(r))
+      } else {
+        toast(`Report generation for ${k} finished without a report — see jira-intern/logs/.`, 'error', 5000)
+      }
+    }
+    for (const k of next) if (!prev.has(k)) toast(`Generating PR readiness report for ${k} in the background…`, 'loading', 3500)
+    setReportsGenerating(next)
+    return idx
+  }, [toast])
+
+  // Heartbeat: load once; in served mode poll (cheap: a directory read) so background/cron
+  // generations surface without a reload. Faster while something is in flight.
+  useEffect(() => {
+    void refreshReportsIndex()
+    if (!served) return
+    let timer: ReturnType<typeof setTimeout>
+    const tick = async () => {
+      await refreshReportsIndex()
+      timer = setTimeout(tick, reportsGeneratingRef.current.size > 0 ? 4000 : 15000)
+    }
+    timer = setTimeout(tick, 4000)
+    return () => clearTimeout(timer)
+  }, [served, refreshReportsIndex])
+
+  const handleOpenReport = useCallback(
+    async (key: string) => {
+      setReportLoadingKey(key)
+      const r = await getReport(key)
+      setReportLoadingKey(null)
+      if (!r) {
+        toast(`No PR readiness report for ${key} yet.`, 'info', 2500)
+        return
+      }
+      setOpenReport(r)
+    },
+    [toast],
+  )
+
+  const handleGenerateReport = useCallback(
+    async (key: string) => {
+      if (!served) {
+        toast(`Report generation needs the server or Docker — run: bash jira-intern/local-runner/pr-report.sh ${key}`, 'info', 6000)
+        return
+      }
+      const start = await startReportGeneration(key)
+      if (!start?.ok) {
+        toast(`Couldn't start the report for ${key} — is the server running?`, 'error', 4000)
+        return
+      }
+      setReportsGenerating((s) => new Set(s).add(key))
+      toast(start.already ? `${key} report is already being generated.` : `Generating PR readiness report for ${key} — running in the background.`, 'loading', 3200)
+      // The heartbeat picks up completion (and announces it); nothing else to do here.
+    },
+    [served, toast],
   )
 
   // Move a Done ticket to the Completed archive NOW, instead of waiting out the
@@ -610,12 +693,26 @@ export default function App() {
               onRefreshTicket={handleRefreshTicket}
               refreshing={refreshingKeys.has(t.key)}
               user={data.user}
+              report={reportsIndex?.reports[t.key] ?? null}
+              reportGenerating={reportsGenerating.has(t.key)}
+              reportLoading={reportLoadingKey === t.key}
+              onOpenReport={handleOpenReport}
+              onGenerateReport={handleGenerateReport}
+              served={served}
             />
           ) : null
         })}
       </AnimatePresence>
 
       <CompletedOverlay open={completedOpen} onClose={closeCompleted} items={data.completed} onOpen={openTicket} pauseEsc={anyDrawer} />
+
+      {/* PR Readiness Report — sits above the drawer stack; Esc closes it first (capture listener). */}
+      <PrReportOverlay
+        report={openReport}
+        onClose={() => setOpenReport(null)}
+        onRegenerate={served ? handleGenerateReport : undefined}
+        generating={openReport ? reportsGenerating.has(openReport.key) : false}
+      />
 
       <NoticesDock notes={data.notes ?? []} />
       <Toasts toasts={toasts} />

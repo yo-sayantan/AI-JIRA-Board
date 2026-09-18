@@ -56,8 +56,10 @@ const DEFAULTS = {
     confluence: { enabled: true, read: true, write: false },
     bitbucket: { enabled: true, read: true, write: false },
   },
-  models: { main: 'auto', summary: 'auto' },
-  timeouts: { dailySec: 1800, weeklySec: 7200, summarySec: 600, refreshSec: 600 },
+  models: { main: 'auto', summary: 'auto', report: 'auto' },
+  timeouts: { dailySec: 1800, weeklySec: 7200, summarySec: 600, refreshSec: 600, reportSec: 600 },
+  // PR Readiness Reports: generated per ticket-with-PR into jira-intern/reports/ (git-ignored).
+  reports: { autoGenerate: true, year: 2026, maxPerRun: 5 },
   app: { servePort: 4321, requiredApprovals: 2, branding: {} },
 }
 
@@ -170,6 +172,12 @@ function shellenv() {
   out.push(`TIMEOUT_WEEKLY=${shq(cfg.timeouts?.weeklySec ?? 7200)}`)
   out.push(`TIMEOUT_SUMMARY=${shq(cfg.timeouts?.summarySec ?? 600)}`)
   out.push(`TIMEOUT_REFRESH=${shq(cfg.timeouts?.refreshSec ?? 600)}`)
+  // PR Readiness Reports (local-runner/pr-report.sh + pr-reports-backfill.sh).
+  out.push(`MODEL_REPORT=${shq(cfg.models?.report ?? 'auto')}`)
+  out.push(`TIMEOUT_REPORT=${shq(cfg.timeouts?.reportSec ?? 600)}`)
+  out.push(`REPORTS_AUTO=${shq(cfg.reports?.autoGenerate === false ? 0 : 1)}`)
+  out.push(`REPORTS_YEAR=${shq(cfg.reports?.year ?? 2026)}`)
+  out.push(`REPORTS_MAX_PER_RUN=${shq(cfg.reports?.maxPerRun ?? 5)}`)
   return out.join('\n')
 }
 

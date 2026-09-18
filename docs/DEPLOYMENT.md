@@ -100,6 +100,21 @@ bash jira-intern/local-runner/update-completed.sh  # full Completed archive (wee
 
 Both rewrite `jira-intern/data.json` + `data.js`; reload the board to see the result.
 
+## PR Readiness Reports
+
+Generated automatically in the background after each fetch (see `config.json → reports`). By hand:
+
+```bash
+bash jira-intern/local-runner/pr-report.sh FRAUDBUSTE-290           # one ticket (base + AI enrichment)
+bash jira-intern/local-runner/pr-reports-backfill.sh --year 2026    # every 2026 ticket that has a PR
+bash jira-intern/local-runner/pr-reports-backfill.sh --no-ai        # deterministic only — fast, no agent
+bash jira-intern/local-runner/pr-reports-backfill.sh --force        # rebuild even if current
+```
+
+Output: `jira-intern/reports/<KEY>.json` (+ `reports/index.js` for `file://`). **Git-ignored** — real
+PR/Jira content never leaves the machine. In Docker the container runs the deterministic pass only
+(`SKIP_SUMMARY=1`); run the AI enrichment from your Mac, where `cursor-agent` and its MCP servers live.
+
 ---
 
 ## Troubleshooting

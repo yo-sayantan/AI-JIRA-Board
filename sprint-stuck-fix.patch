@@ -1,0 +1,34 @@
+diff --git a/jira-intern/daily_fetch.py b/jira-intern/daily_fetch.py
+--- a/jira-intern/daily_fetch.py
++++ b/jira-intern/daily_fetch.py
+@@ -686,6 +686,11 @@
+         ticket = copy.deepcopy(prior)
+         if ticket.get("resolved") and column != "done":
+             ticket["resolved"] = None  # self-heal: a reopened ticket must not keep a resolved date
++        # Starting/closing a SPRINT edits the sprint, not the issues in it, so an issue's
++        # `updated` never moves when its sprint goes future -> active -> closed. Jira still
++        # reports the sprint's CURRENT state on every read, and it is already in `f` from this
++        # run's search - so refresh it here, or a ticket stays stuck in the Next Sprint bar.
++        ticket["sprint"] = parse_sprint(f.get("customfield_10404"))
+         return refresh_prs_only(ticket, key)
+ 
+     inline = comments_from_issue(f)
+diff --git a/jira-intern/intern-prompt.md b/jira-intern/intern-prompt.md
+--- a/jira-intern/intern-prompt.md
++++ b/jira-intern/intern-prompt.md
+@@ -172,7 +172,14 @@
+ INCREMENTAL BEHAVIOR (use .state.json memory)
+ - New active assignment with no state entry -> full brief; updateLog "Assigned — initial brief".
+ - Already briefed, still active, with a NEW comment or status change -> refresh fields + PREPEND an updateLog entry.
+-- Nothing changed -> keep the previous rich object as-is.
++- Nothing changed -> keep the previous rich object as-is, EXCEPT: ALWAYS re-read and overwrite `sprint`
++  and the PR/branch fields (`pr`, `prs`, `branch`, `branches`) from what Jira/Bitbucket report RIGHT NOW,
++  even on an otherwise-unchanged ticket. Both change with NO comment and NO status transition on the issue:
++    - Starting or closing a SPRINT edits the sprint, not the tickets in it, so an issue's `updated` never
++      moves when its sprint goes future -> active -> closed. Re-reading the issue still reports the sprint's
++      CURRENT state. Skipping this traps a ticket in the dashboard's "Next Sprint" bar forever, even after
++      its sprint has started and it should have moved onto the board as ordinary To Do work.
++    - A PR can be approved, commented on, or merged in Bitbucket without ever touching the ticket.
+ - Reached QA -> this is STILL in-flight: keep column "qa", do NOT set done, do NOT add to completed[]. (QA is its own board column.)
+ - Reached Done / Closed / Resolved (statusCategory = Done) -> PREPEND one "Marked DONE — <date>" entry, set
+   state.done=true, keep it in `tickets[]` as column "done". ALWAYS set `resolved` (the resolution date) —

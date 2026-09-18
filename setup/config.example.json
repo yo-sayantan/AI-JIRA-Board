@@ -58,15 +58,20 @@
 
   "models": {
     "main": "auto",
-    "summary": "auto"
+    "summary": "auto",
+    "report": "auto"
   },
 
   "timeouts": {
     "dailySec": 1800,
     "weeklySec": 7200,
     "summarySec": 900,
-    "refreshSec": 600
+    "refreshSec": 600,
+    "reportSec": 600
   },
+
+  "_reports": "PR Readiness Reports — one per ticket that has a pull request, written to jira-intern/reports/<KEY>.json (git-ignored). autoGenerate: create/refresh them in the background after every fetch when a PR appears or changes. year: only tickets created/resolved in this year. maxPerRun: cap per background pass so a backlog never blocks the fetch.",
+  "reports": { "autoGenerate": true, "year": 2026, "maxPerRun": 5 },
 
   "app": {
     "servePort": 4321,

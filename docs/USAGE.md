@@ -36,6 +36,47 @@ sprint where you've finished all your To Do work still looks full. They live in 
 - The moment you actually start one (In Progress / Review / QA), it moves onto the board where
   its real status lives.
 
+## PR Readiness Report
+
+Every ticket that has a pull request gets a management-grade **PR Readiness Report** — the
+2-second verdict on "can this ship?", with the evidence behind it. Open a ticket: the report
+button sits **above the AI brief**, coloured by its verdict.
+
+| Button state | Meaning |
+|---|---|
+| **PR Readiness Report · Ready 90/100** (coloured) | A report exists — click to open it. |
+| **Generating PR readiness report…** (spinner) | Being built in the background; the button appears when it lands. |
+| **Generate PR readiness report** (dashed) | None yet — click to build one (server/Docker mode). |
+
+The report opens as a tabbed overlay. Tabs are **colour-coded by relevance** so you can skip the green ones:
+
+| Tab | Colour | What's in it |
+|---|---|---|
+| **Verdict** | the verdict's colour | Decision + next action (owner → action → due sprint), 5 at-a-glance tiles, the **gate checklist** (approvals, comments, changes requested, merged, QA sub-task, dependencies, fixVersion, release branch, CI, security scan — the first *Fail* is the reason for the verdict), release-gate warning when triggered |
+| **Evidence** | worst row wins | Evidence chain — *Source · Observed · Conclusion*, one row per fact; every PR (cards, or a worst-first table when >4); timeline |
+| **Open scope** | red / amber / green | What still blocks closure with an **Owner** column (UNASSIGNED in red), ≤3 next actions, status-consistency warning (e.g. closed in Jira but PR never merged) |
+| **AI assessment** | violet | Only after the AI pass: per-file change classification (Required / Neutral / Risky), review focus, production proof (Dynatrace), deployment & rollback facts, risks, the ticket-specific release gate |
+| **Sources** | grey | Every link, run metadata, fingerprint |
+
+Verdicts: *Ready to merge · Merge-ready, scope open · Awaiting approvals · Blocked (unresolved comments /
+changes requested) · Merged, awaiting verification · Ready to close · Shipped · Shipped, no fixVersion ·
+Closed in Jira, code not merged · Declined, no replacement · On hold* — plus a *stale* modifier after 14
+idle days. The deterministic pass **owns** the verdict, score and every colour; the AI pass may only add
+(its own tab, extra evidence rows, CI/scan gate states) — a report that changes anything derived is
+rejected and the base is restored. Every block carries a provenance chip: **measured**, **AI-enriched**,
+or **not verified** (a gap — shown, never hidden). A ring shows the 0–100 readiness score.
+
+**How reports are produced.** Two passes, so a report always exists once a PR appears:
+1. *Deterministic base* — `jira-intern/pr_report.py`, from the fetched ticket data. No AI, no network.
+2. *AI enrichment* — `cursor-agent` with your read-only Jira / Bitbucket / Confluence / Dynatrace MCP
+   servers rewrites it in place with evidence chains, per-file assessment, risks and a ticket-specific
+   release gate. Skipped automatically in Docker (`SKIP_SUMMARY=1`) or when no agent CLI is present.
+
+**When they are generated.** Automatically after every fetch for any ticket whose PR appeared or
+changed (background, capped by `reports.maxPerRun`), after a single-ticket refresh, or on demand from
+the button. Reports live in `jira-intern/reports/` — **git-ignored**, they contain real company data.
+Backfill a whole year by hand: `bash jira-intern/local-runner/pr-reports-backfill.sh --year 2026`.
+
 ## Cards
 
 Each card shows type, key, story points, title, priority, PR state, approvals, branch, and how

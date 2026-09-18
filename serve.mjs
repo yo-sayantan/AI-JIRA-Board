@@ -7,7 +7,7 @@
 // and reloads when fresh data lands. Without the server the board still works from
 // file://; Refresh there just reloads the latest dump.
 import { createServer } from 'node:http'
-import { readFile, stat, unlink } from 'node:fs/promises'
+import { readFile, readdir, stat, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { extname, join, normalize } from 'node:path'
@@ -149,6 +149,104 @@ async function pumpRefreshQueue() {
     void pumpRefreshQueue()
   }
 }
+// PR Readiness Report queue — mirrors the refresh queue. Reports write ONLY jira-intern/reports/
+// (never data.json) but they read data.json and run the agent, so they wait for data writers and
+// run one at a time. Generations started elsewhere (cron backfill, terminal) register themselves
+// in reports/.status.json (pid + startedAt); /api/intern-status merges both so the board shows
+// "generating" regardless of who started it.
+const REPORT_SCRIPT = join(INTERN, 'local-runner/pr-report.sh')
+const REPORTS_DIR = join(INTERN, 'reports')
+const REPORTS_STATUS = join(REPORTS_DIR, '.status.json')
+let reportActive = null
+const reportQueue = []
+const reportExits = new Map()
+let reportPumpTimer = null
+
+function reportPendingKeys() {
+  return reportActive ? [reportActive, ...reportQueue] : [...reportQueue]
+}
+
+async function pumpReportQueue() {
+  if (reportPumpTimer) {
+    clearTimeout(reportPumpTimer)
+    reportPumpTimer = null
+  }
+  if (reportActive || reportQueue.length === 0) return
+  const { running: internBusy } = await anyInternRunning()
+  if (running || archiveRunning || internBusy) {
+    reportPumpTimer = setTimeout(() => {
+      reportPumpTimer = null
+      void pumpReportQueue()
+    }, 2000)
+    return
+  }
+  const key = reportQueue.shift()
+  if (!key) return
+  reportActive = key
+  const done = (code) => {
+    reportActive = null
+    reportExits.set(key, code)
+    void pumpReportQueue()
+  }
+  try {
+    const child = spawn('bash', [REPORT_SCRIPT, key], { cwd: ROOT, stdio: 'ignore' })
+    child.on('exit', (code, signal) => done(signal ? 1 : (code ?? 1)))
+    child.on('error', () => done(1))
+  } catch {
+    done(1)
+  }
+}
+
+/** Keys some OTHER process is generating right now (reports/.status.json) — dead PIDs ignored. */
+async function externalGenerating() {
+  try {
+    const st = JSON.parse(await readFile(REPORTS_STATUS, 'utf8'))
+    const out = []
+    for (const [key, v] of Object.entries(st?.generating || {})) {
+      const pid = Number(v?.pid)
+      if (!Number.isInteger(pid) || pid <= 0) continue
+      try {
+        process.kill(pid, 0)
+        out.push(key)
+      } catch (e) {
+        if (e.code !== 'ESRCH') out.push(key)
+      }
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+/** Header-only index of every report on disk (key → verdict/generatedAt/enriched/fingerprint). */
+async function reportsIndex() {
+  const out = {}
+  let names = []
+  try {
+    names = await readdir(REPORTS_DIR)
+  } catch {
+    return out
+  }
+  for (const n of names) {
+    if (!n.endsWith('.json') || n.startsWith('.')) continue
+    try {
+      const r = JSON.parse(await readFile(join(REPORTS_DIR, n), 'utf8'))
+      if (r && typeof r.key === 'string') {
+        out[r.key] = {
+          key: r.key,
+          title: r.title ?? null,
+          generatedAt: r.generatedAt ?? null,
+          enrichedAt: r.enrichedAt ?? null,
+          enriched: !!r.enriched,
+          fingerprint: r.fingerprint ?? null,
+          verdict: r.verdict ?? null,
+        }
+      }
+    } catch {}
+  }
+  return out
+}
+
 const BOARD = '/dist/index.html'
 // Same precedence as jira-intern/local-runner/config.mjs (kept in sync manually — this file
 // is intentionally zero-dependency, so it doesn't import that ESM module): personal config
@@ -289,6 +387,39 @@ const server = createServer(async (req, res) => {
     })
   }
 
+  // ── PR Readiness Reports ────────────────────────────────────────────────────
+  if (path === '/api/reports' && req.method === 'GET') {
+    const [reports, external] = await Promise.all([reportsIndex(), externalGenerating()])
+    return json(res, 200, {
+      reports,
+      generating: [...new Set([...reportPendingKeys(), ...external])],
+      exits: Object.fromEntries(reportExits),
+    })
+  }
+  if (path.startsWith('/api/reports/') && req.method === 'GET') {
+    const key = path.slice('/api/reports/'.length).trim().toUpperCase()
+    if (!KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
+    try {
+      const body = await readFile(join(REPORTS_DIR, `${key}.json`))
+      res.writeHead(200, { 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store' }).end(body)
+    } catch {
+      json(res, 404, { ok: false, error: 'no report yet' })
+    }
+    return
+  }
+  // Generate (or regenerate) one ticket's report in the background. Idempotent while queued.
+  if (path === '/api/report' && req.method === 'POST') {
+    const key = (url.searchParams.get('key') || '').trim().toUpperCase()
+    if (!KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
+    if (reportActive === key || reportQueue.includes(key)) {
+      return json(res, 202, { ok: true, already: true, key, pending: reportPendingKeys() })
+    }
+    reportExits.delete(key)
+    reportQueue.push(key)
+    void pumpReportQueue()
+    return json(res, 202, { ok: true, queued: true, key, pending: reportPendingKeys() })
+  }
+
   if (path === '/api/intern-status') {
     let dataModified = null
     try {
@@ -326,6 +457,9 @@ const server = createServer(async (req, res) => {
       // Exit codes for recently finished per-ticket refreshes (key → number).
       refreshExits: Object.fromEntries(refreshExits),
       progress,
+      // PR Readiness Reports in flight: this server's queue ∪ cron/terminal generations.
+      reportsGenerating: [...new Set([...reportPendingKeys(), ...(await externalGenerating())])],
+      reportExits: Object.fromEntries(reportExits),
     })
   }
 

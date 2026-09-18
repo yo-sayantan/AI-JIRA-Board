@@ -109,6 +109,18 @@ absolute path of this folder), so the prompts are path-portable with zero config
 | `main` | Model for the daily/weekly/refresh runs. `"auto"` = let the connector pick (no flag passed). Env `MODEL=` overrides per run. |
 | `summary` | Model for the cheap local AI-summary pass — set a fast/cheap one (e.g. `haiku-4.5`, `gpt-4o-mini`, `gemini-2.5-flash`). Env `SUMMARY_MODEL=` overrides. |
 
+## `reports` — PR Readiness Reports
+| key | meaning |
+|---|---|
+| `autoGenerate` | `true` (default): after every fetch / single-ticket refresh, (re)generate the report of any ticket whose PR appeared or changed — in the background, never delaying the fetch. `false` turns the automation off (the drawer button still works). |
+| `year` | Which tickets the automatic pass and `pr-reports-backfill.sh` consider (by created/resolved year). Default `2026`. |
+| `maxPerRun` | Cap per automatic pass so a backlog never runs for hours. Default `5`. Manual backfills are uncapped unless `--max` is given. |
+
+Models: `models.report` picks the agent model for the AI enrichment (`"auto"` = connector default; env
+`REPORT_MODEL=` overrides). `timeouts.reportSec` (default 600) bounds one enrichment run. Skip the AI
+pass entirely with `SKIP_REPORT_AI=1` (Docker already sets `SKIP_SUMMARY=1`, which also skips it).
+Reports are written to `jira-intern/reports/` — git-ignored; they contain real ticket and PR content.
+
 ## `timeouts` (seconds)
 `dailySec` (default 1800), `weeklySec` (7200, env `TIMEOUT_SEC` overrides), `summarySec` (600),
 `refreshSec` (600).

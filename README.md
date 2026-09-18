@@ -36,6 +36,10 @@ React 19 · Vite 6 · Tailwind v4 · Motion · a Python fetch pipeline · one se
 - **On Hold** — its own section, shown only when something is blocked/waiting.
 - **Next Sprint** — tickets queued in a sprint that hasn't started yet, kept out of To Do so a
   cleared sprint doesn't look full. Toggle it from the top chips; **All** reveals everything at once.
+- **PR Readiness Report** — for every ticket with a pull request: a management-grade, colour-coded
+  tabbed report (verdict + score, evidence chain, per-file change assessment, risks & release gate,
+  open scope, timeline). Generated automatically in the background when a PR appears or changes —
+  deterministic base from the fetch, AI-enriched via your Cursor MCP skills. One button in the ticket drawer.
 - **Completed** — the full historical archive of every Done ticket, with inline peek + detail.
 - **Ticket detail** — a slide-in drawer: status pipeline, PR card, description, an interactive
   acceptance-criteria checklist, comments, related issues, Confluence/docs, branch, sources.

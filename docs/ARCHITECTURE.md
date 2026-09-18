@@ -36,6 +36,18 @@ Key scripts:
 | `local-runner/config.mjs` | Resolves `config.json` into shell vars, rendered prompts, MCP policy. |
 | `prompts/intern-prompt.md` | The schema the fetch must produce, in prose — mirrors `src/types.ts`. |
 | `config.json` | **Single source of truth** for identity, endpoints, connector, policy, branding. |
+| `pr_report.py` | **PR Readiness Reports** — deterministic base per ticket-with-PR → `reports/<KEY>.json`; validation; staleness by PR fingerprint. |
+| `prompts/pr-readiness-prompt.md` | The AI enrichment brief (evidence chain, per-file assessment, risks, release gate) — mirrors `src/lib/reportTypes.ts`. |
+| `local-runner/pr-report.sh` · `pr-reports-backfill.sh` | One ticket / every ticket-with-PR of a year. Auto-launched in the background by `run-intern.sh` and `refresh-ticket.sh`. |
+| `local-runner/sync-reports.mjs` | `reports/*.json` → `reports/index.js` (`window.__JIRA_PR_REPORTS__`) so reports open on `file://` too. |
+
+**PR Readiness Reports** are a second data file family beside `data.json`: one JSON per ticket in
+`jira-intern/reports/` (git-ignored). The app renders them generically from a fixed set of block
+kinds (callout · stats · table · cards · list · timeline · links · kv), each tagged with a tone and a
+provenance (`derived` / `ai` / `unknown`), so the deterministic base and the AI-enriched version use
+the same component. In served mode the app reads `/api/reports*`; on `file://` it reads
+`reports/index.js`. "Generating" state is a `.status.json` of PIDs that both the server and the
+`file://` sync consult, so a cron-launched generation still shows a spinner in the drawer.
 
 The fetch needs only a **Jira token**. Confluence/Bitbucket tokens and MCP servers are optional
 and only enrich the output (linked docs, real branches, PR state, AI briefings).

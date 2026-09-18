@@ -133,6 +133,15 @@ if [ -f "$INTERN_DIR/data.json" ] && command -v node >/dev/null 2>&1; then
   fi
 fi
 
+# PR Readiness Reports (best-effort, BACKGROUND): for every ticket whose PR appeared or changed since
+# its last report, (re)generate jira-intern/reports/<KEY>.json. Detached with nohup so a slow agent
+# never delays this run; the board shows "report in progress" from reports/.status.json meanwhile.
+# Off with config.json → reports.autoGenerate=false (REPORTS_AUTO=0). Capped by reports.maxPerRun.
+if [ "$code" = "0" ] && [ "${REPORTS_AUTO:-1}" != "0" ] && [ -f "$HERE/pr-reports-backfill.sh" ]; then
+  echo "$(date): launching PR readiness report pass in the background…" | tee -a "$LOG"
+  nohup bash "$HERE/pr-reports-backfill.sh" --auto >>"$LOG_DIR/reports-auto.log" 2>&1 &
+fi
+
 # AI-summary pass (cheap, LOCAL-only): add a short aiSummary to each active ticket. Best-effort —
 # never fails the main run. Skip with SKIP_SUMMARY=1; pick a cheap model with SUMMARY_MODEL=…
 if [ "$code" = "0" ] && [ -z "$SKIP_SUMMARY" ] && [ -f "$HERE/summarize-active.sh" ]; then

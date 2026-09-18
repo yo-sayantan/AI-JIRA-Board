@@ -5,6 +5,7 @@ import { COLUMN_META } from '../lib/columns'
 import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba } from '../lib/format'
 import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink } from './ui'
 import { Pipeline } from './Pipeline'
+import { toneColor, type PrReportSummary } from '../lib/reportTypes'
 import {
   ChevronIcon,
   RefreshIcon,
@@ -25,6 +26,102 @@ import {
   TrophyIcon,
 } from './Icons'
 
+/**
+ * The one-click path from a ticket to its management-grade verdict. Three states: a report exists
+ * (button coloured by verdict → opens the overlay), one is being generated (spinner — the app polls
+ * and this flips to the button when it lands), none yet (offer to generate; on file:// show how).
+ */
+function PrReportButton({
+  ticketKey,
+  report,
+  generating,
+  loading,
+  served,
+  onOpen,
+  onGenerate,
+}: {
+  ticketKey: string
+  report?: PrReportSummary | null
+  generating?: boolean
+  loading?: boolean
+  served?: boolean
+  onOpen?: (key: string) => void
+  onGenerate?: (key: string) => void
+}) {
+  const ai = '#a855f7'
+  if (generating) {
+    return (
+      <div
+        className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px]"
+        style={{ borderColor: hexToRgba(ai, 0.4), background: hexToRgba(ai, 0.08) }}
+        role="status"
+      >
+        <motion.span className="inline-flex" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}>
+          <RefreshIcon size={13} color={ai} />
+        </motion.span>
+        <span className="font-bold" style={{ color: ai }}>
+          Generating PR readiness report…
+        </span>
+        <span className="text-[var(--muted)]">runs in the background — this turns into the report button when it lands</span>
+      </div>
+    )
+  }
+  if (report) {
+    const v = report.verdict
+    const c = toneColor(v?.tone)
+    const when = report.enrichedAt ?? report.generatedAt
+    return (
+      <button
+        type="button"
+        onClick={() => onOpen?.(ticketKey)}
+        disabled={loading}
+        className="mb-4 flex w-full flex-wrap items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-[transform,filter] hover:-translate-y-px hover:brightness-105 disabled:opacity-70"
+        style={{ borderColor: hexToRgba(c, 0.5), background: `linear-gradient(135deg, ${hexToRgba(c, 0.16)}, ${hexToRgba(c, 0.04)})` }}
+        title={v?.headline ?? 'Open the PR readiness report'}
+      >
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: c }} />
+        <span className="text-[12.5px] font-extrabold" style={{ color: c }}>
+          PR Readiness Report
+        </span>
+        {v && (
+          <span className="rounded-full px-2 py-[2px] text-[10.5px] font-bold" style={{ color: c, background: hexToRgba(c, 0.18) }}>
+            {v.label}
+          </span>
+        )}
+        {typeof v?.score === 'number' && <span className="text-[11px] font-bold tabular-nums text-[var(--ink-soft)]">{v.score}/100</span>}
+        <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
+          {report.enriched ? 'AI-enriched' : 'derived'}
+          {when ? ` · ${fmtDate(when)}` : ''}
+        </span>
+        <ChevronIcon size={11} className="text-[var(--muted)]" />
+      </button>
+    )
+  }
+  if (served && onGenerate) {
+    return (
+      <button
+        type="button"
+        onClick={() => onGenerate(ticketKey)}
+        className="mb-4 flex w-full flex-wrap items-center gap-2 rounded-xl border border-dashed px-3.5 py-2.5 text-left text-[12.5px] transition-colors hover:bg-[var(--surface-2)]"
+        style={{ borderColor: hexToRgba(ai, 0.5) }}
+        title="Build the PR readiness report for this ticket in the background"
+      >
+        <SparkleIcon size={13} color={ai} />
+        <span className="font-bold" style={{ color: ai }}>
+          Generate PR readiness report
+        </span>
+        <span className="text-[var(--muted)]">verdict · evidence · change assessment · risks · open scope — runs in the background</span>
+      </button>
+    )
+  }
+  return (
+    <div className="mb-4 rounded-xl border border-dashed border-[var(--line)] px-3.5 py-2 text-[11.5px] text-[var(--muted)]">
+      No PR readiness report yet — it is generated automatically after the next fetch, or run{' '}
+      <code className="rounded bg-[var(--surface-2)] px-1">bash jira-intern/local-runner/pr-report.sh {ticketKey}</code>
+    </div>
+  )
+}
+
 export function TicketDetail({
   ticket,
   now,
@@ -37,7 +134,20 @@ export function TicketDetail({
   onArchive,
   refreshing,
   user,
+  report,
+  reportGenerating,
+  reportLoading,
+  onOpenReport,
+  onGenerateReport,
+  served,
 }: {
+  /** PR Readiness Report header for this ticket (null/undefined = none yet). */
+  report?: PrReportSummary | null
+  reportGenerating?: boolean
+  reportLoading?: boolean
+  onOpenReport?: (key: string) => void
+  onGenerateReport?: (key: string) => void
+  served?: boolean
   ticket: Ticket
   now: number
   onClose: () => void
@@ -216,6 +326,20 @@ export function TicketDetail({
 
           {/* Section order = developer usability: understand → deliverables → work → code →
               discussion → analysis → references → metadata / history (least useful last). */}
+
+          {/* 0. PR Readiness Report — above the brief on purpose: once code exists, "can this ship?"
+              is the first question. Only for tickets that have a pull request. */}
+          {prs.length > 0 && (
+            <PrReportButton
+              ticketKey={ticket.key}
+              report={report}
+              generating={reportGenerating}
+              loading={reportLoading}
+              served={served}
+              onOpen={onOpenReport}
+              onGenerate={onGenerateReport}
+            />
+          )}
 
           {/* 1. AI Summary — fastest "what is this about". To Do / In-Progress tickets carry a
               DEEP brief (light HTML: linked docs, related tickets, PR/code state, attachments);
