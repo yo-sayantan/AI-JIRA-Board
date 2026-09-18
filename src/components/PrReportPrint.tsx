@@ -152,7 +152,7 @@ function splitHeadline(headline?: string | null, label?: string | null): { lead:
     next = rest.slice(at + 'Next:'.length).trim()
     rest = rest.slice(0, at).trim()
   }
-  return { lead: rest, next }
+  return { lead: sentenceCase(rest), next }
 }
 
 /** The cover repeats the header strip's figures, so an identical stats block is dropped. */
@@ -176,11 +176,42 @@ function Figure({ stat }: { stat: ReportStat }) {
     <div className="jb-pdf-fig">
       <div className="jb-pdf-fig-label">{stat.label}</div>
       <div className="jb-pdf-fig-value" style={toned ? { color: c } : undefined}>
-        {stat.value}
+        <StatValue text={sentenceCase(String(stat.value ?? ''))} />
       </div>
       {stat.hint && <div className="jb-pdf-fig-hint">{stat.hint}</div>}
     </div>
   )
+}
+
+/**
+ * A composite figure ("1 merged · 0 open · 1 declined") is several facts in one string. Left to
+ * wrap on its own it broke wherever the line ran out — "…0 open · 1" then "declined" — which reads
+ * as a sentence cut in half. Each fact is kept whole and the separator travels with the fact it
+ * follows, so a break can only ever land between facts.
+ */
+function StatValue({ text }: { text: string }) {
+  const parts = text.split(' · ')
+  if (parts.length < 2) return <>{text}</>
+  const last = parts.length - 1
+  return (
+    <>
+      {parts.map((p, i) => (
+        <span key={i}>
+          {/* The separator rides inside the no-wrap run so it can never start a line, but the
+              space AFTER it stays outside — keep it in and there is no break opportunity left
+              between facts at all, and the value overflows its column instead of wrapping. */}
+          <span className="jb-pdf-seg">{i < last ? `${p} ·` : p}</span>
+          {i < last ? ' ' : ''}
+        </span>
+      ))}
+    </>
+  )
+}
+
+/** Values like "merged" arrive lower-case from the generator and read as a dropped word under a
+ *  capitalised label. Only the first letter is touched; numbers and keys are left alone. */
+function sentenceCase(s: string): string {
+  return /^[a-z]/.test(s) ? s[0].toUpperCase() + s.slice(1) : s
 }
 
 /** Blocks that stay narrow enough to sit two-up; everything else takes the full measure. */
@@ -196,8 +227,10 @@ function PrintBlock({ block }: { block: ReportBlock }) {
           {block.title}
         </h3>
       )}
+      {/* block.note is dropped on paper. It explains how to read the block ("rows are in
+          verdict-rule order…") — scaffolding for someone exploring the app, and just noise in a
+          document handed to a reader who wants the answer. The screen view still shows it. */}
       <BlockBody block={block} />
-      {block.note && <p className="jb-pdf-note">{block.note}</p>}
     </section>
   )
 }
