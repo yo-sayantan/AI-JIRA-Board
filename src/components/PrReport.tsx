@@ -393,8 +393,15 @@ function ProvenanceChip({ provenance, big }: { provenance?: ReportProvenance | n
 
 function BlockShell({ block, children }: { block: ReportBlock; children: ReactNode }) {
   const c = toneColor(block.tone)
+  // Long blocks may split across a printed page; short ones must not. Without this a tall gate
+  // checklist that doesn't fit the remaining space jumps to the next page whole, leaving most of
+  // the previous one blank.
+  const breakable = block.kind === 'table' || block.kind === 'cards'
   return (
-    <section className="overflow-hidden rounded-xl border" style={{ borderColor: hexToRgba(c, 0.35) }}>
+    <section
+      className={`overflow-hidden rounded-xl border${breakable ? ' jb-breakable' : ''}`}
+      style={{ borderColor: hexToRgba(c, 0.35) }}
+    >
       {(block.title || block.provenance) && (
         <div className="flex items-center gap-2 border-b px-3.5 py-2" style={{ borderColor: hexToRgba(c, 0.25), background: hexToRgba(c, 0.07) }}>
           <span className="inline-block h-2 w-2 rounded-full" style={{ background: c }} />

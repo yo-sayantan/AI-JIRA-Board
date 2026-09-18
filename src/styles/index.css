@@ -461,10 +461,15 @@ a {
     margin-bottom: 5px !important;
   }
   [role='tabpanel'] section,
-  table,
   tr {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+  /* Tables and card grids are the tall blocks; letting them flow across the fold is what keeps
+     the previous page full. Rows still stay whole and the header repeats on each page. */
+  [role='tabpanel'] section.jb-breakable {
+    break-inside: auto;
+    page-break-inside: auto;
   }
   thead {
     display: table-header-group;
