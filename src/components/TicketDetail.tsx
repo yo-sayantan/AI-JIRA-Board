@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { Ticket, LinkRef, Comment, PullRequest } from '../types'
 import { COLUMN_META } from '../lib/columns'
-import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba } from '../lib/format'
+import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba, cycleTime, fmtDays } from '../lib/format'
 import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink } from './ui'
 import { Pipeline } from './Pipeline'
 import { toneColor, type PrReportSummary } from '../lib/reportTypes'
@@ -601,8 +601,29 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 // Type/Priority/Status/Story points live in the header; Opened/Closed/Last update live in the
 // Update log section; Fix versions moved to the header — so this grid holds the rest.
 function OverviewGrid({ ticket }: { ticket: Ticket }) {
+  // Derived from the status lifecycle already in updateLog. Shown for in-flight tickets too,
+  // where the lead time is "so far" rather than final.
+  const ct = cycleTime(ticket)
+  const closed = !!ticket.resolved
   return (
     <div className="mb-3 rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] px-3.5 py-2">
+      {ct.measurable && (
+        <Row label={closed ? 'Time to deliver' : 'Open for'}>
+          <span className="tabular-nums">{fmtDays(ct.totalDays)}</span>
+          {ct.devDays > 0 && (
+            <span
+              className="ml-2 text-[var(--muted)]"
+              title={`${fmtDays(ct.progressDays)} in progress · ${fmtDays(ct.reviewDays)} in review`}
+            >
+              · <span className="font-semibold" style={{ color: '#8b5cf6' }}>{fmtDays(ct.devDays)}</span> dev
+              <span className="text-[11px]">
+                {' '}
+                ({fmtDays(ct.progressDays)} progress, {fmtDays(ct.reviewDays)} review)
+              </span>
+            </span>
+          )}
+        </Row>
+      )}
       <Row label="Sprint">{ticket.sprint}</Row>
       <Row label="Reporter">{ticket.reporter}</Row>
       <Row label="Assignee">{ticket.assignee}</Row>

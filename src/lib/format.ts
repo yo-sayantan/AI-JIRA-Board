@@ -1,4 +1,5 @@
-import type { PrState, PullRequest } from '../types'
+import type { PrState, PullRequest, UpdateLogEntry } from '../types'
+import { mapStatusToColumn } from './columns'
 
 // ── Priority ────────────────────────────────────────────────────────────
 // 7 distinct tiers, each its own rank + colour + icon (see PriorityIcon in Icons.tsx).
@@ -321,6 +322,80 @@ export function workdaysBetween(fromTs: number, toTs: number): number {
     d.setDate(d.getDate() + 1)
   }
   return n
+}
+
+export interface CycleTime {
+  /** Calendar days from Opened to the last status change (or now, if still open). */
+  totalDays: number
+  /** Days the ticket sat in the In Progress column. */
+  progressDays: number
+  /** Days the ticket sat in the In Review column. */
+  reviewDays: number
+  /** progressDays + reviewDays — the part of the wall clock that was actually development. */
+  devDays: number
+  /** False when the lifecycle is a single entry, so there is nothing meaningful to show. */
+  measurable: boolean
+}
+
+const DAY_MS = 86_400_000
+const round1 = (n: number) => Math.round(n * 10) / 10
+
+/**
+ * How long a ticket took, and how much of that was development.
+ *
+ * Derived from `updateLog`, which the fetch already builds from the Jira changelog — the entries
+ * are status transitions newest-first, so the time a ticket spent IN a status is the gap between
+ * that entry and the one after it chronologically. Nothing extra is fetched.
+ *
+ * Total is deliberately wall-clock from Opened, not a sum of the statuses: the gap between "the
+ * ticket existed" and "someone worked on it" is exactly what makes the dev-days split worth
+ * showing.
+ */
+export function cycleTime(
+  t: { created?: string | null; resolved?: string | null; updateLog?: UpdateLogEntry[] | null },
+  now: number = Date.now(),
+): CycleTime {
+  const empty: CycleTime = { totalDays: 0, progressDays: 0, reviewDays: 0, devDays: 0, measurable: false }
+  const log = (t.updateLog ?? [])
+    .map((e) => ({ ts: Date.parse(e.when ?? ''), text: e.text ?? '' }))
+    .filter((e) => !Number.isNaN(e.ts))
+    .sort((a, b) => a.ts - b.ts)
+  if (log.length < 2) return empty
+
+  let progressMs = 0
+  let reviewMs = 0
+  for (let i = 0; i < log.length - 1; i++) {
+    const span = log[i + 1].ts - log[i].ts
+    if (span <= 0) continue
+    // "Opened" and the synthetic "Marked DONE — <date>" rows are not Jira statuses; the former
+    // is the creation marker, the latter a duplicate of the Done transition.
+    const label = log[i].text.replace(/\s+—.*$/, '')
+    if (label === 'Opened') continue
+    const col = mapStatusToColumn(label)
+    if (col === 'prog') progressMs += span
+    else if (col === 'rev') reviewMs += span
+  }
+
+  const startTs = Date.parse(t.created ?? '') || log[0].ts
+  const endTs = Date.parse(t.resolved ?? '') || (t.resolved ? log[log.length - 1].ts : now)
+  const totalMs = Math.max(0, endTs - startTs)
+  const progressDays = round1(progressMs / DAY_MS)
+  const reviewDays = round1(reviewMs / DAY_MS)
+
+  return {
+    totalDays: round1(totalMs / DAY_MS),
+    progressDays,
+    reviewDays,
+    devDays: round1((progressMs + reviewMs) / DAY_MS),
+    measurable: progressMs + reviewMs > 0 || totalMs > 0,
+  }
+}
+
+/** "3.5d" / "<1d" — compact enough to sit inline without stealing attention. */
+export function fmtDays(d: number): string {
+  if (d <= 0) return '0d'
+  if (d < 1) return '<1d'
+  return `${d % 1 === 0 ? d : d.toFixed(1)}d`
 }
 
 /** Where the sprint stands relative to `now` — drives the header chip's label + colour.

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { CompletedTicket, Ticket } from '../types'
-import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, releaseEnvOf, yearOf, hexToRgba, branchesOf, branchStatusOf, prListOf, isMergedPr, shortBranch } from '../lib/format'
+import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, releaseEnvOf, yearOf, hexToRgba, branchesOf, branchStatusOf, prListOf, isMergedPr, shortBranch, cycleTime, fmtDays } from '../lib/format'
 import { matchRow, parseQuery } from '../lib/search'
 import { Pill, PrBadge, BranchStatusPill, PointsTag } from './ui'
 import { BranchIcon, ChevronIcon, CommentIcon, ExpandAllIcon, PersonIcon, PrStateIcon, SearchIcon, SparkleIcon, TrophyIcon, TypeIcon } from './Icons'
@@ -434,6 +434,7 @@ function CompletedRow({ it, expanded, onToggle, onOpen, onOpenKey }: { it: Compl
   const mine = isMine(it)
   const comments = it.commentCount ?? 0
   const rel = relTime(it.resolved)
+  const ct = cycleTime(it)
 
   return (
     <div
@@ -543,6 +544,23 @@ function CompletedRow({ it, expanded, onToggle, onOpen, onOpenKey }: { it: Compl
               <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
                 <Field label="Opened" value={it.created ? fmtDate(it.created) : '—'} />
                 <Field label="Closed" value={it.resolved ? fmtDate(it.resolved) : '—'} />
+                {/* Lead time is the wall clock; dev time is only the part spent In Progress or In
+                    Review. The gap between the two is usually the interesting number. */}
+                <Field
+                  label="Lead time"
+                  value={ct.measurable ? fmtDays(ct.totalDays) : '—'}
+                  hint={ct.measurable ? `${fmtDays(ct.totalDays)} from opened to closed` : undefined}
+                />
+                <Field
+                  label="Dev time"
+                  value={ct.measurable ? fmtDays(ct.devDays) : '—'}
+                  dot={ct.measurable && ct.devDays > 0 ? '#8b5cf6' : undefined}
+                  hint={
+                    ct.measurable
+                      ? `${fmtDays(ct.progressDays)} in progress · ${fmtDays(ct.reviewDays)} in review — ${fmtDays(ct.devDays)} of the ${fmtDays(ct.totalDays)} lead time`
+                      : undefined
+                  }
+                />
                 <Field label="Current status" value={status} dot={DONE} />
                 <Field label="Type" value={et && et !== it.type ? `${et} · ${it.type}` : it.type || '—'} />
                 <Field label="Priority" value={priorityMeta(it.priority).label} dot={priorityMeta(it.priority).color} />
@@ -700,11 +718,11 @@ function Section({ label, icon, children }: { label: string; icon?: ReactNode; c
   )
 }
 
-function Field({ label, value, dot }: { label: string; value: string; dot?: string }) {
+function Field({ label, value, dot, hint }: { label: string; value: string; dot?: string; hint?: string }) {
   return (
     <div className="min-w-0">
       <div className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.07em] text-[var(--muted)]">{label}</div>
-      <div className="flex items-center gap-1.5 truncate text-[12.5px] font-medium text-[var(--ink-soft)]" title={value}>
+      <div className="flex items-center gap-1.5 truncate text-[12.5px] font-medium text-[var(--ink-soft)]" title={hint ?? value}>
         {dot && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dot }} />}
         <span className="truncate">{value}</span>
       </div>
