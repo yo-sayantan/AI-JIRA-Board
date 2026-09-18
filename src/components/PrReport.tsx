@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import type {
   PrReport,
@@ -48,7 +49,19 @@ export function PrReportOverlay({
 
   // Two frames, not one: React must commit the all-tabs render and the browser must lay it out
   // before print() snapshots the page, or the PDF captures the single-tab view.
+  //
+  // The save dialog takes its default filename from document.title, so every report was arriving
+  // as "My Jira Board". Swapping the title for the duration of the print names the file after the
+  // ticket it is about; afterprint puts it back (it fires on cancel too).
   const handlePrint = () => {
+    if (!report) return
+    const restore = document.title
+    document.title = `${report.key} — PR Readiness Report`
+    const onDone = () => {
+      document.title = restore
+      window.removeEventListener('afterprint', onDone)
+    }
+    window.addEventListener('afterprint', onDone)
     setPrinting(true)
     requestAnimationFrame(() => requestAnimationFrame(() => window.print()))
   }
@@ -85,7 +98,10 @@ export function PrReportOverlay({
   const v = report?.verdict
   const vc = toneColor(v?.tone)
 
-  return (
+  // Portalled to <body> so print can hide its siblings with display:none. Hiding them by
+  // visibility instead would keep the whole board's height in the layout, and the document would
+  // paginate around content that has no ink on it — which is where the blank pages came from.
+  return createPortal(
     <AnimatePresence>
       {report && (
         <motion.div
@@ -270,7 +286,8 @@ export function PrReportOverlay({
           </motion.section>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }
 
@@ -393,15 +410,8 @@ function ProvenanceChip({ provenance, big }: { provenance?: ReportProvenance | n
 
 function BlockShell({ block, children }: { block: ReportBlock; children: ReactNode }) {
   const c = toneColor(block.tone)
-  // Long blocks may split across a printed page; short ones must not. Without this a tall gate
-  // checklist that doesn't fit the remaining space jumps to the next page whole, leaving most of
-  // the previous one blank.
-  const breakable = block.kind === 'table' || block.kind === 'cards'
   return (
-    <section
-      className={`overflow-hidden rounded-xl border${breakable ? ' jb-breakable' : ''}`}
-      style={{ borderColor: hexToRgba(c, 0.35) }}
-    >
+    <section className="overflow-hidden rounded-xl border" style={{ borderColor: hexToRgba(c, 0.35) }}>
       {(block.title || block.provenance) && (
         <div className="flex items-center gap-2 border-b px-3.5 py-2" style={{ borderColor: hexToRgba(c, 0.25), background: hexToRgba(c, 0.07) }}>
           <span className="inline-block h-2 w-2 rounded-full" style={{ background: c }} />

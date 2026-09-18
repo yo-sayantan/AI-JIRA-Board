@@ -360,15 +360,14 @@ a {
 }
 
 /* ── PR Readiness Report → PDF ────────────────────────────────────────────────
-   The report overlay is the ONLY thing that prints. The board behind it is hidden
-   rather than re-rendered, so what lands in the PDF is exactly the component that
-   was verified on screen. Colour is the whole point of this report, so the tone
-   tints are forced through instead of being dropped by the browser's ink-saving
-   default. */
+   The on-screen report is a dark, glassy web UI. On paper it should read as a
+   document someone wrote: white, quiet rules instead of filled boxes, one accent
+   colour carrying the verdict, and generous but purposeful spacing. Everything
+   below is print-only — the screen view is untouched. */
 @media print {
   @page {
     size: A4 landscape;
-    margin: 12mm;
+    margin: 14mm 15mm;
   }
 
   html,
@@ -378,15 +377,15 @@ a {
     overflow: visible !important;
   }
 
-  /* Keep the report's own palette legible on white paper. */
   body {
     --bg: #ffffff;
     --surface-solid: #ffffff;
-    --surface-2: #f6f7f9;
-    --line: #d6dae1;
-    --ink: #0b1220;
-    --ink-soft: #2b3444;
-    --muted: #5b6676;
+    --surface-2: #f7f8fa;
+    --line: #dfe3ea;
+    --ink: #10151f;
+    --ink-soft: #37415a;
+    --muted: #6b7690;
+    font-size: 11px;
   }
 
   *,
@@ -396,102 +395,185 @@ a {
     print-color-adjust: exact !important;
     animation: none !important;
     transition: none !important;
+    box-shadow: none !important;
   }
 
-  /* Print ONLY the report overlay. Visibility (not display) so this works at any nesting depth
-     without assuming where the overlay sits in the tree — and note the ticket drawer is also a
-     role=dialog, hence the explicit class rather than a role selector. */
-  body * {
-    visibility: hidden;
-  }
-  .jb-report-overlay,
-  .jb-report-overlay * {
-    visibility: visible;
+  /* Print ONLY the report. It is portalled to <body>, so its siblings can be removed from the
+     layout outright — hiding them by visibility would leave the board's full height in the
+     document and paginate around pages that have no ink on them. */
+  body > *:not(.jb-report-overlay) {
+    display: none !important;
   }
   .jb-report-overlay {
-    position: absolute !important;
-    inset: 0 auto auto 0 !important;
-    width: 100% !important;
+    position: static !important;
     display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
     overflow: visible !important;
     background: none !important;
     backdrop-filter: none !important;
-    padding: 0 !important;
   }
   .jb-report-overlay > section {
     max-width: none !important;
     width: 100% !important;
     border: 0 !important;
     border-radius: 0 !important;
-    box-shadow: none !important;
     transform: none !important;
     opacity: 1 !important;
     overflow: visible !important;
   }
 
-  /* Controls and tab chrome are meaningless on paper — every tab is printed in full. */
+  /* Interactive chrome has no meaning on paper. */
   .jb-no-print,
-  [role='tablist'] {
+  [role='tablist'],
+  .jb-report-overlay > section > div:first-child {
     display: none !important;
   }
 
-  /* Two columns, stated outright. The lg: breakpoint the screen layout uses is 1024px and the
-     A4 landscape content area is ~1031px, so whether blocks paired up came down to the margin
-     and scale chosen in the print dialog — one notch either way and every block fell into a
-     single column with half the sheet blank. */
+  /* ── Masthead ── ticket, title, and the verdict as a line of type rather than a pill. */
+  .jb-report-overlay > section > header {
+    padding: 0 0 8px 0 !important;
+    border-bottom: 1.5px solid var(--ink) !important;
+    margin-bottom: 10px !important;
+    display: block !important;
+  }
+  .jb-report-overlay h2 {
+    font-size: 17px !important;
+    line-height: 1.25 !important;
+    letter-spacing: -0.01em;
+    margin: 3px 0 4px !important;
+  }
+  .jb-report-overlay header p {
+    font-size: 10.5px !important;
+    line-height: 1.55 !important;
+    max-width: 62em;
+  }
+  /* "measured" / "AI-enriched" is workflow provenance — it belongs on screen, not in the masthead
+     of a document going to someone who just wants the answer. */
+  .jb-report-overlay > section > header [title*='Computed directly'],
+  .jb-report-overlay > section > header [title*='Concluded by'],
+  .jb-report-overlay > section > header [title*='Could not be verified'] {
+    display: none !important;
+  }
+
+  /* ── Figures strip ── plain measurements under a rule, not tinted cards. */
+  .jb-report-stats {
+    padding: 0 0 8px 0 !important;
+    border-bottom: 1px solid var(--line) !important;
+    margin-bottom: 2px !important;
+    gap: 0 !important;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* ── Tab sections ── a small caps heading with a hairline, then its blocks. */
+  [role='tabpanel'] {
+    padding: 0 !important;
+  }
+  .jb-print-tab {
+    margin-top: 13px !important;
+  }
+  .jb-print-tab > h3 {
+    font-size: 8.5px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted) !important;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 3px;
+    margin: 0 0 7px !important;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .jb-print-tab > h3 span {
+    display: none !important;
+  }
+
   .jb-blocks {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
-    gap: 7px !important;
+    gap: 9px !important;
     align-items: start;
   }
   .jb-block-full {
     grid-column: 1 / -1 !important;
   }
 
-  /* Tabs flow into each other instead of each claiming a fresh sheet. A tab holding two short
-     blocks was costing a whole page. Blocks still never split across the fold, and a heading
-     never strands itself at the bottom of one. */
-  .jb-print-tab {
-    margin-top: 10px !important;
-  }
-  .jb-print-tab > h3 {
-    break-after: avoid;
-    page-break-after: avoid;
-    margin-bottom: 5px !important;
-  }
+  /* A section is never split. If it does not fit alongside what is already on the page it moves
+     to the next one whole — a half table continued overleaf is worse than a shorter page. */
   [role='tabpanel'] section,
   tr {
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  /* Tables and card grids are the tall blocks; letting them flow across the fold is what keeps
-     the previous page full. Rows still stay whole and the header repeats on each page. */
-  [role='tabpanel'] section.jb-breakable {
-    break-inside: auto;
-    page-break-inside: auto;
-  }
   thead {
     display: table-header-group;
   }
 
-  /* Screen padding is generous on purpose; on paper it is just margin inside a margin. */
-  [role='tabpanel'] {
-    padding: 6px 0 0 0 !important;
+  /* ── Blocks ── drop the card. An accent rule on the left carries the tone. */
+  [role='tabpanel'] section {
+    border: 0 !important;
+    border-left: 2.5px solid currentColor !important;
+    border-radius: 0 !important;
+    padding-left: 8px !important;
+    background: none !important;
   }
-  .jb-report-overlay > section > header {
-    padding: 0 0 6px 0 !important;
+  [role='tabpanel'] section > div:first-child {
+    background: none !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--line) !important;
+    padding: 0 0 3px 0 !important;
+    margin-bottom: 5px !important;
   }
-  .jb-report-overlay > section > footer,
-  .jb-report-stats {
+  [role='tabpanel'] section > div:first-child span:first-child {
+    display: none !important;
+  }
+  [role='tabpanel'] section > div:first-child > span:nth-child(2) {
+    font-size: 10px !important;
+    letter-spacing: 0.02em;
+  }
+  /* Provenance chips are workflow metadata, not something a reader needs on paper. */
+  [role='tabpanel'] section > div:first-child > span:last-child {
+    display: none !important;
+  }
+  /* Tone tints are set as inline styles, so they need reaching at every depth — a filled panel is
+     the single thing that makes this read as a web card rather than a page. The left accent rule
+     already carries the same information. */
+  [role='tabpanel'] section div,
+  [role='tabpanel'] section dl,
+  [role='tabpanel'] section ol,
+  [role='tabpanel'] section ul {
+    background: none !important;
+  }
+  [role='tabpanel'] section > div {
     padding-left: 0 !important;
     padding-right: 0 !important;
   }
-  .jb-report-stats {
-    break-after: avoid;
-    page-break-after: avoid;
+
+  /* ── Tables ── hairlines only; tone survives as a left edge on the row that failed. */
+  [role='tabpanel'] table {
+    font-size: 10px !important;
   }
-  .jb-report-overlay h2 {
-    margin-top: 2px !important;
+  [role='tabpanel'] th {
+    font-size: 8px !important;
+    letter-spacing: 0.1em;
+    border-bottom: 1px solid var(--ink-soft) !important;
+    padding: 0 8px 3px 0 !important;
+  }
+  [role='tabpanel'] td {
+    padding: 3.5px 8px 3.5px 0 !important;
+    border-bottom: 1px solid var(--line) !important;
+  }
+  [role='tabpanel'] tbody tr {
+    background: none !important;
+  }
+
+  /* ── Footer ── a colophon line, not a toolbar. */
+  .jb-report-overlay > section > footer {
+    padding: 7px 0 0 0 !important;
+    margin-top: 14px !important;
+    border-top: 1px solid var(--line) !important;
+    font-size: 8.5px !important;
+    color: var(--muted) !important;
   }
 }
