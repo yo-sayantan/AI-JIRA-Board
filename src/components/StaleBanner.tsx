@@ -44,19 +44,24 @@ export function StaleBanner({
 
             <div className="ml-auto flex items-center gap-2">
               <motion.button
-                whileHover={{ scale: 1.04, y: -1 }}
                 whileTap={{ scale: 0.96 }}
+                transition={{ type: 'spring', stiffness: 600, damping: 30 }}
                 onClick={onRefresh}
                 disabled={refreshing}
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-bold text-white shadow-md disabled:opacity-60"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12px] font-bold text-white shadow-md transition-[filter] hover:brightness-105 disabled:opacity-60"
                 style={{ background: 'linear-gradient(135deg, #ef4444, #f97316)' }}
               >
                 <span className={`inline-flex ${refreshing ? 'animate-spin' : ''}`}>
-                  <RefreshIcon size={14} color="#fff" />
+                  <RefreshIcon size={12} color="#fff" />
                 </span>
                 {refreshing ? 'Refreshing…' : served ? 'Refresh now' : 'Reload'}
               </motion.button>
-              <button onClick={() => setDismissed(true)} className="grid h-7 w-7 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]" title="Dismiss" aria-label="Dismiss">
+              <button
+                onClick={() => setDismissed(true)}
+                className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
+                title="Dismiss"
+                aria-label="Dismiss"
+              >
                 ✕
               </button>
             </div>

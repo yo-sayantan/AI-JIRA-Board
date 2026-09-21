@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ReportScope } from '../lib/runner'
 import { hexToRgba } from '../lib/format'
 import { SparkleIcon } from './Icons'
+import { ToolButton, useDismiss } from './toolbar'
 
 const AI = '#a855f7'
 
@@ -64,25 +65,8 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
   const [key, setKey] = useState('')
   const wrapRef = useRef<HTMLDivElement>(null)
   const busy = generating.size
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey, true)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey, true)
-    }
-  }, [open])
+  const close = useCallback(() => setOpen(false), [])
+  useDismiss(wrapRef, open, close)
 
   const thisYear = useMemo(() => new Date().getFullYear(), [])
   const run = (target: ReportScope) => {
@@ -93,34 +77,33 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
 
   return (
     <div className="relative" ref={wrapRef}>
-      {/* Same 9×9 icon button as Help / theme — the count lives in the tooltip so the control stays
-          a single glyph, and the glyph itself becomes the progress indicator while work is queued. */}
-      <motion.button
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.9 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-        onClick={() => setOpen((o) => !o)}
-        aria-label={busy ? `Generating ${busy} PR readiness report${busy === 1 ? '' : 's'} — open report options` : 'Generate PR readiness reports'}
-        aria-expanded={open}
+      {/* The same 32px control as every other toolbar item — a monochrome glyph at rest, and the
+          AI violet only while work is queued, when the glyph itself becomes the progress ring. */}
+      <ToolButton
+        label={busy ? `Generating ${busy} PR readiness report${busy === 1 ? '' : 's'} — open report options` : 'Generate PR readiness reports'}
         title={
           busy
             ? `${busy} PR readiness report${busy === 1 ? '' : 's'} generating in the background — click for options`
             : 'Generate PR Readiness Reports — all tickets with a pull request, a time window, or one ticket'
         }
-        className="grid h-9 w-9 place-items-center rounded-xl border bg-[var(--surface-solid)] card-shadow hover:border-[var(--muted)]"
-        style={{ borderColor: busy ? hexToRgba(AI, 0.5) : 'var(--line)' }}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        pressed={open}
+        busy={busy > 0}
+        style={busy ? { borderColor: hexToRgba(AI, 0.55) } : undefined}
       >
-        {busy ? <LoadingRing size={16} color={AI} /> : <SparkleIcon size={16} color={AI} />}
-      </motion.button>
+        {busy ? <LoadingRing size={16} color={AI} /> : <SparkleIcon size={12} color="currentColor" />}
+      </ToolButton>
 
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.97 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className="absolute right-0 z-50 mt-2 w-[330px] origin-top-right overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] shadow-2xl"
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+            className="absolute right-0 top-[calc(100%+6px)] z-50 w-[330px] origin-top-right overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] shadow-2xl"
             role="menu"
           >
             <div className="border-b border-[var(--line)] px-3.5 py-2.5" style={{ background: hexToRgba(AI, 0.07) }}>
