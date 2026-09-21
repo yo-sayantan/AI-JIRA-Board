@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { ReportScope } from '../lib/runner'
+import type { AiEnrichmentState, ReportScope } from '../lib/runner'
 import { hexToRgba } from '../lib/format'
 import { SparkleIcon } from './Icons'
 import { ToolButton, useDismiss } from './toolbar'
@@ -56,9 +56,11 @@ export interface ReportsMenuProps {
   reportCount: number
   onBulk: (target: ReportScope, force: boolean) => void
   onOne: (key: string) => void
+  /** Whether the server can run the AI pass — when it can't, the menu says the reports will be deterministic. */
+  aiEnrichment?: AiEnrichmentState | null
 }
 
-export function ReportsMenu({ served, generating, withPrCount, reportCount, onBulk, onOne }: ReportsMenuProps) {
+export function ReportsMenu({ served, generating, withPrCount, reportCount, onBulk, onOne, aiEnrichment }: ReportsMenuProps) {
   const [open, setOpen] = useState(false)
   const [force, setForce] = useState(false)
   const [since, setSince] = useState(() => daysAgo(30))
@@ -114,6 +116,11 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
                 {reportCount} of {withPrCount} tickets with a pull request have a report.
                 {busy > 0 ? ` ${busy} in progress.` : ''}
               </div>
+              {served && aiEnrichment && !aiEnrichment.available && (
+                <div className="mt-1 text-[10.5px] font-semibold text-[#b45309]">
+                  Generated without AI from here — Settings → AI usage explains how to enrich them.
+                </div>
+              )}
             </div>
 
             {!served ? (

@@ -32,8 +32,21 @@ export interface InternProgress {
   updatedAt?: string
 }
 
+/**
+ * Whether the server that generates PR Readiness Reports can run the AI enrichment pass at all.
+ * Fixed for the life of the process: it is about environment flags and installed binaries.
+ */
+export interface AiEnrichmentState {
+  available: boolean
+  /** disabled = SKIP_SUMMARY / SKIP_REPORT_AI is set (the Docker image) · no-agent = agent CLI not installed. */
+  reason?: 'disabled' | 'no-agent'
+  detail?: string
+}
+
 export interface InternStatus {
   running: boolean
+  /** Can the AI enrichment pass run where this server lives? Absent from older servers. */
+  aiEnrichment?: AiEnrichmentState
   /** Which writer is busy: the fast daily fetch, the deep archive rebuild, or a terminal-launched run. */
   job?: 'daily' | 'archive' | 'external' | null
   lastExit: number | null

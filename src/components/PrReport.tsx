@@ -11,6 +11,7 @@ import type {
 } from '../lib/reportTypes'
 import { toneColor, worstTone } from '../lib/reportTypes'
 import { fmtDateTime, hexToRgba } from '../lib/format'
+import type { AiEnrichmentState } from '../lib/runner'
 import { SafeHtml } from './ui'
 import { PrinterIcon, RefreshIcon, SparkleIcon } from './Icons'
 import { PrReportPrintDoc } from './PrReportPrint'
@@ -25,13 +26,17 @@ export function PrReportOverlay({
   onClose,
   onRegenerate,
   generating,
+  aiEnrichment,
 }: {
   report: PrReport | null
   onClose: () => void
   /** Served mode only — kicks off a background regeneration. */
   onRegenerate?: (key: string) => void
   generating?: boolean
+  /** Whether the server can run the AI pass; explains a deterministic-only report in the footer. */
+  aiEnrichment?: AiEnrichmentState | null
 }) {
+  const aiBlocked = !!aiEnrichment && !aiEnrichment.available
   const [tabId, setTabId] = useState<string | null>(null)
   // Reset to the first tab whenever a different report opens.
   useEffect(() => {
@@ -167,7 +172,11 @@ export function PrReportOverlay({
                       onClick={() => !generating && onRegenerate(report.key)}
                       disabled={!!generating}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-solid)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink-soft)] hover:border-[var(--muted)] disabled:opacity-60"
-                      title="Rebuild this report in the background (deterministic base + AI enrichment)"
+                      title={
+                        aiBlocked
+                          ? 'Rebuild the deterministic base in the background — the AI pass cannot run where this board is served (see the note at the foot of the report)'
+                          : 'Rebuild this report in the background (deterministic base + AI enrichment)'
+                      }
                     >
                       <motion.span className="inline-flex" animate={generating ? { rotate: 360 } : { rotate: 0 }} transition={generating ? { repeat: Infinity, duration: 0.9, ease: 'linear' } : { duration: 0.2 }}>
                         <RefreshIcon size={12} color="currentColor" />
@@ -252,6 +261,17 @@ export function PrReportOverlay({
               {report.sources && <span className="min-w-0 truncate">Sources: {report.sources}</span>}
               {report.warnings && report.warnings.length > 0 && (
                 <span className="basis-full text-[#b45309]">⚠ {report.warnings.join(' · ')}</span>
+              )}
+              {/* The generic warning above says WHAT is missing; when we know the AI pass cannot run
+                  from this server, also say WHY and what to run — otherwise "regenerate" looks broken. */}
+              {!report.enriched && aiBlocked && (
+                <span className="basis-full text-[var(--ink-soft)]">
+                  Why deterministic: {aiEnrichment?.detail} To enrich this report, run on your own machine{' '}
+                  <code className="rounded bg-[var(--surface-2)] px-1.5 py-[1px] font-mono text-[10.5px] text-[var(--ink)]">
+                    bash jira-intern/local-runner/pr-report.sh {report.key}
+                  </code>{' '}
+                  — it writes to the same reports folder and shows here on the next poll.
+                </span>
               )}
             </footer>
           </motion.section>

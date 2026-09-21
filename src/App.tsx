@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { loadData, loadArchivedKeys, persistArchivedKeys } from './data'
 import { completedToTicket, type ColumnKey, type Ticket } from './types'
-import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, startBulkReportGeneration, saveServerSettings, type PrReportsIndex, type ReportScope } from './lib/runner'
+import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, startBulkReportGeneration, saveServerSettings, type AiEnrichmentState, type PrReportsIndex, type ReportScope } from './lib/runner'
 import type { PrReport } from './lib/reportTypes'
 import { PrReportOverlay } from './components/PrReport'
 import { Header } from './components/Header'
@@ -76,6 +76,8 @@ export default function App() {
   const [reportsGenerating, setReportsGenerating] = useState<Set<string>>(new Set())
   const [openReport, setOpenReport] = useState<PrReport | null>(null)
   const [reportLoadingKey, setReportLoadingKey] = useState<string | null>(null)
+  // Can the server run the AI enrichment pass? null until known (or on file://, where it can't apply).
+  const [aiEnrichment, setAiEnrichment] = useState<AiEnrichmentState | null>(null)
 
   // Stable handlers so the panel/overlay effects mount once (no churn).
   // openTicket = fresh open (from the board/on-hold/completed); pushTicket = drill
@@ -265,6 +267,14 @@ export default function App() {
     if (!served) return
     void saveServerSettings({ aiLevel: settings.aiLevel })
   }, [served, settings.aiLevel])
+
+  // Whether the server can run the AI enrichment pass is fixed for the life of the process (env
+  // flags and installed binaries), so one read on mount is enough. The Settings panel and the
+  // report overlay use it to say WHY a report stayed deterministic and what to run instead.
+  useEffect(() => {
+    if (!served) return
+    void getInternStatus().then((s) => setAiEnrichment(s?.aiEnrichment ?? null))
+  }, [served])
 
   // The header's sun/moon flips the theme directly; doing so pins it, since "auto" or a schedule
   // would otherwise override the click on the next evaluation.
@@ -675,6 +685,7 @@ export default function App() {
                 reportCount: Object.keys(reportsIndex?.reports ?? {}).length,
                 onBulk: handleBulkReports,
                 onOne: handleGenerateReport,
+                aiEnrichment,
               }
             : undefined
         }
@@ -686,6 +697,7 @@ export default function App() {
         onChange={setSettings}
         onClose={() => setSettingsOpen(false)}
         aiLevelSynced={served}
+        aiEnrichment={aiEnrichment}
       />
 
       {fr.stale && <StaleBanner label={fr.label} served={served} refreshing={refreshing} onRefresh={handleRefresh} />}
@@ -804,6 +816,7 @@ export default function App() {
         onClose={() => setOpenReport(null)}
         onRegenerate={served ? handleGenerateReport : undefined}
         generating={openReport ? reportsGenerating.has(openReport.key) : false}
+        aiEnrichment={aiEnrichment}
       />
 
       <NoticesDock notes={data.notes ?? []} />

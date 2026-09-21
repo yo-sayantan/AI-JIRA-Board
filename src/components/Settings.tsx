@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { AI_LEVELS, FEATURES, type FeatureKey, type Settings, type ThemeMode } from '../lib/settings'
+import type { AiEnrichmentState } from '../lib/runner'
 import { hexToRgba } from '../lib/format'
 import { CalendarIcon, DocIcon, MoonIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from './Icons'
 
@@ -21,6 +22,7 @@ export function SettingsPanel({
   onChange,
   onClose,
   aiLevelSynced,
+  aiEnrichment,
 }: {
   open: boolean
   settings: Settings
@@ -28,6 +30,8 @@ export function SettingsPanel({
   onClose: () => void
   /** false when the AI level is local-only because there is no server to tell. */
   aiLevelSynced: boolean
+  /** Whether the server can run the AI pass at all; null while unknown or on file://. */
+  aiEnrichment?: AiEnrichmentState | null
 }) {
   useEffect(() => {
     if (!open) return
@@ -130,11 +134,7 @@ export function SettingsPanel({
                     <AiChoice key={l.key} level={l} active={settings.aiLevel === l.key} onClick={() => set('aiLevel', l.key)} />
                   ))}
                 </div>
-                <p className="mt-2 text-[11px] text-[var(--muted)]">
-                  {aiLevelSynced
-                    ? 'Applies to PR Readiness Report generation on the next run.'
-                    : 'Saved on this device only — without the local server the fetch scripts cannot be told, so they keep their configured level.'}
-                </p>
+                <AiAvailabilityNote synced={aiLevelSynced} state={aiEnrichment} />
               </Section>
             </div>
           </motion.section>
@@ -142,6 +142,37 @@ export function SettingsPanel({
       )}
     </AnimatePresence>
   )
+}
+
+/**
+ * What the chosen AI level will actually do. Where the board is served from a place that cannot
+ * run the agent — the Docker container, or a machine without the CLI — say so plainly and give the
+ * command that enriches reports from the user's own machine, rather than letting a report's
+ * "needs the AI enrichment pass" note look like a bug in the setting.
+ */
+function AiAvailabilityNote({ synced, state }: { synced: boolean; state?: AiEnrichmentState | null }) {
+  if (!synced) {
+    return (
+      <p className="mt-2 text-[11px] text-[var(--muted)]">
+        Saved on this device only — without the local server the fetch scripts cannot be told, so they keep their configured level.
+      </p>
+    )
+  }
+  if (state && !state.available) {
+    const AMBER = '#f59e0b'
+    return (
+      <div className="mt-2.5 rounded-lg border px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ borderColor: hexToRgba(AMBER, 0.5), background: hexToRgba(AMBER, 0.1) }}>
+        <div className="font-bold text-[#b45309]">AI enrichment can’t run where this board is served</div>
+        <p className="mt-0.5 text-[var(--ink-soft)]">
+          {state.detail} Reports generated from here stay deterministic whatever level is chosen — the “needs the AI enrichment pass” note on a report is accurate, not a fault.
+        </p>
+        <p className="mt-1.5 text-[var(--ink-soft)]">The level still governs runs on your own machine, where the agent is signed in. To enrich every report that is still deterministic-only:</p>
+        <code className="mt-1 block rounded bg-[var(--surface-2)] px-2 py-1 font-mono text-[10.5px] text-[var(--ink)]">bash jira-intern/local-runner/pr-reports-backfill.sh --needs-ai</code>
+        <p className="mt-1 text-[var(--muted)]">Enriched reports land in the same jira-intern/reports folder this board reads, so they show up here on the next poll.</p>
+      </div>
+    )
+  }
+  return <p className="mt-2 text-[11px] text-[var(--muted)]">Applies to PR Readiness Report generation on the next run.</p>
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

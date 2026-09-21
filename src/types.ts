@@ -102,6 +102,11 @@ export interface Ticket {
   subtaskCount?: number | null
   url?: string | null
   sprint?: string | null
+  /**
+   * Every sprint the ticket has been in, oldest → newest (names only). More than one means the
+   * work spilled over from an earlier sprint — the board outlines those cards in red.
+   */
+  sprints?: string[]
   reporter?: string | null
   assignee?: string | null
   epic?: LinkRef | null
@@ -169,6 +174,8 @@ export interface CompletedTicket {
   // ── optional richer detail for the full detail page (may be sparse) ──
   lastUpdate?: string | null
   sprint?: string | null
+  /** Every sprint the ticket has been in, oldest → newest — see Ticket.sprints. */
+  sprints?: string[]
   reporter?: string | null
   assignee?: string | null
   epic?: LinkRef | null

@@ -306,6 +306,28 @@ const PORT = Number(process.env.PORT) || (await configuredPort())
 // sets BIND_HOST=0.0.0.0 so the board is reachable via the published port.
 const HOST = process.env.BIND_HOST || '127.0.0.1'
 
+// Can THIS server run the AI enrichment pass for PR Readiness Reports? Mirrors the gates in
+// local-runner/pr-report.sh, so the board can say up front why a report stays deterministic
+// instead of leaving the reader a "needs the AI pass" note beside a setting that changes nothing.
+function aiEnrichmentState() {
+  if (process.env.SKIP_SUMMARY || process.env.SKIP_REPORT_AI) {
+    return {
+      available: false,
+      reason: 'disabled',
+      detail:
+        'AI is switched off for this server (SKIP_SUMMARY is set — the Docker image does this because the container carries no agent CLI or login).',
+    }
+  }
+  const bin = process.env.AGENT_BIN || 'cursor-agent'
+  const dirs = (process.env.PATH || '').split(':').filter(Boolean)
+  const candidates = [...dirs.map((d) => join(d, bin)), join(homedir(), '.local', 'bin', bin)]
+  if (!candidates.some((p) => existsSync(p))) {
+    return { available: false, reason: 'no-agent', detail: `The agent CLI (${bin}) is not installed where this server runs.` }
+  }
+  return { available: true }
+}
+const AI_ENRICHMENT = aiEnrichmentState()
+
 let running = false
 let archiveRunning = false
 let lastExit = null
@@ -569,6 +591,8 @@ const server = createServer(async (req, res) => {
       // PR Readiness Reports in flight: this server's queue ∪ cron/terminal generations.
       reportsGenerating: [...new Set([...reportPendingKeys(), ...(await externalGenerating())])],
       reportExits: Object.fromEntries(reportExits),
+      // Whether the AI enrichment pass can run here at all (env + installed agent CLI).
+      aiEnrichment: AI_ENRICHMENT,
     })
   }
 

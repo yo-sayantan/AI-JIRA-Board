@@ -255,6 +255,30 @@ def parse_sprint(raw):
     return str(raw)
 
 
+def parse_sprints(raw):
+    """Every sprint the issue has been in, oldest → newest (names only).
+
+    Jira keeps the whole history in customfield_10404; parse_sprint() keeps just the current
+    one. Two or more names mean the work spilled over from an earlier sprint — the board outlines
+    those cards in red. Handles both the legacy "Sprint@…[…,name=X,…]" strings and object form.
+    """
+    if not raw:
+        return []
+    names = []
+    for it in raw if isinstance(raw, list) else [raw]:
+        if isinstance(it, dict):
+            name = it.get("name")
+        elif isinstance(it, str):
+            m = re.search(r"name=([^,\]]+)", it)
+            name = m.group(1) if m else it
+        else:
+            name = str(it)
+        name = (name or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
 def ac_list(raw):
     if not raw:
         return []
@@ -654,6 +678,7 @@ def build_basic_subtask(si, parent_key):
         "lastUpdate": iso(sf.get("updated")),
         "resolved": iso(sf.get("resolutiondate")) or (changelog_done_date(si.get("changelog")) if col == "done" else None),
         "sprint": parse_sprint(sf.get("customfield_10404")),
+        "sprints": parse_sprints(sf.get("customfield_10404")),
         "commentCount": (sf.get("comment") or {}).get("total"),
         "branch": None,
         "branches": [],
@@ -700,6 +725,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         if ticket.get("resolved") and column != "done":
             ticket["resolved"] = None  # self-heal: a reopened ticket must not keep a resolved date
         ticket["sprint"] = parse_sprint(f.get("customfield_10404"))
+        ticket["sprints"] = parse_sprints(f.get("customfield_10404"))
         return refresh_prs_only(ticket, key)
 
     inline = comments_from_issue(f)
@@ -765,6 +791,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         "onHold": on_hold,
         "url": f"{JIRA_BASE}/browse/{key}",
         "sprint": parse_sprint(f.get("customfield_10404")),
+        "sprints": parse_sprints(f.get("customfield_10404")),
         "reporter": person_fmt(f.get("reporter")),
         "assignee": person_fmt(f.get("assignee")),
         "epic": epic,

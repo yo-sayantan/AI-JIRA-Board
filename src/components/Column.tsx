@@ -43,7 +43,9 @@ export function Column({
         className="relative rounded-2xl border border-dashed p-2"
         style={{ borderColor: hexToRgba(meta.accent, 0.22), background: hexToRgba(meta.accent, 0.04) }}
       >
-        <div className="flex flex-col gap-2">
+        {/* Cards tile on a grid of equal cells: one per row in the normal five-column board, several
+            per row when a single column is focused — so a card is the same size either way. */}
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-2">
           <AnimatePresence mode="popLayout" initial={false}>
             {tickets.map((t) => (
               <TicketCard
@@ -62,7 +64,7 @@ export function Column({
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex items-center justify-center rounded-lg py-6 text-[11px] italic text-[var(--muted)]"
+              className="col-span-full flex items-center justify-center rounded-lg py-6 text-[11px] italic text-[var(--muted)]"
             >
               Nothing here
             </motion.div>
