@@ -21,14 +21,14 @@ Then open **http://localhost:4321/dist/index.html**.
 
 ### What that does
 
-`docker-compose.yml` builds the image from the `Dockerfile` (stage 1 compiles `dist/index.html`;
-stage 2 runs `serve.mjs` + the Python fetch) and starts a container named `jira-board`:
+`docker-compose.yml` builds the board image and starts **JIRA-Board**, **JIRA-AI-Ollama**, and
+**JIRA-AI-Intern**:
 
 - Mounts your secrets read-only: `~/.cursor/mcp-secrets.env → /root/.cursor/mcp-secrets.env:ro`.
 - `REFRESH_ON_START=1` — fetches once on boot.
 - `REFRESH_INTERVAL=900` — re-fetches every 15 min (set `0` to disable).
-- `SKIP_SUMMARY=1` — deterministic fetch, **no LLM**, so no connector API key is needed.
-- Persists data on the host via the `./jira-intern` volume.
+- `SKIP_SUMMARY=1` — no LLM in the **fetch** container. Report AI is owned by JIRA-AI-Intern.
+- Persists data on the host via the `./jira-intern` volume; models on `jira-ai-models`.
 
 ### Everyday commands
 
@@ -112,8 +112,9 @@ bash jira-intern/local-runner/pr-reports-backfill.sh --force        # rebuild ev
 ```
 
 Output: `jira-intern/reports/<KEY>.json` (+ `reports/index.js` for `file://`). **Git-ignored** — real
-PR/Jira content never leaves the machine. In Docker the container runs the deterministic pass only
-(`SKIP_SUMMARY=1`); run the AI enrichment from your Mac, where `cursor-agent` and its MCP servers live.
+PR/Jira content never leaves the machine. Docker writes the deterministic base in JIRA-Board, then
+enqueues enrichment for JIRA-AI-Intern when Settings is not None. Download a local model from
+Settings, or `docker exec JIRA-AI-Ollama ollama pull qwen2.5-coder:7b`.
 
 ---
 

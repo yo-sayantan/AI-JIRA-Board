@@ -190,6 +190,9 @@ function shellenv() {
   // The board's Settings panel writes jira-intern/.settings.json; it overrides config.json so a
   // UI change takes effect without editing (or exposing) the user's personal config file.
   out.push(`REPORTS_AI_LEVEL=${shq(boardSettings().aiLevel ?? cfg.reports?.aiLevel ?? 'moderate')}`)
+  out.push(`AI_BACKEND=${shq(boardSettings().aiBackend ?? 'local')}`)
+  out.push(`AI_LOCAL_MODEL=${shq(boardSettings().aiLocalModel ?? 'qwen2.5-coder:7b')}`)
+  out.push(`AI_USE_HOST_OLLAMA=${shq(boardSettings().aiUseHostOllama ? 1 : 0)}`)
   return out.join('\n')
 }
 

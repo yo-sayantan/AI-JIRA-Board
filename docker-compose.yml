@@ -21,7 +21,8 @@ services:
       PORT: "4321"
       REFRESH_ON_START: "1"     # fetch once the moment the container starts
       REFRESH_INTERVAL: "900"   # ...then re-fetch every 15 min (0 = off)
-      SKIP_SUMMARY: "1"         # no LLM agent in the container; deterministic fetch only
+      SKIP_SUMMARY: "1"         # no LLM in this container; AI jobs go to jira-ai
+      AI_INTERN_URL: http://jira-ai:4322
     volumes:
       # Tokens: reuse your existing connector secrets file, read-only. It just needs
       # JIRA_PERSONAL_TOKEN (and optionally BITBUCKET_PAT / ATLASSIAN_TOKEN).
@@ -37,6 +38,8 @@ services:
       # Persist fetched data on the host (and reuse your current dump). Remove this
       # line for a fully self-contained, ephemeral container that uses the baked data.
       - ./jira-intern:/app/jira-intern
+    depends_on:
+      - jira-ai
     restart: unless-stopped
     # If auto-refresh / archive logs show "Name or service not known" for
     # your Jira host, Docker's DNS proxy is flapping (common with VPN).
@@ -47,3 +50,38 @@ services:
     # Alternative to the secrets mount above — pass tokens directly instead:
     # env_file:
     #   - .env
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: JIRA-AI-Ollama
+    volumes:
+      - jira-ai-models:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+
+  jira-ai:
+    build: ./ai-intern
+    image: jira-ai-intern:latest
+    container_name: JIRA-AI-Intern
+    environment:
+      INTERN_DIR: /app/jira-intern
+      PORT: "4322"
+      OLLAMA_HOST: http://ollama:11434
+      HOST_OLLAMA_URL: http://host.docker.internal:11434
+      AGENT_SECRETS: /root/.cursor/mcp-secrets.env
+    volumes:
+      - ./jira-intern:/app/jira-intern
+      - ${HOME}/.ai/config.json:/root/.ai/config.json:ro
+      - ${HOME}/.cursor/mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+volumes:
+  jira-ai-models:

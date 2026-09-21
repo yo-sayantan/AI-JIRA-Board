@@ -7,7 +7,7 @@
 // and reloads when fresh data lands. Without the server the board still works from
 // file://; Refresh there just reloads the latest dump.
 import { createServer } from 'node:http'
-import { readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
+import { readFile, readdir, stat, unlink, writeFile, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { extname, join, normalize } from 'node:path'
@@ -158,6 +158,10 @@ const REPORT_SCRIPT = join(INTERN, 'local-runner/pr-report.sh')
 const REPORTS_DIR = join(INTERN, 'reports')
 const REPORTS_STATUS = join(REPORTS_DIR, '.status.json')
 const SETTINGS_FILE = join(INTERN, '.settings.json')
+const AI_QUEUE = join(INTERN, '.ai-queue')
+const AI_INTERN = process.env.AI_INTERN_URL || 'http://127.0.0.1:4322'
+const AI_LEVELS = ['none', 'low', 'moderate', 'full']
+const AI_BACKENDS = ['local', 'cloud']
 let reportActive = null
 const reportQueue = []
 const reportExits = new Map()
@@ -165,6 +169,115 @@ let reportPumpTimer = null
 
 function reportPendingKeys() {
   return reportActive ? [reportActive, ...reportQueue] : [...reportQueue]
+}
+
+async function readBoardSettings() {
+  try {
+    return JSON.parse(await readFile(SETTINGS_FILE, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+async function aiQueueKeys() {
+  try {
+    const names = await readdir(AI_QUEUE)
+    const keys = []
+    for (const n of names) {
+      if (!n.endsWith('.json')) continue
+      try {
+        const j = JSON.parse(await readFile(join(AI_QUEUE, n), 'utf8'))
+        if (j.type === 'enrich-report' && j.key) keys.push(String(j.key).toUpperCase())
+      } catch {}
+    }
+    return keys
+  } catch {
+    return []
+  }
+}
+
+async function enqueueEnrich(key, settings) {
+  await mkdir(AI_QUEUE, { recursive: true })
+  const id = `${Date.now()}-${key}`
+  const backend = settings.aiBackend === 'cloud' ? 'cloud' : 'local'
+  const job = {
+    id,
+    type: 'enrich-report',
+    key,
+    level: AI_LEVELS.includes(settings.aiLevel) ? settings.aiLevel : 'moderate',
+    backend,
+    model:
+      backend === 'cloud'
+        ? settings.aiCloudModel || ''
+        : settings.aiLocalModel || 'qwen2.5-coder:7b',
+    useHostOllama: !!settings.aiUseHostOllama,
+    enqueuedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+  }
+  await writeFile(join(AI_QUEUE, `${id}.json`), JSON.stringify(job, null, 2) + '\n')
+}
+
+function runPython(args) {
+  return new Promise((resolve) => {
+    try {
+      const child = spawn('python3', args, { cwd: ROOT, stdio: 'ignore' })
+      child.on('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)))
+      child.on('error', () => resolve(1))
+    } catch {
+      resolve(1)
+    }
+  })
+}
+
+async function proxyAi(req, res, destPath) {
+  try {
+    let body
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      const chunks = []
+      for await (const c of req) chunks.push(c)
+      body = Buffer.concat(chunks)
+    }
+    const r = await fetch(`${AI_INTERN}${destPath}`, {
+      method: req.method,
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    })
+    const text = await r.text()
+    res
+      .writeHead(r.status, {
+        'Content-Type': r.headers.get('content-type') || 'application/json',
+        'Cache-Control': 'no-store',
+      })
+      .end(text)
+  } catch {
+    json(res, 503, { ok: false, down: true, state: 'down', error: 'AI intern unreachable' })
+  }
+}
+
+async function localAiCatalog() {
+  try {
+    return JSON.parse(await readFile(join(ROOT, 'ai-intern/models.json'), 'utf8'))
+  } catch {
+    return { models: [], defaultLocal: 'qwen2.5-coder:7b' }
+  }
+}
+
+async function internAiStatus() {
+  const queued = await aiQueueKeys()
+  try {
+    const r = await fetch(`${AI_INTERN}/api/status`, { signal: AbortSignal.timeout(4000) })
+    const body = await r.json()
+    return { ...body, ok: body.ok !== false, queuedKeys: queued, queued: queued.length }
+  } catch {
+    return {
+      ok: false,
+      down: true,
+      state: 'down',
+      queuedKeys: queued,
+      queued: queued.length,
+      error: 'AI intern unreachable',
+      catalog: await localAiCatalog(),
+    }
+  }
 }
 
 async function pumpReportQueue() {
@@ -190,8 +303,21 @@ async function pumpReportQueue() {
     void pumpReportQueue()
   }
   try {
-    const child = spawn('bash', [REPORT_SCRIPT, key], { cwd: ROOT, stdio: 'ignore' })
-    child.on('exit', (code, signal) => done(signal ? 1 : (code ?? 1)))
+    const child = spawn('python3', [join(INTERN, 'pr_report.py'), 'base', key], { cwd: ROOT, stdio: 'ignore' })
+    child.on('exit', async (code, signal) => {
+      const exit = signal ? 1 : (code ?? 1)
+      if (exit === 0) {
+        const settings = await readBoardSettings()
+        if ((settings.aiLevel || 'moderate') !== 'none') {
+          try {
+            await enqueueEnrich(key, settings)
+          } catch (e) {
+            console.error('enqueue enrich failed', e)
+          }
+        }
+      }
+      done(exit)
+    })
     child.on('error', () => done(1))
   } catch {
     done(1)
@@ -423,10 +549,10 @@ const server = createServer(async (req, res) => {
 
   // ── PR Readiness Reports ────────────────────────────────────────────────────
   if (path === '/api/reports' && req.method === 'GET') {
-    const [reports, external] = await Promise.all([reportsIndex(), externalGenerating()])
+    const [reports, external, queued] = await Promise.all([reportsIndex(), externalGenerating(), aiQueueKeys()])
     return json(res, 200, {
       reports,
-      generating: [...new Set([...reportPendingKeys(), ...external])],
+      generating: [...new Set([...reportPendingKeys(), ...external, ...queued])],
       exits: Object.fromEntries(reportExits),
     })
   }
@@ -457,8 +583,18 @@ const server = createServer(async (req, res) => {
       return json(res, 400, { ok: false, error: 'bad json' })
     }
     const LEVELS = ['none', 'low', 'moderate', 'full']
+    const BACKENDS = ['local', 'cloud']
     if (patch.aiLevel !== undefined && !LEVELS.includes(patch.aiLevel)) {
       return json(res, 400, { ok: false, error: 'bad aiLevel' })
+    }
+    if (patch.aiBackend !== undefined && !BACKENDS.includes(patch.aiBackend)) {
+      return json(res, 400, { ok: false, error: 'bad aiBackend' })
+    }
+    if (patch.aiLocalModel !== undefined && (typeof patch.aiLocalModel !== 'string' || patch.aiLocalModel.length > 80)) {
+      return json(res, 400, { ok: false, error: 'bad aiLocalModel' })
+    }
+    if (patch.aiCloudModel !== undefined && (typeof patch.aiCloudModel !== 'string' || patch.aiCloudModel.length > 80)) {
+      return json(res, 400, { ok: false, error: 'bad aiCloudModel' })
     }
     let current = {}
     try {
@@ -466,6 +602,10 @@ const server = createServer(async (req, res) => {
     } catch {}
     const next = { ...current }
     if (patch.aiLevel !== undefined) next.aiLevel = patch.aiLevel
+    if (patch.aiBackend !== undefined) next.aiBackend = patch.aiBackend
+    if (patch.aiLocalModel !== undefined) next.aiLocalModel = patch.aiLocalModel
+    if (patch.aiCloudModel !== undefined) next.aiCloudModel = patch.aiCloudModel
+    if (patch.aiUseHostOllama !== undefined) next.aiUseHostOllama = !!patch.aiUseHostOllama
     try {
       await writeFile(SETTINGS_FILE, JSON.stringify(next, null, 2) + '\n')
     } catch (e) {
@@ -529,6 +669,32 @@ const server = createServer(async (req, res) => {
     return json(res, 202, { ok: true, queued: true, key, pending: reportPendingKeys() })
   }
 
+  if (path === '/api/ai-status' && req.method === 'GET') {
+    return json(res, 200, await internAiStatus())
+  }
+  if (path === '/api/ai-models' && req.method === 'GET') {
+    const intern = await internAiStatus()
+    if (intern.down) {
+      return json(res, 200, {
+        ok: false,
+        down: true,
+        catalog: intern.catalog || (await localAiCatalog()),
+        installed: intern.installedModels || [],
+        ollamaOk: false,
+      })
+    }
+    await proxyAi(req, res, '/api/models')
+    return
+  }
+  if (path === '/api/ai-models/pull' && req.method === 'POST') {
+    await proxyAi(req, res, '/api/models/pull')
+    return
+  }
+  if (path === '/api/ai-jobs' && req.method === 'POST') {
+    await proxyAi(req, res, '/api/jobs')
+    return
+  }
+
   if (path === '/api/intern-status') {
     let dataModified = null
     try {
@@ -567,8 +733,9 @@ const server = createServer(async (req, res) => {
       refreshExits: Object.fromEntries(refreshExits),
       progress,
       // PR Readiness Reports in flight: this server's queue ∪ cron/terminal generations.
-      reportsGenerating: [...new Set([...reportPendingKeys(), ...(await externalGenerating())])],
+      reportsGenerating: [...new Set([...reportPendingKeys(), ...(await externalGenerating()), ...(await aiQueueKeys())])],
       reportExits: Object.fromEntries(reportExits),
+      ai: await internAiStatus(),
     })
   }
 

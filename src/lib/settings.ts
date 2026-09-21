@@ -9,6 +9,7 @@
 
 export type ThemeMode = 'auto' | 'fixed' | 'schedule'
 export type AiLevel = 'none' | 'low' | 'moderate' | 'full'
+export type AiBackend = 'local' | 'cloud'
 
 export interface Settings {
   /** auto = follow the OS · fixed = always `theme` · schedule = light between the day hours. */
@@ -18,6 +19,14 @@ export interface Settings {
   dayStart: number
   dayEnd: number
   aiLevel: AiLevel
+  /** Local Ollama (in-container or host Metal) vs a cloud chat API. */
+  aiBackend: AiBackend
+  /** Ollama tag to pull/run when aiBackend is local. */
+  aiLocalModel: string
+  /** Optional override of config.json models.report when using cloud. */
+  aiCloudModel: string
+  /** Talk to Ollama.app on the Mac (Metal) instead of the Linux Docker VM (CPU). */
+  aiUseHostOllama: boolean
   features: Record<FeatureKey, boolean>
 }
 
@@ -79,11 +88,41 @@ export const FEATURES = [
 
 export type FeatureKey = (typeof FEATURES)[number]['key']
 
-export const AI_LEVELS: { key: AiLevel; label: string; hint: string }[] = [
-  { key: 'none', label: 'None', hint: 'No agent at all — reports stay deterministic' },
-  { key: 'low', label: 'Low', hint: 'Agent runs, short leash — fastest and cheapest' },
-  { key: 'moderate', label: 'Moderate', hint: 'Balanced depth and cost (default)' },
-  { key: 'full', label: 'Full', hint: 'Maximum intelligence and time per ticket' },
+export const AI_LEVELS: {
+  key: AiLevel
+  label: string
+  hint: string
+  plus: string[]
+  cons: string[]
+}[] = [
+  {
+    key: 'none',
+    label: 'None',
+    hint: 'Base report only — no intern',
+    plus: ['Instant and free', 'Verdict stays deterministic', 'Works even if the intern is down'],
+    cons: ['No business-impact write-up', 'No per-file review notes'],
+  },
+  {
+    key: 'low',
+    label: 'Low',
+    hint: 'Short timeout — fastest pass',
+    plus: ['Quick on nano / mini models', 'Cheapest cloud option', 'Unblocks the queue sooner'],
+    cons: ['Shallow file notes', 'May skip longer diffs'],
+  },
+  {
+    key: 'moderate',
+    label: 'Moderate',
+    hint: 'Balanced depth (default)',
+    plus: ['Solid JSON follow-through', 'Fits 7B local models', 'Sensible wait vs quality'],
+    cons: ['Slower than Low', 'Still skips live CI / scan proof'],
+  },
+  {
+    key: 'full',
+    label: 'Max',
+    hint: 'Longest timeout — deepest pass',
+    plus: ['Best local / cloud quality', 'Room for 14B+ models', 'Richer file and risk notes'],
+    cons: ['Slowest, especially on CPU', 'Burns the most cloud tokens'],
+  },
 ]
 
 const DEFAULT_FEATURES = Object.fromEntries(FEATURES.map((f) => [f.key, f.default])) as Record<FeatureKey, boolean>
@@ -94,6 +133,10 @@ export const DEFAULT_SETTINGS: Settings = {
   dayStart: 7,
   dayEnd: 19,
   aiLevel: 'moderate',
+  aiBackend: 'local',
+  aiLocalModel: 'qwen2.5-coder:7b',
+  aiCloudModel: '',
+  aiUseHostOllama: false,
   features: DEFAULT_FEATURES,
 }
 

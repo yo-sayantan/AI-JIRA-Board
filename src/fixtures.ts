@@ -104,6 +104,8 @@ export const fixture: JiraData = {
       created: '2026-06-18T09:00:00Z',
       url: 'https://jira.example.com/browse/PROJ-6048',
       sprint: 'PROJ 89_2026 (active · 2026-06-24 → 2026-07-08)',
+      sprintOverflow: true,
+      sprintCount: 2,
       reporter: 'Nookala, Srividya',
       assignee: 'Alex Doe (DEV001)',
       epic: { key: 'PROJ-5999', url: 'https://jira.example.com/browse/PROJ-5999', relation: 'epic' },

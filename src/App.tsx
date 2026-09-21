@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { loadData, loadArchivedKeys, persistArchivedKeys } from './data'
 import { completedToTicket, type ColumnKey, type Ticket } from './types'
-import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, startBulkReportGeneration, saveServerSettings, type PrReportsIndex, type ReportScope } from './lib/runner'
+import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, startBulkReportGeneration, saveServerSettings, type PrReportsIndex, type ReportScope, type AiInternStatus } from './lib/runner'
 import type { PrReport } from './lib/reportTypes'
 import { PrReportOverlay } from './components/PrReport'
 import { Header } from './components/Header'
@@ -76,6 +76,7 @@ export default function App() {
   const [reportsGenerating, setReportsGenerating] = useState<Set<string>>(new Set())
   const [openReport, setOpenReport] = useState<PrReport | null>(null)
   const [reportLoadingKey, setReportLoadingKey] = useState<string | null>(null)
+  const [aiStatus, setAiStatus] = useState<AiInternStatus | null>(null)
 
   // Stable handlers so the panel/overlay effects mount once (no churn).
   // openTicket = fresh open (from the board/on-hold/completed); pushTicket = drill
@@ -148,6 +149,18 @@ export default function App() {
     timer = setTimeout(tick, 4000)
     return () => clearTimeout(timer)
   }, [served, refreshReportsIndex, settings.features.prReports, settings.features.autoRefresh])
+
+  useEffect(() => {
+    if (!served) return
+    let timer: ReturnType<typeof setTimeout>
+    const tick = async () => {
+      const s = await getInternStatus()
+      if (s?.ai) setAiStatus(s.ai)
+      timer = setTimeout(tick, s?.ai?.state === 'working' || s?.ai?.state === 'pulling' ? 3000 : 12000)
+    }
+    void tick()
+    return () => clearTimeout(timer)
+  }, [served])
 
   const handleOpenReport = useCallback(
     async (key: string) => {
@@ -260,11 +273,17 @@ export default function App() {
     setDark(resolveDark(settings))
   }, [now, settings])
 
-  // Mirror the AI level to the server so the shell runners see it (served mode only).
+  // Mirror intern-facing settings to the server so JIRA-AI-Intern jobs honour them.
   useEffect(() => {
     if (!served) return
-    void saveServerSettings({ aiLevel: settings.aiLevel })
-  }, [served, settings.aiLevel])
+    void saveServerSettings({
+      aiLevel: settings.aiLevel,
+      aiBackend: settings.aiBackend,
+      aiLocalModel: settings.aiLocalModel,
+      aiCloudModel: settings.aiCloudModel,
+      aiUseHostOllama: settings.aiUseHostOllama,
+    })
+  }, [served, settings.aiLevel, settings.aiBackend, settings.aiLocalModel, settings.aiCloudModel, settings.aiUseHostOllama])
 
   // The header's sun/moon flips the theme directly; doing so pins it, since "auto" or a schedule
   // would otherwise override the click on the next evaluation.
@@ -686,6 +705,7 @@ export default function App() {
         onChange={setSettings}
         onClose={() => setSettingsOpen(false)}
         aiLevelSynced={served}
+        aiStatus={aiStatus}
       />
 
       {fr.stale && <StaleBanner label={fr.label} served={served} refreshing={refreshing} onRefresh={handleRefresh} />}
@@ -804,6 +824,7 @@ export default function App() {
         onClose={() => setOpenReport(null)}
         onRegenerate={served ? handleGenerateReport : undefined}
         generating={openReport ? reportsGenerating.has(openReport.key) : false}
+        internStatus={aiStatus}
       />
 
       <NoticesDock notes={data.notes ?? []} />

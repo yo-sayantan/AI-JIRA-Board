@@ -28,9 +28,9 @@ The board has **two moving parts**, and they need different things:
    detail (linked docs, real branches, PR state).
 2. **The app** (`src/` → `dist/index.html`) — renders whatever the fetch dumped. Needs **nothing**.
 
-MCP servers are **optional**. They're only used by the local *AI-summary pass* that writes the
-long ticket briefings. The Docker deployment runs `SKIP_SUMMARY=1` (a deterministic fetch, no
-LLM), so **to just deploy the board you only need a Jira token** — skip steps 3–4 below.
+MCP servers are **optional**. Ticket briefs and report enrichment run in **JIRA-AI-Intern**
+(local Ollama or a cloud API). The Docker fetch container runs `SKIP_SUMMARY=1` so the
+board never blocks on an LLM — **to just deploy the board you only need a Jira token**.
 
 ---
 

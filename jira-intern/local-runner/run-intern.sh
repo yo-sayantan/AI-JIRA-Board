@@ -175,11 +175,9 @@ if [ "$code" = "0" ] && [ "${REPORTS_AUTO:-1}" != "0" ] && [ -f "$HERE/pr-report
   nohup bash "$HERE/pr-reports-backfill.sh" --auto >>"$LOG_DIR/reports-auto.log" 2>&1 &
 fi
 
-# AI-summary pass (cheap, LOCAL-only): add a short aiSummary to each active ticket. Best-effort —
-# never fails the main run. Skip with SKIP_SUMMARY=1; pick a cheap model with SUMMARY_MODEL=…
-# The summary pass boots the agent CLI (~minutes) even when there's nothing to do —
-# check first whether any active ticket is missing/outdated on aiSummary (the same
-# skip-if-current rule the summary prompt applies: aiSummaryAt >= lastUpdate = current).
+# AI-summary pass: enqueue for JIRA-AI-Intern (never blocks this fetch). The intern
+# skips the job when Settings AI usage is None. SKIP_SUMMARY no longer gates this —
+# it only means the fetch container itself does not invoke an LLM.
 NEED_SUMMARY=1
 if command -v python3 >/dev/null 2>&1 && [ -f "$INTERN_DIR/data.json" ]; then
   NEED_SUMMARY="$(python3 -c '
@@ -192,9 +190,10 @@ except Exception:
     print(1)
 ' "$INTERN_DIR/data.json" 2>/dev/null || echo 1)"
 fi
-if [ "$code" = "0" ] && [ -z "$SKIP_SUMMARY" ] && [ "$NEED_SUMMARY" = "1" ] && [ -f "$HERE/summarize-active.sh" ]; then
-  echo "$(date): running AI-summary pass…" | tee -a "$LOG"
-  bash "$HERE/summarize-active.sh" >> "$LOG" 2>&1 || echo "$(date): summary pass non-zero exit (ignored)" | tee -a "$LOG"
+if [ "$code" = "0" ] && [ "$NEED_SUMMARY" = "1" ]; then
+  echo "$(date): enqueueing AI-summary pass for JIRA-AI-Intern…" | tee -a "$LOG"
+  python3 "$INTERN_DIR/ai_queue.py" enqueue --type summarize-active >>"$LOG" 2>&1 \
+    || echo "$(date): could not enqueue summary job (ignored)" | tee -a "$LOG"
 elif [ "$code" = "0" ] && [ "$NEED_SUMMARY" = "0" ]; then
   echo "$(date): AI summaries all current — skipping the summary pass" | tee -a "$LOG"
 fi

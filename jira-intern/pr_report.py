@@ -553,7 +553,7 @@ def build_base(t, src, cfg):
         "fingerprint": fingerprint(t), "enriched": False, "enrichedAt": None, "generator": GENERATOR,
         "verdict": verdict, "stats": stats, "tabs": [verdict_tab, evidence_tab, scope_tab, sources_tab], "links": links,
         "sources": "Jira (last fetch) · Bitbucket via Jira dev-status. Deterministic — no AI, no live calls.",
-        "warnings": ["CI / security-scan state, per-file change assessment, production proof and the business impact line need the AI enrichment pass."],
+        "warnings": ["CI / Checkmarx / live production telemetry were not queried. File-only AI (when enabled) fills business impact and per-file notes; those three gates stay Not verified."],
     }
 
 
@@ -772,13 +772,20 @@ def main(argv):
         print("valid")
         return 0
     if cmd == "mark-enriched":
+        # Callers: pr-report.sh after validate; ai-intern/worker.py after merge_enrichment.
+        # Optional --generator stamps "jira-ai-intern · local · qwen2.5-coder:7b".
         rep = read_json(report_path(key))
         if rep is None:
             return 1
+        gen = None
+        if "--generator" in args:
+            i = args.index("--generator")
+            if i + 1 < len(args):
+                gen = args[i + 1]
         rep["enriched"] = True
         rep["enrichedAt"] = now_iso()
-        rep["generator"] = f"{((cfg.get('connector') or {}).get('active')) or 'agent'} · {((cfg.get('models') or {}).get('report')) or 'auto'}"
-        rep["warnings"] = [w for w in (rep.get("warnings") or []) if "AI enrichment pass" not in w]
+        rep["generator"] = gen or f"{((cfg.get('connector') or {}).get('active')) or 'agent'} · {((cfg.get('models') or {}).get('report')) or 'auto'}"
+        rep["warnings"] = [w for w in (rep.get("warnings") or []) if "AI enrichment pass" not in w and "File-only AI" not in w]
         for tb in rep.get("tabs") or []:
             if tb.get("id") == "sources":
                 for b in tb.get("blocks") or []:

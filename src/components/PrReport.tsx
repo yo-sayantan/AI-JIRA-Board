@@ -14,6 +14,7 @@ import { fmtDateTime, hexToRgba } from '../lib/format'
 import { SafeHtml } from './ui'
 import { PrinterIcon, RefreshIcon, SparkleIcon } from './Icons'
 import { PrReportPrintDoc } from './PrReportPrint'
+import type { AiInternStatus } from '../lib/runner'
 
 /**
  * PR Readiness Report overlay — renders a report GENERICALLY from its block kinds, so the
@@ -25,12 +26,14 @@ export function PrReportOverlay({
   onClose,
   onRegenerate,
   generating,
+  internStatus,
 }: {
   report: PrReport | null
   onClose: () => void
   /** Served mode only — kicks off a background regeneration. */
   onRegenerate?: (key: string) => void
   generating?: boolean
+  internStatus?: AiInternStatus | null
 }) {
   const [tabId, setTabId] = useState<string | null>(null)
   // Reset to the first tab whenever a different report opens.
@@ -249,6 +252,19 @@ export function PrReportOverlay({
                 {report.enriched && report.enrichedAt ? ` · AI-enriched ${fmtDateTime(report.enrichedAt)}` : ' · deterministic only'}
                 {report.generator ? ` · ${report.generator}` : ''}
               </span>
+              {internStatus && (
+                <span className={internStatus.down ? 'text-[#dc2626]' : internStatus.state === 'working' ? 'text-[#a855f7]' : ''}>
+                  {internStatus.down
+                    ? 'AI intern is down'
+                    : internStatus.state === 'working' && internStatus.current?.key
+                      ? `Intern enriching ${internStatus.current.key}`
+                      : internStatus.state === 'working'
+                        ? 'Intern working…'
+                        : internStatus.lastError
+                          ? `Intern: ${internStatus.lastError}`
+                          : 'Intern idle'}
+                </span>
+              )}
               {report.sources && <span className="min-w-0 truncate">Sources: {report.sources}</span>}
               {report.warnings && report.warnings.length > 0 && (
                 <span className="basis-full text-[#b45309]">⚠ {report.warnings.join(' · ')}</span>

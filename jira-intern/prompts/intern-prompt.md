@@ -98,7 +98,8 @@ A) ACTIVE + RECENT — `tickets[]` (rich objects). All issues where assignee = c
      strips them defensively, but keep the dump clean.) For LINKS emit real anchors
      <a href="https://absolute-url">label</a> with ABSOLUTE urls — never markdown [label](url) or Jira wiki
      [label|url] (those render as corrupted text). type, priority, status, story points,
-     labels, components, fix versions, sprint, reporter, assignee, created date, last update.
+     labels, components, fix versions, sprint, sprintOverflow (true when the issue has been in
+     more than one distinct sprint — Jira's carry-over signal), sprintCount, reporter, assignee, created date, last update.
    - aiSummary — do NOT generate this here (a separate pass, summarize-active.sh, owns it: deep
      source-enriched briefs for todo/prog tickets, quick summaries for the rest). If a ticket already
      has `aiSummary` and/or `aiSummaryAt`, PRESERVE BOTH unchanged; otherwise just omit the fields.
@@ -221,7 +222,7 @@ data.json SCHEMA (match git/jira-board/src/types.ts EXACTLY — same keys, same 
       ],
       "commentCount": 3, "latestComment": "<ISO>", "lastUpdate": "<ISO>", "created": "<ISO>",
       "done": false, "onHold": false, "url": "{{JIRA_BASE}}/browse/FIDM-6048",
-      "sprint": "…", "reporter": "…", "assignee": "{{USER_NAME}} ({{USER_ID}})",
+      "sprint": "…", "sprintOverflow": false, "sprintCount": 1, "reporter": "…", "assignee": "{{USER_NAME}} ({{USER_ID}})",
       "epic": { "key": "FIDM-5999", "url": "…", "relation": "epic (parent)" },
       "labels": ["…"], "components": ["…"], "fixVersions": ["…"],
       "description": "<p>… light HTML …</p>",

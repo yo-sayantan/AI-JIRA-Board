@@ -28,6 +28,7 @@ def atomic_dump(path, obj):
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import endpoints, identity  # noqa: E402
+from _sprint import apply_sprint  # noqa: E402
 
 INTERN = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(INTERN, "cache")
@@ -157,26 +158,6 @@ def wiki_to_html(text):
     if in_ul:
         out.append("</ul>")
     return "".join(out) or None
-
-
-def parse_sprint(raw):
-    if not raw:
-        return None
-    if isinstance(raw, list) and raw:
-        raw = raw[-1]
-    if isinstance(raw, str):
-        m = re.search(r"name=([^,\]]+)", raw)
-        state_m = re.search(r"state=([^,\]]+)", raw)
-        start_m = re.search(r"startDate=([^,\]]+)", raw)
-        end_m = re.search(r"endDate=([^,\]]+)", raw)
-        name = m.group(1) if m else raw
-        st = (state_m.group(1) if state_m else "").lower()
-        tag = "active" if st == "active" else ("future" if st == "future" else st)
-        dates = ""
-        if start_m and end_m:
-            dates = f" · {start_m.group(1)[:10]} → {end_m.group(1)[:10]}"
-        return f"{name} ({tag}{dates})"
-    return str(raw)
 
 
 def ac_list(raw):
@@ -466,7 +447,6 @@ def build_ticket(issue, prior, pr_overrides, force=False, skip_pr=False):
         "done": column == "done",
         "onHold": on_hold,
         "url": f"{JIRA_BASE}/browse/{key}",
-        "sprint": parse_sprint(f.get("customfield_10404")),
         "reporter": person_fmt(f.get("reporter")),
         "assignee": person_fmt(f.get("assignee")),
         "epic": epic,
@@ -486,6 +466,7 @@ def build_ticket(issue, prior, pr_overrides, force=False, skip_pr=False):
         "sources": (prior or {}).get("sources") or [{"title": f"Jira {key}", "url": f"{JIRA_BASE}/browse/{key}"}],
         "updateLog": update_log,
     }
+    apply_sprint(ticket, f.get("customfield_10404"))
     if (prior or {}).get("estDays"):
         ticket["estDays"] = prior["estDays"]
     return merge_preserve(ticket, prior)

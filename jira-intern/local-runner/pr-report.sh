@@ -9,8 +9,8 @@
 #   2. AI ENRICHMENT       — the connector agent (cursor-agent by default: the same MCP servers and
 #      skills you use in Cursor — Jira, Bitbucket diff, Confluence, Dynatrace, all read-only) rewrites
 #      the report in place with evidence chains, per-file change assessment, risks and a release gate.
-#      Skipped with --no-ai / SKIP_REPORT_AI=1 / SKIP_SUMMARY=1 (Docker) / no agent CLI. If the agent
-#      output is not a valid report, the deterministic base is restored — never a blank or torn file.
+#      Skipped with --no-ai / SKIP_REPORT_AI=1 / AI usage None in Settings.
+#      SKIP_SUMMARY=1 only skips the fetch-container summary agent; it does NOT skip report AI.
 #
 # Output: jira-intern/reports/<KEY>.json  (+ reports/index.js for file:// via sync-reports.mjs).
 # Exit codes: 0 ok · 2 ticket has no PR / not found.
@@ -69,74 +69,17 @@ if ! python3 "$PY" base "$KEY" >>"$LOG" 2>&1; then
 fi
 node "$HERE/sync-reports.mjs" "$INTERN_DIR" >>"$LOG" 2>&1 || true   # base is visible immediately
 
-# ── 2. AI enrichment (optional) ───────────────────────────────────────────────
-if [ "$NO_AI" = "1" ] || [ -n "${SKIP_REPORT_AI:-}" ] || [ -n "${SKIP_SUMMARY:-}" ]; then
+# ── 2. AI enrichment (optional) — JIRA-AI-Intern owns this, not cursor-agent ──
+if [ "$NO_AI" = "1" ] || [ -n "${SKIP_REPORT_AI:-}" ]; then
   echo "$(date): AI enrichment skipped (flag/env) — deterministic report kept" | tee -a "$LOG"; exit 0
 fi
-# AI usage level from the board's Settings panel (none | low | moderate | full). "none" is the
-# same contract as --no-ai; the others only scale how long the agent is allowed to think.
 case "${REPORTS_AI_LEVEL:-moderate}" in
-  none)     echo "$(date): AI usage is set to None — deterministic report kept" | tee -a "$LOG"; exit 0 ;;
-  low)      TIMEOUT_REPORT=$(( TIMEOUT_REPORT / 2 )) ;;
-  full)     TIMEOUT_REPORT=$(( TIMEOUT_REPORT * 2 )) ;;
+  none) echo "$(date): AI usage is set to None — deterministic report kept" | tee -a "$LOG"; exit 0 ;;
 esac
-AGENT="$(command -v "$AGENT_BIN")"
-if [ -z "$AGENT" ]; then
-  IFS=':' read -r -a FBS <<< "$AGENT_BIN_FALLBACKS"
-  for f in "${FBS[@]}"; do [ -x "$f" ] && AGENT="$f" && break; done
-fi
-if [ -z "$AGENT" ]; then
-  echo "$(date): $AGENT_BIN not found (connector: $AGENT_CONNECTOR) — deterministic report kept" | tee -a "$LOG"; exit 0
-fi
-[ -f "$PROMPT_FILE" ] || { echo "$(date): prompt missing: $PROMPT_FILE — deterministic report kept" | tee -a "$LOG"; exit 0; }
-
-# The agent reads/writes these files rather than receiving a giant prompt: the ticket object
-# (context) and the base report, which it must ENRICH in place, keeping every derived field.
-CTX="$REPORTS_DIR/.ctx-$KEY.json"
-python3 "$PY" context "$KEY" > "$CTX" 2>>"$LOG" || { echo "$(date): could not extract ticket context" | tee -a "$LOG"; exit 0; }
-BASE_COPY="$REPORTS_DIR/.base-$KEY.json"
-cp "$REPORTS_DIR/$KEY.json" "$BASE_COPY"
-
-PROMPT_TEXT="$(node "$HERE/config.mjs" render "$PROMPT_FILE" 2>>"$LOG" || cat "$PROMPT_FILE")"
-PROMPT_TEXT="${PROMPT_TEXT//\{\{TICKET_KEY\}\}/$KEY}"
-PROMPT_TEXT="${PROMPT_TEXT//\{\{REPORT_PATH\}\}/$REPORTS_DIR/$KEY.json}"
-PROMPT_TEXT="${PROMPT_TEXT//\{\{CONTEXT_PATH\}\}/$CTX}"
-PROMPT_TEXT="${PROMPT_TEXT//\{\{TODAY\}\}/$(date -u +%Y-%m-%d)}"
-
-cd "$GIT_ROOT"
-echo "$(date): enriching $KEY via $AGENT (connector=$AGENT_CONNECTOR, model=$REPORT_MODEL)" | tee -a "$LOG"
-RUN=( "$AGENT" "$AGENT_PROMPT_FLAG" "$PROMPT_TEXT" $AGENT_EXTRA_ARGS )
-[ -n "$REPORT_MODEL" ] && [ "$REPORT_MODEL" != "auto" ] && RUN+=( "$AGENT_MODEL_FLAG" "$REPORT_MODEL" )
-# A stock macOS has neither timeout nor gtimeout (they ship with GNU coreutils), which would
-# leave a backfill of dozens of tickets with no ceiling at all — one wedged agent stalls the
-# whole queue. perl is always present, and alarm+exec gives the same "kill it at N seconds,
-# exit 124" contract without adding a dependency.
-TIMEOUT_BIN="$(command -v timeout || command -v gtimeout)"
-if [ -n "$TIMEOUT_BIN" ]; then
-  "$TIMEOUT_BIN" "$TIMEOUT_REPORT" "${RUN[@]}" >>"$LOG" 2>&1
-elif command -v perl >/dev/null 2>&1; then
-  # Fork rather than exec: exec would replace perl itself, losing the ALRM handler (the alarm
-  # would still fire, but as an uncaught signal — exit 142, not timeout's 124).
-  perl -e 'my $t=shift; my $p=fork; if(!$p){ exec @ARGV or exit 127 }
-           $SIG{ALRM}=sub{ kill 9,$p; waitpid $p,0; exit 124 }; alarm $t;
-           waitpid $p,0; exit $?>>8' \
-    "$TIMEOUT_REPORT" "${RUN[@]}" >>"$LOG" 2>&1
-else
-  "${RUN[@]}" >>"$LOG" 2>&1
-fi
-code=$?
-[ "$code" = "124" ] && echo "$(date): enrichment TIMED OUT after ${TIMEOUT_REPORT}s" | tee -a "$LOG"
-
-# Validate: the agent's file must be a complete report with the derived fields intact. Otherwise
-# restore the base so the board never shows a torn/half-written report.
-if python3 "$PY" validate "$KEY" --base "$BASE_COPY" >>"$LOG" 2>&1; then
-  python3 "$PY" mark-enriched "$KEY" >>"$LOG" 2>&1 || true
-  echo "$(date): $KEY report enriched" | tee -a "$LOG"
-else
-  echo "$(date): enriched output invalid — restoring deterministic report" | tee -a "$LOG"
-  cp "$BASE_COPY" "$REPORTS_DIR/$KEY.json"
-fi
-rm -f "$BASE_COPY" "$CTX"
+echo "$(date): enqueueing $KEY for JIRA-AI-Intern (level=${REPORTS_AI_LEVEL:-moderate})" | tee -a "$LOG"
+python3 "$INTERN_DIR/ai_queue.py" enqueue --type enrich-report --key "$KEY" --level "${REPORTS_AI_LEVEL:-moderate}" >>"$LOG" 2>&1 || {
+  echo "$(date): could not enqueue AI job — deterministic report kept" | tee -a "$LOG"; exit 0
+}
 ls -1t "$LOG_DIR"/report-*.log 2>/dev/null | tail -n +61 | xargs rm -f 2>/dev/null || true
-echo "$(date): report for $KEY finished (agent exit $code) — log: $LOG" | tee -a "$LOG"
+echo "$(date): report for $KEY base written; AI intern will enrich it — log: $LOG" | tee -a "$LOG"
 exit 0

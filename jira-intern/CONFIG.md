@@ -118,7 +118,8 @@ absolute path of this folder), so the prompts are path-portable with zero config
 
 Models: `models.report` picks the agent model for the AI enrichment (`"auto"` = connector default; env
 `REPORT_MODEL=` overrides). `timeouts.reportSec` (default 600) bounds one enrichment run. Skip the AI
-pass entirely with `SKIP_REPORT_AI=1` (Docker already sets `SKIP_SUMMARY=1`, which also skips it).
+pass entirely with `SKIP_REPORT_AI=1` or Settings AI usage **None**. Docker `SKIP_SUMMARY=1` only skips
+the fetch-container LLM; report enrichment is queued for JIRA-AI-Intern.
 Reports are written to `jira-intern/reports/` — git-ignored; they contain real ticket and PR content.
 
 ## `timeouts` (seconds)
