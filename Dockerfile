@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # My Jira Board — self-contained image.
-#   • Stage 1 builds the single-file React board (dist/index.html).
+#   • Stage 1 provides the single-file React board (dist/index.html) — either built inside
+#     Docker (default) or copied from a build done on the host (DIST_SOURCE=prebuilt).
 #   • Stage 2 runs the zero-dependency Node server plus the Python fetch pipeline,
 #     so the board serves AND refreshes itself with no host commands.
 #
@@ -13,9 +14,15 @@
 #     -v "$HOME/.cursor/mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro" \
 #     jira-board
 # Then open http://localhost:4321
+#
+# DIST_SOURCE selects where dist/ comes from:
+#   source    (default) npm ci + npm run build inside the image — works on a fresh clone.
+#   prebuilt  copy ./dist from the build context — start-jira-board.sh builds it on the host
+#             first, so nothing is downloaded through the Docker VM except the base image.
+ARG DIST_SOURCE=source
 
-# ── Stage 1: build the board ───────────────────────────────────────────────────
-FROM node:26-bookworm-slim AS build
+# ── Stage 1a: build the board inside Docker ────────────────────────────────────
+FROM node:26-bookworm-slim AS build-source
 WORKDIR /app
 # Install deps first so this layer is cached until the lockfile changes.
 COPY package.json package-lock.json ./
@@ -23,6 +30,13 @@ RUN npm ci
 # Bring in the source and produce dist/index.html (tsc --noEmit && vite build).
 COPY . .
 RUN npm run build
+
+# ── Stage 1b: take the board built on the host ─────────────────────────────────
+FROM scratch AS build-prebuilt
+COPY dist /app/dist
+
+# Whichever stage DIST_SOURCE names becomes "build"; the other is never executed.
+FROM build-${DIST_SOURCE} AS build
 
 # ── Stage 2: runtime ───────────────────────────────────────────────────────────
 FROM node:26-bookworm-slim AS runtime

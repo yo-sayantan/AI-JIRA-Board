@@ -11,7 +11,13 @@
 # dedicated port — never auto-incremented.
 services:
   jira-board:
-    build: .
+    build:
+      context: .
+      args:
+        # start-jira-board.sh builds dist/ on the host and sets DIST_SOURCE=prebuilt, so the
+        # image only copies it — no npm downloads through the Docker VM. A plain
+        # `docker compose up --build` leaves this at "source" and builds inside the image.
+        DIST_SOURCE: ${DIST_SOURCE:-source}
     image: jira-board:latest
     container_name: JIRA-Board
     ports:

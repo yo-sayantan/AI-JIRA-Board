@@ -1,9 +1,10 @@
-# Keep the build context small and reproducible. dist/ and node_modules are
-# rebuilt inside the image, so never ship the host copies.
+# Keep the build context small and reproducible. node_modules is never shipped: the
+# image either installs its own (DIST_SOURCE=source) or needs none at all. dist/ IS
+# allowed in — start-jira-board.sh builds it on the host and the image copies it
+# (DIST_SOURCE=prebuilt), which keeps `npm ci` and its downloads out of the Docker VM.
 .git
 .gitignore
 node_modules
-dist
 
 # Editor / OS noise
 .DS_Store

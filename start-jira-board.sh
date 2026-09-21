@@ -88,10 +88,28 @@ deploy() {
   [ -f Dockerfile ] || die "No Dockerfile in ${REPO_DIR}"
   [ -f docker-compose.yml ] || die "No docker-compose.yml in ${REPO_DIR}"
 
-  log "Building image ${IMAGE_NAME} (this can take a minute the first time)…"
+  # Build the board on the HOST first. It takes well under a second here, whereas `npm ci`
+  # inside the Docker VM re-downloads every package through the VM's network — on a slow or
+  # proxied connection that alone can run for many minutes. The image then just copies dist/.
+  # Without npm on the host (a Docker-only machine) the image builds the board itself.
+  if command -v npm >/dev/null 2>&1; then
+    log "Building dist/index.html on the host…"
+    [ -d node_modules ] || npm ci
+    npm run build
+    export DIST_SOURCE=prebuilt
+    ok "dist/index.html built"
+  else
+    log "npm not found on the host — the image will build the board itself (slower)"
+    export DIST_SOURCE=source
+  fi
+
+  log "Building image ${IMAGE_NAME} (the node base image is downloaded only the first time)…"
   # Compose reads PORT from the environment for the published port mapping.
   export PORT
-  docker compose build --pull 2>&1 | tail -n 20
+  # No `--pull`: the base image is fetched only when it is not already cached locally, so a
+  # redeploy never waits on Docker Hub. BuildKit's live progress is left on screen on purpose —
+  # a slow registry then shows up as a crawling layer download instead of a silent wait.
+  docker compose build
   ok "Image built"
 
   log "Deploying container '${CONTAINER_NAME}' on port ${PORT}…"
