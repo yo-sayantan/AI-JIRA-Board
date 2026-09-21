@@ -342,9 +342,9 @@ a {
 }
 
 /* ── Toolbar ─────────────────────────────────────────────────────────── */
-/* Search field. The focus ring is the accent. On wide windows the field also grows toward the
-   centre while it has focus — a wider field shows more of a query. Wide only: below ~1440px the
-   toolbar's side columns have no slack, and a growing field would nudge the centred viewer. */
+/* Search field. The focus ring is the accent. On wide windows the field also grows while it has
+   focus — a wider field shows more of a query. Wide only: below ~1440px the row has no slack and
+   a growing field would push its neighbours around. */
 .jb-field {
   transition:
     width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -357,7 +357,7 @@ a {
 }
 @media (min-width: 90rem) {
   .jb-field:focus-within {
-    width: 290px;
+    width: 280px;
   }
 }
 /* The field draws its own clear control; WebKit's built-in one would double it. */

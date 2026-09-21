@@ -1,11 +1,11 @@
-import { useCallback, useRef, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { JiraData } from '../types'
-import { currentSprint, fmtDate, fmtDateShort, freshness, hexToRgba, sprintStatus, type SprintInfo } from '../lib/format'
-import { ChevronDownIcon, ClearIcon, GearIcon, MoonIcon, QuestionIcon, RefreshIcon, SearchIcon, SunIcon, TicketGlyph, TrophyIcon } from './Icons'
+import { currentSprint, fmtDate, fmtDateShort, freshness, hexToRgba, sprintStatus } from '../lib/format'
+import { CalendarIcon, ClearIcon, GearIcon, MoonIcon, QuestionIcon, RefreshIcon, SearchIcon, SunIcon, TicketGlyph, TrophyIcon } from './Icons'
 import { guideUrl } from '../lib/runner'
 import { ReportsMenu, type ReportsMenuProps } from './ReportsMenu'
-import { ACCENT, ControlGroup, Kbd, Menu, MenuItem, SURFACE, ToolButton, ToolLink, useDismiss } from './toolbar'
+import { Kbd, SURFACE, ToolButton, ToolLink } from './toolbar'
 
 export type RunProgress = {
   done: number
@@ -15,12 +15,8 @@ export type RunProgress = {
   phase?: string
 }
 
-type Job = 'daily' | 'archive' | null
-type Freshness = ReturnType<typeof freshness>
-type SprintStatus = ReturnType<typeof sprintStatus>
-
 /**
- * Overall completion 0–100 for the progress line. Prep phases (search → devinfo) take the line
+ * Overall completion 0–100 for the button fill. Prep phases (search → devinfo) take the bar
  * to ~24%; the rest fills linearly as tickets are built, so the fill reflects real progress.
  */
 function displayPct(p: RunProgress | null | undefined): number {
@@ -43,164 +39,115 @@ function displayPct(p: RunProgress | null | undefined): number {
   return floor[p.phase || ''] ?? 6
 }
 
-/** True once we have a real ticket count — before that the progress line is indeterminate. */
+/** True once we have a real ticket count to show as x/y. */
 function hasCount(p: RunProgress | null | undefined): boolean {
   return !!(p && p.total > 0 && (p.phase === 'building' || p.phase === 'assembling'))
 }
 
-/** What the fetch is doing right now, in words — the viewer's second line while a job runs. */
-function phaseLabel(p: RunProgress | null | undefined): string {
-  if (!p) return 'Starting…'
-  if (p.phase === 'building' || p.phase === 'assembling') {
-    if (p.total > 0) return `${p.done} of ${p.total} tickets${p.current ? ` · ${p.current}` : ''}`
-    return 'Building tickets…'
-  }
-  const words: Record<string, string> = {
-    starting: 'Starting…',
-    searching: 'Searching Jira…',
-    subtasks: 'Loading sub-tasks…',
-    parents: 'Loading parent tickets…',
-    devinfo: 'Reading pull requests & branches…',
-    writing: 'Writing data…',
-    done: 'Finishing…',
-  }
-  return words[p.phase || ''] ?? 'Working…'
-}
-
-/** "Updated 3:53 PM" while fresh; once the dump is hours old its age is the more useful fact. */
-function updatedLabel(generatedAt: string | null | undefined, fr: Freshness): string {
-  if (fr.level === 'unknown' || !generatedAt) return 'No data yet'
-  const h = fr.ageHours
-  if (h >= 3) return h < 48 ? `Updated ${Math.floor(h)}h ago` : `Updated ${Math.round(h / 24)}d ago`
-  return `Updated ${new Date(generatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
-}
-
-// ── Activity viewer ─────────────────────────────────────────────────────────
-
-/** One line of the viewer: a truncating lead and an optional right-aligned fact. */
-function Line({ lead, trail, strong }: { lead: ReactNode; trail?: ReactNode; strong?: boolean }) {
-  return (
-    <span className={`flex items-center justify-between gap-3 ${strong ? 'text-[11px] leading-[13px]' : 'text-[10.5px] leading-[12px]'}`}>
-      <span className="min-w-0 truncate">{lead}</span>
-      {trail && <span className="shrink-0 whitespace-nowrap">{trail}</span>}
-    </span>
-  )
-}
-
 /**
- * The centre of the toolbar, in the manner of Xcode's activity viewer: the sprint and the data's
- * freshness at rest; the job's name, count and percentage while a fetch runs. One 2px line along
- * the bottom edge is the sprint's progress at rest and the fetch's progress in flight — so the
- * viewer is the single place the board reports on itself.
+ * A fixed-width button that doubles as its own progress bar. Idle: solid bright gradient with
+ * a label. Busy: the same bright colour fills left→right (the unfilled part is dimmed/faded),
+ * and the label is just `x/y · z%` — no word, so the width never has to change.
  */
-function ActivityViewer({
-  sprint,
-  sp,
-  fr,
-  updated,
-  job,
+function ProgressButton({
+  busy,
   progress,
+  onClick,
+  disabled,
+  ariaLabel,
   title,
+  idleLabel,
+  gradient,
+  shadow,
+  idleIcon,
 }: {
-  sprint: SprintInfo | null
-  sp: SprintStatus | null
-  fr: Freshness
-  updated: string
-  job: Job
+  busy: boolean
   progress: RunProgress | null | undefined
+  onClick: () => void
+  disabled: boolean
+  ariaLabel: string
   title: string
+  idleLabel: string
+  gradient: string
+  shadow: string
+  idleIcon: ReactNode
 }) {
-  const busy = job != null
-  const pct = busy ? Math.round(Math.max(3, Math.min(100, displayPct(progress)))) : 0
-  const sprintPct = sp?.pct != null ? Math.round(sp.pct * 100) : null
-  const showLine = busy || sprintPct != null
-  const fill = busy ? ACCENT : sp ? hexToRgba(sp.color, 0.75) : 'transparent'
-  const track = busy ? 'color-mix(in oklab, var(--link) 18%, transparent)' : sp ? hexToRgba(sp.color, 0.16) : 'transparent'
-  const swap = {
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -6 },
-    transition: { duration: 0.18, ease: 'easeOut' as const },
-  }
+  const pctNum = busy ? Math.max(4, Math.min(100, displayPct(progress))) : 0
+  const pct = Math.round(pctNum)
+  const label = busy ? (hasCount(progress) ? `${progress!.done}/${progress!.total} · ${pct}%` : `${pct}%`) : idleLabel
 
   return (
-    <div title={title} className="relative hidden h-8 w-[300px] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface-2)] md:block lg:w-[340px]">
-      <AnimatePresence initial={false}>
-        {busy ? (
-          <motion.div key="busy" {...swap} className="absolute inset-0 flex flex-col justify-center px-2.5 pb-[2px]">
-            <Line
-              strong
-              lead={<span className="font-semibold text-[var(--ink)]">{job === 'archive' ? 'Rebuilding Completed archive' : 'Refreshing board'}</span>}
-              trail={
-                <span className="font-semibold tabular-nums" style={{ color: ACCENT }}>
-                  {pct}%
-                </span>
-              }
-            />
-            <Line lead={<span className="text-[var(--muted)]">{phaseLabel(progress)}</span>} />
-          </motion.div>
-        ) : (
-          <motion.div key="idle" {...swap} className="absolute inset-0 flex flex-col justify-center px-2.5 pb-[2px]">
-            <Line
-              strong
-              lead={<span className="font-semibold text-[var(--ink)]">{sprint ? sprint.name : 'No active sprint'}</span>}
-              trail={
-                sp && (
-                  <span className="font-semibold" style={{ color: sp.color }}>
-                    {sp.label}
-                  </span>
-                )
-              }
-            />
-            <Line
-              lead={
-                <span className="tabular-nums text-[var(--muted)]">
-                  {sprint?.start && sprint?.end ? `${fmtDateShort(sprint.start)} → ${fmtDateShort(sprint.end)}` : sprint?.state || ''}
-                </span>
-              }
-              trail={
-                <span className="inline-flex items-center gap-1.5 text-[var(--muted)]">
-                  <span className="h-[5px] w-[5px] rounded-full" style={{ background: fr.color }} />
-                  {updated}
-                </span>
-              }
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {showLine && (
-        <div className="absolute inset-x-0 bottom-0 h-[2px]" style={{ background: track }}>
-          <motion.div
-            className="h-full rounded-r-full"
-            initial={false}
-            animate={{ width: `${busy ? pct : sprintPct}%` }}
-            transition={{ type: 'spring', stiffness: 140, damping: 26, mass: 0.6 }}
-            style={{ background: fill }}
-          />
-          {/* Indeterminate: a highlight travels the line until the fetch knows how many tickets. */}
-          {busy && !hasCount(progress) && (
-            <motion.span
-              aria-hidden
-              className="absolute inset-y-0 w-1/3"
-              animate={{ left: ['-33%', '100%'] }}
-              transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
-              style={{ background: 'linear-gradient(90deg, transparent, color-mix(in oklab, var(--link) 55%, white), transparent)' }}
-            />
-          )}
-        </div>
+    <motion.button
+      whileHover={disabled ? undefined : { scale: 1.04, y: -1 }}
+      whileTap={disabled ? undefined : { scale: 0.94 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      aria-busy={busy || undefined}
+      title={
+        busy && progress?.current
+          ? `${title}\nNow: ${progress.current}${progress.total ? ` (${progress.done}/${progress.total})` : ''}`
+          : title
+      }
+      // Fixed width so the label swapping (idle text ↔ x/y · %) never resizes the button. 156px is
+      // the tightest width that still holds "Rebuild archive" and "40/40 · 100%" without moving.
+      className="relative inline-flex h-9 w-[156px] shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-xl px-3 text-[13px] font-bold text-white transition-[filter] hover:brightness-[1.08]"
+      style={{ background: gradient, boxShadow: `0 6px 18px -6px ${shadow}`, opacity: disabled && !busy ? 0.6 : 1 }}
+    >
+      {/* Dimming scrim over the UNFILLED (right) portion — recedes as pct grows, so the deep
+          bright colour "fills in" from the left. */}
+      {busy && (
+        <motion.span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 z-0"
+          initial={false}
+          animate={{ left: `${pct}%` }}
+          transition={{ type: 'spring', stiffness: 120, damping: 22, mass: 0.6 }}
+          style={{ background: 'rgba(0,0,0,0.34)' }}
+        />
       )}
-    </div>
+      {/* Bright leading edge at the fill boundary for a crisp "wet paint" look. */}
+      {busy && (
+        <motion.span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 z-[1] w-[3px]"
+          initial={false}
+          animate={{ left: `calc(${pct}% - 1.5px)` }}
+          transition={{ type: 'spring', stiffness: 120, damping: 22, mass: 0.6 }}
+          style={{ background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 8px rgba(255,255,255,0.6)' }}
+        />
+      )}
+      {/* Shimmer while we don't yet have a ticket count (early phases). */}
+      {busy && !hasCount(progress) && (
+        <motion.span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 z-[1] w-1/4"
+          animate={{ left: ['-25%', '100%'] }}
+          transition={{ repeat: Infinity, duration: 1.1, ease: 'linear' }}
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)' }}
+        />
+      )}
+      <span className="relative z-10 inline-flex items-center gap-1.5" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}>
+        <motion.span
+          className="inline-flex"
+          animate={busy ? { rotate: 360 } : { rotate: 0 }}
+          transition={busy ? { repeat: Infinity, duration: 0.8, ease: 'linear' } : { type: 'spring', stiffness: 300, damping: 20 }}
+        >
+          {busy ? <RefreshIcon size={15} color="#fff" /> : idleIcon}
+        </motion.span>
+        <span className="tabular-nums">{label}</span>
+      </span>
+    </motion.button>
   )
 }
 
-// ── Controls ────────────────────────────────────────────────────────────────
-
+/** Search, exactly 36px like its neighbours: accent focus ring, a "/" key cap until you type. */
 function SearchField({ query, setQuery }: { query: string; setQuery: (v: string) => void }) {
   return (
-    <label className={`jb-field group relative flex h-8 w-[150px] shrink-0 items-center gap-2 rounded-lg pl-2.5 pr-1.5 ${SURFACE} sm:w-[190px] lg:w-[230px]`}>
+    <label className={`jb-field group relative flex h-9 w-[160px] shrink-0 items-center gap-2 rounded-xl pl-3 pr-2 ${SURFACE} lg:w-[220px]`}>
       <span className="shrink-0 text-[var(--muted)]">
-        <SearchIcon size={11} />
+        <SearchIcon size={12} />
       </span>
       <input
         id="jb-search"
@@ -211,7 +158,7 @@ function SearchField({ query, setQuery }: { query: string; setQuery: (v: string)
         aria-label="Search tickets"
         autoComplete="off"
         spellCheck={false}
-        className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[var(--ink)] outline-none placeholder:text-[var(--muted)]"
+        className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ink)] outline-none placeholder:text-[var(--muted)]"
       />
       {query ? (
         <button
@@ -231,133 +178,30 @@ function SearchField({ query, setQuery }: { query: string; setQuery: (v: string)
   )
 }
 
-/**
- * Refresh is the board's one primary action, so its glyph alone carries the accent. Served, it
- * is a pull-down: the button is the everyday quick refresh; the deep archive rebuild — minutes,
- * not seconds — lives in the menu, where a rare and heavy action belongs.
- */
-function RefreshControl({
-  served,
-  refreshing,
-  archiveRefreshing,
-  onRefresh,
-  onArchiveRefresh,
-}: {
-  served: boolean
-  refreshing: boolean
-  archiveRefreshing: boolean
-  onRefresh: () => void
-  onArchiveRefresh: () => void
-}) {
-  const busy = refreshing || archiveRefreshing
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const close = useCallback(() => setOpen(false), [])
-  useDismiss(ref, open, close)
-
-  // The accent rides on `color` and the glyph uses currentColor: a var() inside an SVG fill
-  // attribute is not honoured everywhere, but inherited colour is.
-  const glyph = (
-    <motion.span
-      className="inline-flex"
-      style={{ color: ACCENT }}
-      animate={busy ? { rotate: 360 } : { rotate: 0 }}
-      transition={busy ? { repeat: Infinity, duration: 0.9, ease: 'linear' } : { duration: 0.2 }}
-    >
-      <RefreshIcon size={12} color="currentColor" />
-    </motion.span>
-  )
-
-  if (!served) {
-    return (
-      <ToolButton label="Reload the latest data dump from disk  (r)" onClick={onRefresh} disabled={busy} busy={busy}>
-        {glyph}
-      </ToolButton>
-    )
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      <ControlGroup>
-        <ToolButton
-          bare
-          label="Refresh board"
-          title="Refresh board — re-fetches only your active tickets (seconds). The Completed archive is untouched.  (r)"
-          onClick={onRefresh}
-          disabled={busy}
-          busy={refreshing}
-        >
-          {glyph}
-        </ToolButton>
-        <ToolButton
-          bare
-          narrow
-          label="More refresh options"
-          onClick={() => setOpen((o) => !o)}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          pressed={open}
-        >
-          <ChevronDownIcon size={9} />
-        </ToolButton>
-      </ControlGroup>
-
-      <Menu open={open} width={288}>
-        <MenuItem
-          icon={
-            <span className="inline-flex" style={{ color: ACCENT }}>
-              <RefreshIcon size={11} color="currentColor" />
-            </span>
-          }
-          label="Refresh board"
-          hint="Active tickets only · seconds"
-          kbd="r"
-          disabled={busy}
-          onClick={() => {
-            close()
-            onRefresh()
-          }}
-        />
-        <MenuItem
-          icon={<TrophyIcon size={11} />}
-          label="Rebuild Completed archive"
-          hint="Every closed ticket, its pull requests and branches · minutes"
-          disabled={busy}
-          onClick={() => {
-            close()
-            onArchiveRefresh()
-          }}
-        />
-      </Menu>
-    </div>
-  )
-}
-
-/** Sun ↔ moon cross-fade with a small turn — the one flourish the utility group allows itself. */
+/** Sun ↔ moon cross-fade with a turn, on top of the button's own hover tilt. */
 function ThemeGlyph({ dark }: { dark: boolean }) {
   return (
-    <span className="relative grid h-5 w-5 place-items-center">
+    <span className="relative grid h-[22px] w-[22px] place-items-center">
       <AnimatePresence initial={false}>
         <motion.span
           key={dark ? 'moon' : 'sun'}
           className="absolute inset-0 grid place-items-center"
-          initial={{ opacity: 0, rotate: -45, scale: 0.7 }}
+          initial={{ opacity: 0, rotate: -60, scale: 0.6 }}
           animate={{ opacity: 1, rotate: 0, scale: 1 }}
-          exit={{ opacity: 0, rotate: 45, scale: 0.7 }}
-          transition={{ duration: 0.18 }}
+          exit={{ opacity: 0, rotate: 60, scale: 0.6 }}
+          transition={{ duration: 0.2 }}
         >
-          {dark ? <MoonIcon size={12} color="currentColor" /> : <SunIcon size={12} color="currentColor" />}
+          {dark ? <MoonIcon size={16} /> : <SunIcon size={16} />}
         </motion.span>
       </AnimatePresence>
     </span>
   )
 }
 
-// ── Header ──────────────────────────────────────────────────────────────────
-
 /**
- * One 52px toolbar in three regions: identity on the left, the activity viewer in the centre,
- * actions on the right. Everything is 32px tall on an 8px grid; nothing wraps to a second line.
+ * One 56px row. The identity block on the left is exactly 36px tall — title over name + freshness
+ * pill, with tight leading — so it sits on the same line as every control instead of pushing the
+ * bar to two lines. Everything on the right is 36px too, including the search field.
  */
 export function Header({
   data,
@@ -383,7 +227,7 @@ export function Header({
   toggleTheme: () => void
   refreshing: boolean
   archiveRefreshing: boolean
-  /** Live done/total from the running fetch — drives the activity viewer. */
+  /** Live done/total from the running fetch — fills the active button. */
   runProgress?: RunProgress | null
   served: boolean
   onRefresh: () => void
@@ -393,64 +237,152 @@ export function Header({
   onOpenSettings?: () => void
 }) {
   const fr = freshness(data.generatedAt, now)
-  const name = data.user?.name?.split(',')[1]?.trim() || data.user?.name || ''
+  const name = data.user?.name?.split(',')[1]?.trim() || data.user?.name || 'you'
   // Headline sprint: the active one on the board's tickets (else the next future one).
   const sprint = currentSprint(data.tickets)
   const sp = sprint ? sprintStatus(sprint, now) : null
-  const job: Job = refreshing ? 'daily' : archiveRefreshing ? 'archive' : null
-  const updated = updatedLabel(data.generatedAt, fr)
-
-  const sprintTitle = sprint
-    ? sprint.start && sprint.end
-      ? `Sprint ${sprint.name}: ${fmtDate(sprint.start)} → ${fmtDate(sprint.end)} — ${sp?.label ?? ''} (working days, Mon–Fri).`
-      : `Sprint ${sprint.name}${sp ? ` — ${sp.label}` : ''}.`
-    : 'No active or upcoming sprint on the board.'
-  const dataTitle = data.generatedAt ? `Board data as of ${fr.full} (last intern run) — ${fr.label}.` : 'The intern has not produced a dump yet.'
+  const dailyProgress = refreshing ? runProgress : null
+  const archiveProgress = archiveRefreshing ? runProgress : null
 
   return (
     <header className="sticky top-0 z-30 -mx-4 mb-3 border-b border-[var(--line)] bg-[var(--bg)]/80 px-4 py-2.5 backdrop-blur-xl md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-        {/* Identity — the one brand mark, then the name in solid ink. */}
-        <div className="flex min-w-0 items-center gap-2.5 justify-self-start">
-          <span
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
-            style={{ background: 'linear-gradient(135deg, #6d5bd0, #3b82f6)', boxShadow: '0 1px 2px rgba(16,24,40,0.14)' }}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {/* Identity: 36px logo, then title over name + freshness — 19px + 17px = the same 36px. */}
+        <div className="flex min-w-0 items-center gap-2.5">
+          <motion.span
+            initial={{ rotate: -12, scale: 0.8, opacity: 0 }}
+            animate={{ rotate: 0, scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
+            style={{ background: 'linear-gradient(135deg, #6d5bd0, #3b82f6)' }}
           >
-            <TicketGlyph size={13} />
-          </span>
-          <h1
-            className="hidden truncate text-[15px] font-semibold tracking-[-0.01em] text-[var(--ink)] sm:block"
-            title={`${name ? `${name}’s board` : 'Your board'} · ${dataTitle}`}
-          >
-            My Jira Board
-          </h1>
+            <TicketGlyph size={20} />
+          </motion.span>
+          <div className="flex h-9 min-w-0 flex-col justify-center">
+            <h1 className="whitespace-nowrap bg-gradient-to-r from-[var(--ink)] to-[var(--muted)] bg-clip-text text-[16px] font-extrabold leading-[19px] tracking-tight text-transparent">
+              My Jira Board
+            </h1>
+            <div className="flex items-center gap-2 whitespace-nowrap text-[11px] leading-[15px] text-[var(--muted)]">
+              <span className="hidden sm:inline">{name}</span>
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border px-2 leading-[15px]"
+                style={{ borderColor: hexToRgba(fr.color, 0.45), background: hexToRgba(fr.color, 0.1) }}
+                title={
+                  data.generatedAt
+                    ? `The board reflects JIRA as of ${fr.full} (the last intern run). It is ${fr.label} relative to now.`
+                    : 'The intern has not produced a dump yet.'
+                }
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: fr.color }} />
+                {data.generatedAt ? (
+                  <>
+                    <span className="text-[var(--ink-soft)]">last run {fr.full}</span>
+                    <b style={{ color: fr.color }}>· {fr.label}</b>
+                  </>
+                ) : (
+                  <b style={{ color: fr.color }}>no intern run yet</b>
+                )}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <ActivityViewer sprint={sprint} sp={sp} fr={fr} updated={updated} job={job} progress={runProgress} title={`${sprintTitle}\n${dataTitle}`} />
+        <div className="ml-auto flex items-center gap-2">
+          {/* Current sprint — two tight lines in the same 36px: name + workdays left, dates + progress. */}
+          {sprint && sp && (
+            <div
+              className="hidden h-9 shrink-0 flex-col justify-center gap-[3px] rounded-xl border px-2.5 leading-none md:flex"
+              style={{ borderColor: hexToRgba(sp.color, 0.4), background: hexToRgba(sp.color, 0.08) }}
+              title={
+                (sprint.start && sprint.end
+                  ? `Sprint ${sprint.name}: ${fmtDate(sprint.start)} → ${fmtDate(sprint.end)}`
+                  : `Sprint ${sprint.name}`) + ` — ${sp.label} (working days, Mon–Fri)`
+              }
+            >
+              <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-[var(--ink-soft)]">
+                <CalendarIcon size={10} color={sp.color} />
+                {/* Sizes to the NAME — sprint names vary ("FraudBus Sprint 13.2" alone needs ~118px).
+                    280px is a backstop against a pathological name squeezing the search box. */}
+                <span className="max-w-[280px] shrink-0 truncate whitespace-nowrap">{sprint.name}</span>
+                <b className="ml-auto shrink-0 whitespace-nowrap pl-1" style={{ color: sp.color }}>
+                  {sp.label}
+                </b>
+              </span>
+              <span className="flex items-center gap-1.5 text-[10px] text-[var(--muted)]">
+                {sprint.start && sprint.end ? (
+                  <span className="whitespace-nowrap tabular-nums">{fmtDateShort(sprint.start)} → {fmtDateShort(sprint.end)}</span>
+                ) : (
+                  <span>{sprint.state || 'sprint'}</span>
+                )}
+                {sp.pct != null && (
+                  <span className="relative h-1 min-w-8 flex-1 overflow-hidden rounded-full" style={{ background: hexToRgba(sp.color, 0.18) }}>
+                    <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.round(sp.pct * 100)}%`, background: sp.color }} />
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
 
-        {/* Actions — search, the primary action, reports, then the utility group. */}
-        <div className="flex items-center gap-2 justify-self-end">
           <SearchField query={query} setQuery={setQuery} />
 
-          <RefreshControl served={served} refreshing={refreshing} archiveRefreshing={archiveRefreshing} onRefresh={onRefresh} onArchiveRefresh={onArchiveRefresh} />
+          <ProgressButton
+            busy={refreshing}
+            progress={dailyProgress}
+            onClick={onRefresh}
+            disabled={refreshing || archiveRefreshing}
+            ariaLabel={served ? 'Refresh the board (active tickets only)' : 'Reload latest data'}
+            title={
+              served
+                ? 'QUICK refresh — re-fetches only your ACTIVE tickets (seconds). The Completed archive is not touched.  (r)'
+                : 'Reload the latest data dump from disk  (r)'
+            }
+            idleLabel={served ? 'Refresh board' : 'Reload'}
+            gradient="linear-gradient(135deg, #7c5cff, #2684ff)"
+            shadow="rgba(38,132,255,0.55)"
+            idleIcon={<RefreshIcon size={15} color="#fff" />}
+          />
+
+          {served && (
+            <ProgressButton
+              busy={archiveRefreshing}
+              progress={archiveProgress}
+              onClick={onArchiveRefresh}
+              disabled={refreshing || archiveRefreshing}
+              ariaLabel="Rebuild the Completed archive (slow, deep scan)"
+              title="DEEP rebuild of the COMPLETED archive — re-scans every closed ticket plus its PRs & branches from Jira and Bitbucket. Takes minutes; run after closing tickets or when the archive looks stale. Not the everyday refresh!"
+              idleLabel="Rebuild archive"
+              gradient="linear-gradient(135deg, #10d29a, #16a34a)"
+              shadow="rgba(16,185,129,0.5)"
+              idleIcon={<TrophyIcon size={15} />}
+            />
+          )}
 
           {reports && <ReportsMenu {...reports} />}
 
-          <ControlGroup>
-            {onOpenSettings && (
-              <ToolButton bare label="Settings — appearance, features, AI usage" onClick={onOpenSettings}>
-                <GearIcon size={12} />
-              </ToolButton>
-            )}
-            {/* An <a>, not a fetch/route, so it still works when the server is down (file:// falls
-                back to the sibling docs/ folder). */}
-            <ToolLink bare href={guideUrl()} label="Setup & deployment guide — requirements, install steps for Windows/macOS/Linux, git & Docker commands, troubleshooting">
-              <QuestionIcon size={12} />
-            </ToolLink>
-            <ToolButton bare label={dark ? 'Switch to light appearance' : 'Switch to dark appearance'} onClick={toggleTheme}>
-              <ThemeGlyph dark={dark} />
+          {onOpenSettings && (
+            <ToolButton label="Board settings" title="Settings — appearance, features, AI usage" onClick={onOpenSettings}>
+              <GearIcon size={16} />
             </ToolButton>
-          </ControlGroup>
+          )}
+
+          {/* Help — opens the Setup & Deployment guide. An <a>, not a fetch/route, so it still works
+              when the server is down (file:// falls back to the sibling docs/ folder). */}
+          <ToolLink href={guideUrl()} label="Setup & deployment guide — requirements, install steps for Windows/macOS/Linux, git & Docker commands, troubleshooting">
+            <QuestionIcon size={16} />
+          </ToolLink>
+
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.08, rotate: dark ? -8 : 8 }}
+            whileTap={{ scale: 0.9, rotate: -15 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            title={dark ? 'Switch to the light theme' : 'Switch to the dark theme'}
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${SURFACE} transition-colors hover:border-[var(--muted)]`}
+          >
+            <ThemeGlyph dark={dark} />
+          </motion.button>
         </div>
       </div>
     </header>

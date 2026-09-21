@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion, useSpring } from 'motion/react'
 import { BOARD_COLUMNS, NEXT_SPRINT_SECTION } from '../lib/columns'
 import type { ColumnKey, Ticket } from '../types'
+import { hexToRgba } from '../lib/format'
 import { TrophyIcon } from './Icons'
 
 /**
@@ -27,15 +28,19 @@ type Segment = {
   label: string
   /** Count shown after the label; omitted for "All". */
   n?: number
-  /** Column identity — a 6px dot, the one bit of colour a segment carries. */
+  /** Column identity — its dot and count wear this colour, and the thumb tints with it when chosen. */
   color?: string
+  /** "Active" and "All" have no column colour: chosen, they invert to solid ink instead. */
+  invert?: boolean
   title: string
 }
 
+const FALLBACK = '#64748b'
+
 /**
- * One segmented control instead of a row of pills: a single quiet track, and a solid thumb that
- * slides to whichever segment is chosen. Colour is withheld to the column dots and the selected
- * count, so the control reads as one object rather than nine.
+ * One segmented control instead of a row of nine pills: a single track, and one thumb that slides
+ * to whichever segment is chosen. Each column keeps its colour — the dot, the bold count, and the
+ * tinted thumb when selected — so the row is compact without going grey.
  */
 export function Stats({
   tickets,
@@ -59,7 +64,7 @@ export function Stats({
   const total = tickets.filter((t) => t.column !== 'hold').length
 
   const segments: Segment[] = [
-    { id: null, label: 'Active', n: total, title: 'Everything in flight — every column of the board' },
+    { id: null, label: 'Active', n: total, invert: true, title: 'Everything in flight — every column of the board' },
     ...BOARD_COLUMNS.map<Segment>((c) => ({ id: c.key, label: c.label, n: counts(c.key), color: c.accent, title: `Only the ${c.label} column` })),
     ...(nextSprintCount > 0
       ? [
@@ -72,7 +77,7 @@ export function Stats({
           },
         ]
       : []),
-    { id: 'all', label: 'All', title: 'Show every ticket at once — all columns plus the Next Sprint queue, expanded' },
+    { id: 'all', label: 'All', invert: true, title: 'Show every ticket at once — all columns plus the Next Sprint queue, expanded' },
   ]
 
   return (
@@ -80,38 +85,46 @@ export function Stats({
       <div
         role="group"
         aria-label="Filter the board"
-        className="no-scrollbar flex h-8 max-w-full shrink items-center gap-[2px] overflow-x-auto rounded-[9px] border border-[var(--line)] bg-[var(--surface-2)] p-[2px]"
+        className="no-scrollbar flex h-9 max-w-full shrink items-center gap-[3px] overflow-x-auto rounded-[12px] border border-[var(--line)] bg-[var(--surface-2)] p-[3px]"
       >
         {segments.map((s) => {
           const on = active === s.id
+          const accent = s.color ?? FALLBACK
+          // Next Sprint is always written in its own colour (it's a toggle, not a filter); the rest
+          // colour up only when chosen.
+          const color = on ? (s.invert ? 'var(--bg)' : accent) : s.id === 'next' ? accent : 'var(--ink-soft)'
           return (
             <motion.button
               key={String(s.id)}
               type="button"
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 600, damping: 30 }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 22 }}
               onClick={() => onSelect(on && s.id !== null ? null : s.id)}
               aria-pressed={on}
               title={s.title}
-              className={`relative flex h-full shrink-0 items-center rounded-[7px] px-3 text-[12px] font-semibold whitespace-nowrap transition-colors duration-150 ${
-                on ? 'text-[var(--ink)]' : 'text-[var(--ink-soft)] hover:text-[var(--ink)]'
-              }`}
+              className="relative flex h-full shrink-0 items-center rounded-[9px] px-3 text-[12px] font-semibold whitespace-nowrap transition-colors duration-150"
+              style={{ color }}
             >
               {on && (
                 <motion.span
                   layoutId="jb-filter-thumb"
-                  className="absolute inset-0 rounded-[7px] bg-[var(--surface-solid)]"
-                  style={{ boxShadow: '0 1px 2px rgba(16,24,40,0.10), 0 0 0 0.5px var(--line)' }}
+                  className="absolute inset-0 rounded-[9px]"
+                  style={
+                    s.invert
+                      ? { background: 'var(--ink)' }
+                      : { background: hexToRgba(accent, 0.16), boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.45)}` }
+                  }
                   transition={{ type: 'spring', stiffness: 520, damping: 40 }}
                 />
               )}
               <span className="relative z-[1] inline-flex items-center gap-1.5">
-                {s.color && <span className="h-[6px] w-[6px] rounded-full" style={{ background: s.color }} />}
+                {s.color && <span className="inline-block h-2 w-2 rounded-full" style={{ background: s.color }} />}
                 {s.label}
                 {s.n != null && (
-                  <span className="tabular-nums" style={{ color: on ? (s.color ?? 'var(--ink)') : 'var(--muted)' }}>
+                  <b style={{ color: s.invert ? 'inherit' : accent }}>
                     <AnimatedNumber value={s.n} />
-                  </span>
+                  </b>
                 )}
               </span>
             </motion.button>
@@ -119,19 +132,18 @@ export function Stats({
         })}
       </div>
 
-      {/* The one celebratory element on the page keeps its gold, sized to the same 32px line. */}
       {completedCount != null && (
         <motion.button
           type="button"
           whileTap={{ scale: 0.97 }}
-          transition={{ type: 'spring', stiffness: 600, damping: 30 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 22 }}
           onClick={onOpenCompleted}
           title="View all completed tickets"
-          className="gold-sheen ml-auto inline-flex h-8 shrink-0 items-center rounded-full border-2 px-3.5 text-[12.5px] font-extrabold text-[#5b3d00]"
+          className="gold-sheen ml-auto inline-flex h-9 shrink-0 items-center rounded-full border-[3px] px-4 text-[13.5px] font-extrabold text-[#5b3d00]"
           style={{ borderColor: '#b45309' }}
         >
-          <span className="relative z-[1] inline-flex items-center gap-1.5">
-            <TrophyIcon size={12} glint /> Completed{' '}
+          <span className="relative z-[1] inline-flex items-center gap-2">
+            <TrophyIcon size={16} glint /> Completed{' '}
             <b>
               <AnimatedNumber value={completedCount} />
             </b>

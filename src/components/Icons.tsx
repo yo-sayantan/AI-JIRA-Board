@@ -299,16 +299,7 @@ export function CommentIcon({ size = 13, className = '', color = 'currentColor' 
   )
 }
 
-/** Sun — coloured by default; pass `color` for the monochrome outline the toolbar uses. */
-export function SunIcon({ size = 16, className = '', color }: IP) {
-  if (color) {
-    return (
-      <svg {...svg(size, className)}>
-        <circle cx="12" cy="12" r="4" stroke={color} strokeWidth="1.9" />
-        <path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.2 5.2l1.8 1.8M17 17l1.8 1.8M18.8 5.2L17 7M7 17l-1.8 1.8" {...line(color, 1.9)} />
-      </svg>
-    )
-  }
+export function SunIcon({ size = 16, className = '' }: IP) {
   return (
     <svg {...svg(size, className)}>
       <circle cx="12" cy="12" r="4" fill="#f59e0b" />
@@ -317,15 +308,7 @@ export function SunIcon({ size = 16, className = '', color }: IP) {
   )
 }
 
-/** Moon — coloured by default; pass `color` for the monochrome outline the toolbar uses. */
-export function MoonIcon({ size = 16, className = '', color }: IP) {
-  if (color) {
-    return (
-      <svg {...svg(size, className)}>
-        <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" stroke={color} strokeWidth="1.9" strokeLinejoin="round" />
-      </svg>
-    )
-  }
+export function MoonIcon({ size = 16, className = '' }: IP) {
   return (
     <svg {...svg(size, className)}>
       <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="#c4b5fd" stroke="#a78bfa" strokeWidth="1.4" strokeLinejoin="round" />
@@ -546,14 +529,6 @@ export function PaperclipIcon({ size = 14, color = 'currentColor' }: IP) {
   return (
     <svg {...svg(size, '')}>
       <path d="M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 6" {...line(color, 1.8)} />
-    </svg>
-  )
-}
-/** Chevron pointing down — the pull-down affordance beside a toolbar action. */
-export function ChevronDownIcon({ size = 12, className = '', color = 'currentColor' }: IP) {
-  return (
-    <svg {...svg(size, className)}>
-      <path d="M6 9.5l6 6 6-6" {...line(color, 2.4)} />
     </svg>
   )
 }

@@ -77,8 +77,8 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
 
   return (
     <div className="relative" ref={wrapRef}>
-      {/* The same 32px control as every other toolbar item — a monochrome glyph at rest, and the
-          AI violet only while work is queued, when the glyph itself becomes the progress ring. */}
+      {/* The same 36px square as Settings / Help / theme — the count lives in the tooltip so the
+          control stays a single glyph, and the glyph becomes the progress ring while work is queued. */}
       <ToolButton
         label={busy ? `Generating ${busy} PR readiness report${busy === 1 ? '' : 's'} — open report options` : 'Generate PR readiness reports'}
         title={
@@ -93,7 +93,7 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
         busy={busy > 0}
         style={busy ? { borderColor: hexToRgba(AI, 0.55) } : undefined}
       >
-        {busy ? <LoadingRing size={16} color={AI} /> : <SparkleIcon size={12} color="currentColor" />}
+        {busy ? <LoadingRing size={16} color={AI} /> : <SparkleIcon size={16} color={AI} />}
       </ToolButton>
 
       <AnimatePresence>
