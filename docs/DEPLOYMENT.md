@@ -112,8 +112,17 @@ bash jira-intern/local-runner/pr-reports-backfill.sh --force        # rebuild ev
 ```
 
 Output: `jira-intern/reports/<KEY>.json` (+ `reports/index.js` for `file://`). **Git-ignored** — real
-PR/Jira content never leaves the machine. In Docker the container runs the deterministic pass only
-(`SKIP_SUMMARY=1`); run the AI enrichment from your Mac, where `cursor-agent` and its MCP servers live.
+PR/Jira content never leaves the machine.
+
+**AI enrichment from Docker.** The container cannot run `cursor-agent` (`SKIP_SUMMARY=1`, no login), so
+`pr-report.sh` inside it writes the deterministic base and leaves a hand-off marker in
+`jira-intern/reports/.enrich/`. `start-jira-board.sh` installs a small **host-side enricher**
+(`jira-intern/local-runner/enrich-worker.sh`) as a launchd login agent (`com.jira-board.enricher`) on
+your Mac, where the agent is signed in; it picks the markers up and runs the same script at the AI level
+set in the board's Settings, so Regenerate and the bulk runs come out enriched with no terminal step. The
+board shows a report as *generating* until the enriched file lands, and Settings → AI usage shows whether
+the enricher is alive. Opt out with `INSTALL_ENRICHER=0 bash start-jira-board.sh`; remove it with
+`launchctl bootout gui/$(id -u)/com.jira-board.enricher && rm ~/Library/LaunchAgents/com.jira-board.enricher.plist`.
 
 ---
 

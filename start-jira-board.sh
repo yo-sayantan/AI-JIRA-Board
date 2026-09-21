@@ -138,6 +138,54 @@ wait_ready() {
   die "Board did not respond on port ${PORT} in time. Try: docker logs ${CONTAINER_NAME}"
 }
 
+# ── 5. Host-side AI enricher (launchd login agent) ────────────────────────────
+# The container cannot run cursor-agent, so pr-report.sh inside it hands AI enrichment off through
+# jira-intern/reports/.enrich/. This keeps a worker running HERE — where the agent is signed in —
+# that honours those hand-offs, so Regenerate and the bulk runs in the board come out enriched at
+# the level set in Settings with no terminal step. launchd restarts it at login and if it dies.
+# Opt out with INSTALL_ENRICHER=0. Remove:  launchctl bootout gui/$(id -u)/com.jira-board.enricher
+ENRICHER_LABEL="com.jira-board.enricher"
+install_enricher() {
+  if [ "${INSTALL_ENRICHER:-1}" != "1" ]; then ok "enricher install skipped (INSTALL_ENRICHER=0)"; return; fi
+  if [ "$(uname -s)" != "Darwin" ]; then
+    log "not macOS — run the enricher yourself:  bash jira-intern/local-runner/enrich-worker.sh &"; return
+  fi
+  if ! command -v cursor-agent >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/cursor-agent" ]; then
+    log "cursor-agent not found on this Mac — AI enrichment stays off; reports will be deterministic"; return
+  fi
+  local plist="$HOME/Library/LaunchAgents/${ENRICHER_LABEL}.plist"
+  local worker="$REPO_DIR/jira-intern/local-runner/enrich-worker.sh"
+  local logf="$REPO_DIR/jira-intern/logs/enricher.launchd.log"
+  mkdir -p "$HOME/Library/LaunchAgents" "$REPO_DIR/jira-intern/logs"
+  cat > "$plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>${ENRICHER_LABEL}</string>
+  <key>ProgramArguments</key><array><string>/bin/bash</string><string>${worker}</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>WorkingDirectory</key><string>${REPO_DIR}</string>
+  <key>StandardOutPath</key><string>${logf}</string>
+  <key>StandardErrorPath</key><string>${logf}</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict></plist>
+PLIST
+  local domain="gui/$(id -u)"
+  # Reload so a changed repo path or script takes effect; bootout is a harmless no-op if not loaded.
+  launchctl bootout "$domain/$ENRICHER_LABEL" >/dev/null 2>&1 || true
+  if launchctl bootstrap "$domain" "$plist" >/dev/null 2>&1; then
+    ok "host AI enricher running as login agent ${ENRICHER_LABEL} (log: jira-intern/logs/enricher.log)"
+  else
+    log "launchctl bootstrap failed — starting the enricher in the background for this session instead"
+    nohup /bin/bash "$worker" >>"$logf" 2>&1 &
+    ok "enricher started (pid $!) — it will not survive a reboot; see docs/DEPLOYMENT.md"
+  fi
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 printf '\n🎫  My Jira Board — Docker deploy\n'
 printf '    repo: %s\n' "$REPO_DIR"
@@ -147,6 +195,7 @@ ensure_docker
 free_port
 deploy
 wait_ready
+install_enricher
 
 log "Opening ${APP_URL}"
 open "$APP_URL" 2>/dev/null || true
@@ -155,6 +204,7 @@ printf '\n═══════════════════════�
 printf '  Board:     %s\n' "$APP_URL"
 printf '  Port:      %s  (dedicated — never changes)\n' "$PORT"
 printf '  Container: %s\n' "$CONTAINER_NAME"
+printf '  Enricher:  launchctl print gui/%s/%s   (AI enrichment on this Mac)\n' "$(id -u)" "$ENRICHER_LABEL"
 printf '  Logs:      docker logs -f %s\n' "$CONTAINER_NAME"
 printf '  Stop:      docker compose -f %s/docker-compose.yml down\n' "$REPO_DIR"
 printf '════════════════════════════════════════════════════════\n\n'

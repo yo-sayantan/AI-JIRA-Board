@@ -117,8 +117,12 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
                 {busy > 0 ? ` ${busy} in progress.` : ''}
               </div>
               {served && aiEnrichment && !aiEnrichment.available && (
-                <div className="mt-1 text-[10.5px] font-semibold text-[#b45309]">
-                  Generated without AI from here — Settings → AI usage explains how to enrich them.
+                <div className="mt-1 text-[10.5px] font-semibold" style={{ color: aiEnrichment.handoff && aiEnrichment.workerAlive ? AI : '#b45309' }}>
+                  {aiEnrichment.handoff && aiEnrichment.workerAlive
+                    ? 'Enriched on your Mac in the background at the AI level set in Settings.'
+                    : aiEnrichment.handoff
+                      ? 'The enricher on your Mac is not running — these stay deterministic until it is (Settings → AI usage).'
+                      : 'Generated without AI here — see Settings → AI usage.'}
                 </div>
               )}
             </div>

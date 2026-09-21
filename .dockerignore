@@ -28,3 +28,7 @@ jira-intern/.data.*
 jira-intern/.tmp-*
 jira-intern/.state.json
 jira-intern/_STATUS.md
+# PR report hand-off state — live files shared with the host enricher, never baked in.
+jira-intern/reports/.enrich
+jira-intern/reports/.enricher.*
+jira-intern/reports/.status.json

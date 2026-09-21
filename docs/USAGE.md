@@ -70,7 +70,9 @@ or **not verified** (a gap — shown, never hidden). A ring shows the 0–100 re
 1. *Deterministic base* — `jira-intern/pr_report.py`, from the fetched ticket data. No AI, no network.
 2. *AI enrichment* — `cursor-agent` with your read-only Jira / Bitbucket / Confluence / Dynatrace MCP
    servers rewrites it in place with evidence chains, per-file assessment, risks and a ticket-specific
-   release gate. Skipped automatically in Docker (`SKIP_SUMMARY=1`) or when no agent CLI is present.
+   release gate. In Docker the container hands this pass to the enricher running on your Mac (installed
+   by `start-jira-board.sh`), so it still happens at the AI level set in Settings; it is skipped only
+   when that level is None or no agent CLI exists anywhere.
 
 **When they are generated.** Automatically after every fetch for any ticket whose PR appeared or
 changed (background, capped by `reports.maxPerRun`), after a single-ticket refresh, or on demand from

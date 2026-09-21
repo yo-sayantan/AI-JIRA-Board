@@ -41,6 +41,10 @@ export interface AiEnrichmentState {
   /** disabled = SKIP_SUMMARY / SKIP_REPORT_AI is set (the Docker image) · no-agent = agent CLI not installed. */
   reason?: 'disabled' | 'no-agent'
   detail?: string
+  /** True when pr-report.sh hands enrichment off to the host-side enricher instead of dropping it. */
+  handoff?: boolean
+  /** That enricher's heartbeat was seen within the last 30s — hand-offs will actually be picked up. */
+  workerAlive?: boolean
 }
 
 export interface InternStatus {
@@ -76,6 +80,8 @@ export interface PrReportsIndex {
   reports: Record<string, PrReportSummary>
   generating: string[]
   exits?: Record<string, number>
+  /** Served mode: whether the AI pass runs here, is handed off to the host enricher, or is off. */
+  aiEnrichment?: AiEnrichmentState
 }
 
 type ReportsGlobal = { __JIRA_PR_REPORTS__?: { reports?: Record<string, PrReport>; generating?: string[] } }

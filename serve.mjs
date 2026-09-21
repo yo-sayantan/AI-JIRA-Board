@@ -315,7 +315,7 @@ function aiEnrichmentState() {
       available: false,
       reason: 'disabled',
       detail:
-        'AI is switched off for this server (SKIP_SUMMARY is set — the Docker image does this because the container carries no agent CLI or login).',
+        'This server cannot run the agent itself (SKIP_SUMMARY is set — the Docker image does that because the container carries no agent CLI or login).',
     }
   }
   const bin = process.env.AGENT_BIN || 'cursor-agent'
@@ -327,6 +327,36 @@ function aiEnrichmentState() {
   return { available: true }
 }
 const AI_ENRICHMENT = aiEnrichmentState()
+
+// Where this server may not run the agent, pr-report.sh HANDS OFF instead of giving up: it leaves a
+// marker in reports/.enrich/<KEY> for the host-side enricher (local-runner/enrich-worker.sh, kept
+// alive by start-jira-board.sh on the Mac where cursor-agent is signed in). That worker rewrites a
+// heartbeat file every few seconds; a fresh heartbeat is how the board knows hand-offs will really
+// be honoured — and only then are handed-off keys shown as still generating.
+const ENRICH_QUEUE = join(REPORTS_DIR, '.enrich')
+const ENRICHER_ALIVE = join(REPORTS_DIR, '.enricher.alive')
+async function enricherAlive() {
+  try {
+    return Date.now() - (await stat(ENRICHER_ALIVE)).mtimeMs < 30_000
+  } catch {
+    return false
+  }
+}
+/** Keys handed off and not yet picked up — counted as "generating" only while a live worker will take them. */
+async function pendingHandoffs() {
+  if (!(await enricherAlive())) return []
+  try {
+    return (await readdir(ENRICH_QUEUE)).filter((n) => KEY_RE.test(n)).map((n) => n.toUpperCase())
+  } catch {
+    return []
+  }
+}
+async function aiEnrichmentStatus() {
+  if (AI_ENRICHMENT.available) return AI_ENRICHMENT
+  // Env-disabled (the container) means pr-report.sh hands off; a missing agent on a host does not.
+  const handoff = AI_ENRICHMENT.reason === 'disabled'
+  return { ...AI_ENRICHMENT, handoff, workerAlive: handoff ? await enricherAlive() : false }
+}
 
 let running = false
 let archiveRunning = false
@@ -445,11 +475,13 @@ const server = createServer(async (req, res) => {
 
   // ── PR Readiness Reports ────────────────────────────────────────────────────
   if (path === '/api/reports' && req.method === 'GET') {
-    const [reports, external] = await Promise.all([reportsIndex(), externalGenerating()])
+    const [reports, external, handoffs, aiEnrichment] = await Promise.all([reportsIndex(), externalGenerating(), pendingHandoffs(), aiEnrichmentStatus()])
     return json(res, 200, {
       reports,
-      generating: [...new Set([...reportPendingKeys(), ...external])],
+      generating: [...new Set([...reportPendingKeys(), ...external, ...handoffs])],
       exits: Object.fromEntries(reportExits),
+      // Rides along with the index so the board's existing poll keeps the enricher's state current.
+      aiEnrichment,
     })
   }
   if (path.startsWith('/api/reports/') && req.method === 'GET') {
@@ -589,10 +621,10 @@ const server = createServer(async (req, res) => {
       refreshExits: Object.fromEntries(refreshExits),
       progress,
       // PR Readiness Reports in flight: this server's queue ∪ cron/terminal generations.
-      reportsGenerating: [...new Set([...reportPendingKeys(), ...(await externalGenerating())])],
+      reportsGenerating: [...new Set([...reportPendingKeys(), ...(await externalGenerating()), ...(await pendingHandoffs())])],
       reportExits: Object.fromEntries(reportExits),
-      // Whether the AI enrichment pass can run here at all (env + installed agent CLI).
-      aiEnrichment: AI_ENRICHMENT,
+      // Whether the AI pass runs here, is handed off to the host enricher (and whether that is alive), or is off.
+      aiEnrichment: await aiEnrichmentStatus(),
     })
   }
 

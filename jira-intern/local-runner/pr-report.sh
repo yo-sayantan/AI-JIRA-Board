@@ -9,8 +9,10 @@
 #   2. AI ENRICHMENT       — the connector agent (cursor-agent by default: the same MCP servers and
 #      skills you use in Cursor — Jira, Bitbucket diff, Confluence, Dynatrace, all read-only) rewrites
 #      the report in place with evidence chains, per-file change assessment, risks and a release gate.
-#      Skipped with --no-ai / SKIP_REPORT_AI=1 / SKIP_SUMMARY=1 (Docker) / no agent CLI. If the agent
-#      output is not a valid report, the deterministic base is restored — never a blank or torn file.
+#      Skipped with --no-ai, AI usage = None, or no agent CLI. Where the env forbids the agent
+#      (SKIP_SUMMARY=1 / SKIP_REPORT_AI=1 — the Docker container) the ticket is HANDED OFF through
+#      reports/.enrich/<KEY> to the host-side enricher (enrich-worker.sh) instead of dropped. If the
+#      agent output is not a valid report, the deterministic base is restored — never a torn file.
 #
 # Output: jira-intern/reports/<KEY>.json  (+ reports/index.js for file:// via sync-reports.mjs).
 # Exit codes: 0 ok · 2 ticket has no PR / not found.
@@ -70,8 +72,10 @@ fi
 node "$HERE/sync-reports.mjs" "$INTERN_DIR" >>"$LOG" 2>&1 || true   # base is visible immediately
 
 # ── 2. AI enrichment (optional) ───────────────────────────────────────────────
-if [ "$NO_AI" = "1" ] || [ -n "${SKIP_REPORT_AI:-}" ] || [ -n "${SKIP_SUMMARY:-}" ]; then
-  echo "$(date): AI enrichment skipped (flag/env) — deterministic report kept" | tee -a "$LOG"; exit 0
+# --no-ai is an explicit request for the deterministic report (so is AI usage = None below):
+# nothing else should pick the ticket up later.
+if [ "$NO_AI" = "1" ]; then
+  echo "$(date): AI enrichment skipped (--no-ai) — deterministic report kept" | tee -a "$LOG"; exit 0
 fi
 # AI usage level from the board's Settings panel (none | low | moderate | full). "none" is the
 # same contract as --no-ai; the others only scale how long the agent is allowed to think.
@@ -80,6 +84,15 @@ case "${REPORTS_AI_LEVEL:-moderate}" in
   low)      TIMEOUT_REPORT=$(( TIMEOUT_REPORT / 2 )) ;;
   full)     TIMEOUT_REPORT=$(( TIMEOUT_REPORT * 2 )) ;;
 esac
+# Where THIS process may not run the agent (SKIP_SUMMARY / SKIP_REPORT_AI — the Docker container),
+# hand the ticket off rather than drop it: a marker in reports/.enrich/ asks the host-side enricher
+# (local-runner/enrich-worker.sh, kept alive by start-jira-board.sh on the Mac where cursor-agent is
+# signed in) to run this same script there. The board keeps showing "generating" until it lands.
+if [ -n "${SKIP_REPORT_AI:-}" ] || [ -n "${SKIP_SUMMARY:-}" ]; then
+  mkdir -p "$REPORTS_DIR/.enrich"
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$REPORTS_DIR/.enrich/$KEY"
+  echo "$(date): agent not allowed here (env) — handed off to the host enricher via reports/.enrich/$KEY" | tee -a "$LOG"; exit 0
+fi
 AGENT="$(command -v "$AGENT_BIN")"
 if [ -z "$AGENT" ]; then
   IFS=':' read -r -a FBS <<< "$AGENT_BIN_FALLBACKS"

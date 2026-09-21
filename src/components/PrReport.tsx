@@ -36,7 +36,11 @@ export function PrReportOverlay({
   /** Whether the server can run the AI pass; explains a deterministic-only report in the footer. */
   aiEnrichment?: AiEnrichmentState | null
 }) {
+  // Where the AI pass cannot run on the server it is either handed off to the enricher on the user's
+  // Mac (which may or may not be alive) or simply off (no agent anywhere). Each gets its own wording.
   const aiBlocked = !!aiEnrichment && !aiEnrichment.available
+  const aiHandoff = aiBlocked && !!aiEnrichment?.handoff
+  const aiWorker = aiHandoff && !!aiEnrichment?.workerAlive
   const [tabId, setTabId] = useState<string | null>(null)
   // Reset to the first tab whenever a different report opens.
   useEffect(() => {
@@ -173,9 +177,13 @@ export function PrReportOverlay({
                       disabled={!!generating}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-solid)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink-soft)] hover:border-[var(--muted)] disabled:opacity-60"
                       title={
-                        aiBlocked
-                          ? 'Rebuild the deterministic base in the background — the AI pass cannot run where this board is served (see the note at the foot of the report)'
-                          : 'Rebuild this report in the background (deterministic base + AI enrichment)'
+                        aiWorker
+                          ? 'Rebuild this report: the deterministic base here, then AI enrichment on your Mac at the level set in Settings'
+                          : aiHandoff
+                            ? 'Rebuild the deterministic base — the enricher on your Mac is not running, so the AI pass waits until it is (see the note at the foot of the report)'
+                            : aiBlocked
+                              ? 'Rebuild the deterministic base in the background — the AI pass cannot run where this board is served (see the note at the foot of the report)'
+                              : 'Rebuild this report in the background (deterministic base + AI enrichment)'
                       }
                     >
                       <motion.span className="inline-flex" animate={generating ? { rotate: 360 } : { rotate: 0 }} transition={generating ? { repeat: Infinity, duration: 0.9, ease: 'linear' } : { duration: 0.2 }}>
@@ -264,13 +272,23 @@ export function PrReportOverlay({
               )}
               {/* The generic warning above says WHAT is missing; when we know the AI pass cannot run
                   from this server, also say WHY and what to run — otherwise "regenerate" looks broken. */}
-              {!report.enriched && aiBlocked && (
+              {!report.enriched && aiWorker && (
                 <span className="basis-full text-[var(--ink-soft)]">
-                  Why deterministic: {aiEnrichment?.detail} To enrich this report, run on your own machine{' '}
-                  <code className="rounded bg-[var(--surface-2)] px-1.5 py-[1px] font-mono text-[10.5px] text-[var(--ink)]">
-                    bash jira-intern/local-runner/pr-report.sh {report.key}
-                  </code>{' '}
-                  — it writes to the same reports folder and shows here on the next poll.
+                  {generating
+                    ? 'Being enriched on your Mac at the AI level set in Settings — this report refreshes here when it lands.'
+                    : 'Regenerate rebuilds this report with AI enrichment on your Mac at the level set in Settings. Choose None there for a deterministic report.'}
+                </span>
+              )}
+              {!report.enriched && aiHandoff && !aiWorker && (
+                <span className="basis-full text-[#b45309]">
+                  AI enrichment waits for the enricher on your Mac, which is not running — reports stay deterministic until it is. Start it with{' '}
+                  <code className="rounded bg-[var(--surface-2)] px-1.5 py-[1px] font-mono text-[10.5px] text-[var(--ink)]">bash start-jira-board.sh</code>{' '}
+                  (it is installed as a login agent, so it stays on).
+                </span>
+              )}
+              {!report.enriched && aiBlocked && !aiHandoff && (
+                <span className="basis-full text-[var(--ink-soft)]">
+                  Why deterministic: {aiEnrichment?.detail} Install and sign in to the agent CLI on this machine, then regenerate.
                 </span>
               )}
             </footer>

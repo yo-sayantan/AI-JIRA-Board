@@ -119,6 +119,8 @@ export default function App() {
     const idx = await getReportsIndex()
     if (!idx) return null
     setReportsIndex(idx)
+    // The index carries the enricher's live state (its heartbeat), so this same poll keeps it current.
+    if (idx.aiEnrichment) setAiEnrichment(idx.aiEnrichment)
     const next = new Set(idx.generating ?? [])
     const prev = reportsGeneratingRef.current
     for (const k of prev) {

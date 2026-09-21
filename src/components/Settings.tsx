@@ -160,15 +160,33 @@ function AiAvailabilityNote({ synced, state }: { synced: boolean; state?: AiEnri
   }
   if (state && !state.available) {
     const AMBER = '#f59e0b'
+    // The container hands enrichment to the enricher on the user's Mac. Alive: all good, say so.
+    if (state.handoff && state.workerAlive) {
+      return (
+        <div className="mt-2.5 rounded-lg border px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ borderColor: hexToRgba(AI, 0.5), background: hexToRgba(AI, 0.08) }}>
+          <div className="font-bold" style={{ color: AI }}>AI enrichment runs on your Mac</div>
+          <p className="mt-0.5 text-[var(--ink-soft)]">
+            This board is served from a place that cannot run the agent, so Regenerate and the bulk runs hand each report to the background enricher on your Mac, which enriches it at the level above. A report shows as generating until the enriched version lands. Choose None for deterministic reports.
+          </p>
+        </div>
+      )
+    }
+    if (state.handoff) {
+      return (
+        <div className="mt-2.5 rounded-lg border px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ borderColor: hexToRgba(AMBER, 0.5), background: hexToRgba(AMBER, 0.1) }}>
+          <div className="font-bold text-[#b45309]">The background enricher on your Mac isn’t running</div>
+          <p className="mt-0.5 text-[var(--ink-soft)]">
+            Reports generated now stay deterministic until it is. The deploy script installs it as a login agent, so it stays on from then:
+          </p>
+          <code className="mt-1 block rounded bg-[var(--surface-2)] px-2 py-1 font-mono text-[10.5px] text-[var(--ink)]">bash start-jira-board.sh</code>
+          <p className="mt-1 text-[var(--muted)]">Or run it by hand for this session: bash jira-intern/local-runner/enrich-worker.sh</p>
+        </div>
+      )
+    }
     return (
       <div className="mt-2.5 rounded-lg border px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ borderColor: hexToRgba(AMBER, 0.5), background: hexToRgba(AMBER, 0.1) }}>
-        <div className="font-bold text-[#b45309]">AI enrichment can’t run where this board is served</div>
-        <p className="mt-0.5 text-[var(--ink-soft)]">
-          {state.detail} Reports generated from here stay deterministic whatever level is chosen — the “needs the AI enrichment pass” note on a report is accurate, not a fault.
-        </p>
-        <p className="mt-1.5 text-[var(--ink-soft)]">The level still governs runs on your own machine, where the agent is signed in. To enrich every report that is still deterministic-only:</p>
-        <code className="mt-1 block rounded bg-[var(--surface-2)] px-2 py-1 font-mono text-[10.5px] text-[var(--ink)]">bash jira-intern/local-runner/pr-reports-backfill.sh --needs-ai</code>
-        <p className="mt-1 text-[var(--muted)]">Enriched reports land in the same jira-intern/reports folder this board reads, so they show up here on the next poll.</p>
+        <div className="font-bold text-[#b45309]">AI enrichment can’t run here</div>
+        <p className="mt-0.5 text-[var(--ink-soft)]">{state.detail} Install and sign in to the agent CLI on this machine, then regenerate.</p>
       </div>
     )
   }
