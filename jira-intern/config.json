@@ -1,5 +1,5 @@
 {
-  "_readme": "TEMPLATE / FALLBACK — safe to commit, contains NO personal values. Your real config lives OUTSIDE the repo at ~/.ai/config.json, which always wins over this file. Resolution order: $AI_CONFIG_FILE > ~/.ai/config.json > this file. Create yours with: cp jira-intern/config.json ~/.ai/config.json (then edit it). Every key is documented in CONFIG.md next to this file.",
+  "_readme": "DEPRECATED compatibility example. Canonical project defaults now live at config/jira-board.config.json. Personal ~/.ai/config.json should contain only overrides.",
 
   "user": {
     "name": "Your Name (exactly as Jira displays it)",
@@ -76,6 +76,7 @@
   "app": {
     "servePort": 4321,
     "requiredApprovals": 2,
+    "timeZone": "IST",
     "branding": {
       "tagline": "Built to dodge JIRA · made with ☕ + a refresh button",
       "badgeText": "your-name.dev",

@@ -35,6 +35,23 @@ fi
 
 have_token() { [ -n "${JIRA_PERSONAL_TOKEN:-}" ]; }
 
+config_get() {
+  node "$INTERN_DIR/local-runner/config.mjs" get "$1" 2>/dev/null || true
+}
+
+# Explicit environment values win; otherwise use the central project config.
+REFRESH_ON_START="${REFRESH_ON_START:-$(config_get refresh.onStart)}"
+case "$REFRESH_ON_START" in true) REFRESH_ON_START=1 ;; false) REFRESH_ON_START=0 ;; esac
+REFRESH_ON_START="${REFRESH_ON_START:-1}"
+REFRESH_INTERVAL="${REFRESH_INTERVAL:-$(config_get refresh.intervalSec)}"
+REFRESH_INTERVAL="${REFRESH_INTERVAL:-900}"
+
+# Refresh the runtime UI config even when Jira is offline or startup fetch is disabled.
+# This keeps branding, timezone, feature defaults, and polling policy aligned with config.
+if ! node "$INTERN_DIR/local-runner/sync-datajs.mjs" "$INTERN_DIR"; then
+  log "warning: could not refresh data.js runtime config; serving the last saved copy"
+fi
+
 # Use the lock-aware runner (not raw daily_fetch.py). Writing `.intern.lock` with `$$`
 # from this script is unsafe: after `exec node`, `$$` is the Node server PID, so a
 # leftover lock looks "live" forever and wedges Refresh / Rebuild archive.
@@ -62,12 +79,12 @@ run_fetch() {
 }
 
 # 3) Fetch once on boot (backgrounded so a slow/offline Jira never blocks the server).
-if [ "${REFRESH_ON_START:-1}" != "0" ]; then
+if [ "$REFRESH_ON_START" != "0" ]; then
   run_fetch &
 fi
 
 # 4) Periodic auto-refresh. REFRESH_INTERVAL=0 disables it.
-INTERVAL="${REFRESH_INTERVAL:-900}"
+INTERVAL="$REFRESH_INTERVAL"
 if have_token && [ "$INTERVAL" -gt 0 ] 2>/dev/null; then
   log "auto-refresh every ${INTERVAL}s"
   ( while true; do sleep "$INTERVAL"; run_fetch; done ) &

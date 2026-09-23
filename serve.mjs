@@ -8,10 +8,9 @@
 // file://; Refresh there just reloads the latest dump.
 import { createServer } from 'node:http'
 import { readFile, readdir, stat, unlink, writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { extname, join, normalize } from 'node:path'
-import { homedir } from 'node:os'
+import { cfg as PROJECT_CONFIG } from './jira-intern/local-runner/config.mjs'
 
 const ROOT = import.meta.dirname // the jira-board/ project — everything lives inside it
 const INTERN = join(ROOT, 'jira-intern')
@@ -408,26 +407,8 @@ async function reportsIndex() {
 }
 
 const BOARD = '/dist/index.html'
-// Same precedence as jira-intern/local-runner/config.mjs (kept in sync manually — this file
-// is intentionally zero-dependency, so it doesn't import that ESM module): personal config
-// outside the repo wins over the tracked, sanitized template.
-//   1. $AI_CONFIG_FILE            2. ~/.ai/config.json            3. jira-intern/config.json
-function configPath() {
-  if (process.env.AI_CONFIG_FILE) return process.env.AI_CONFIG_FILE
-  const personal = join(homedir(), '.ai', 'config.json')
-  if (existsSync(personal)) return personal
-  return join(INTERN, 'config.json')
-}
-// Port: env PORT > resolved config.json → app.servePort > 4321.
-async function configuredPort() {
-  try {
-    const cfg = JSON.parse(await readFile(configPath(), 'utf8'))
-    const p = Number(cfg?.app?.servePort)
-    if (Number.isInteger(p) && p > 0) return p
-  } catch {}
-  return 4321
-}
-const PORT = Number(process.env.PORT) || (await configuredPort())
+// Port: env PORT > merged project config → app.servePort.
+const PORT = Number(process.env.PORT) || Number(PROJECT_CONFIG.app?.servePort) || 4321
 // Interface to bind. Defaults to loopback so a laptop run stays private; the Docker image
 // sets BIND_HOST=0.0.0.0 so the board is reachable via the published port.
 const HOST = process.env.BIND_HOST || '127.0.0.1'

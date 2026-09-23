@@ -10,7 +10,7 @@ is not my work and must NOT appear. No team-wide fetch, no clones.
 The fast path is completed_archive.py; you are the fallback. Read that script before improvising — it is the
 executable version of everything below.
 
-ENVIRONMENT (values injected from jira-board/jira-intern/config.json — edit THAT file, not this prompt)
+ENVIRONMENT (values injected from config/jira-board.config.json + optional personal override — edit config, not this prompt)
 - I am {{USER_NAME}} (account id {{USER_ID}}).
 - My Jira: {{JIRA_BASE}}   My Confluence: {{CONFLUENCE_BASE}}   My Bitbucket: {{BITBUCKET_BASE}}
 {{MCP_POLICY}}

@@ -33,12 +33,13 @@ Key scripts:
 | `daily_fetch.py` / `run_fetch.py` | Pull active tickets assigned to you → `data.json` / `data.js`. |
 | `completed_archive.py` | Build the full historical "Completed" archive. |
 | `local-runner/*.sh` | Thin wrappers: daily, weekly, per-ticket refresh, summary. |
-| `local-runner/config.mjs` | Resolves `config.json` into shell vars, rendered prompts, MCP policy. |
+| `local-runner/config.mjs` | Deep-merges the project config + personal override into shell vars, rendered prompts, MCP policy, and UI defaults. |
 | `prompts/intern-prompt.md` | The schema the fetch must produce, in prose — mirrors `src/types.ts`. |
-| `config.json` | **Single source of truth** for identity, endpoints, connector, policy, branding. |
+| `config/jira-board.config.json` | **Canonical project defaults/policy** for identity placeholders, endpoints, AI, reports, archive, refresh, UI, timezone, and branding. |
+| `config/jira-board.config.schema.json` | Validation and editor completion for the central config. |
 | `pr_report.py` | **PR Readiness Reports** — deterministic base per ticket-with-PR → `reports/<KEY>.json`; validation; staleness by PR fingerprint. |
 | `ai_queue.py` | File queue `jira-intern/.ai-queue/` for JIRA-AI-Intern jobs (enrich, summarize, pull-model). |
-| `ai-intern/worker.py` | Queue worker + HTTP (`/health`, `/api/models`, `/api/jobs`). Local Ollama or cloud HTTP. |
+| `ai-intern/worker.py` | Queue worker + HTTP (`/health`, `/api/models`, `/api/cloud-models`, `/api/jobs`). Local Ollama, Claude Messages, or Cursor Cloud Agents. |
 | `prompts/pr-readiness-prompt.md` | The AI enrichment brief (evidence chain, per-file assessment, risks, release gate) — mirrors `src/lib/reportTypes.ts`. |
 | `local-runner/pr-report.sh` · `pr-reports-backfill.sh` | One ticket / every ticket-with-PR of a year. Writes the base then enqueues enrichment. |
 | `local-runner/sync-reports.mjs` | `reports/*.json` → `reports/index.js` (`window.__JIRA_PR_REPORTS__`) so reports open on `file://` too. |
@@ -107,4 +108,5 @@ See [`DEPLOYMENT.md`](DEPLOYMENT.md) for step-by-step instructions.
 `aiLocalModel` live in `jira-intern/.settings.json`. The board writes a deterministic report in
 seconds, then enqueues `{type: enrich-report}` unless the level is None. Local inference is Ollama
 (CPU in Docker, or host Metal via `host.docker.internal`). Cloud uses the HTTP API and keys in
-`~/.cursor/mcp-secrets.env`. CI / Checkmarx / Dynatrace stay **Not verified** on the file-only pass.
+`~/.cursor/mcp-secrets.env`. Local enrichment (Gemma / GPT-OSS / mini / nano included) reads the intern
+volume plus live Jira/Bitbucket REST with those same tokens. CI / Checkmarx / Dynatrace stay **Not verified**.

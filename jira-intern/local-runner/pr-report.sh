@@ -10,7 +10,6 @@
 #      skills you use in Cursor — Jira, Bitbucket diff, Confluence, Dynatrace, all read-only) rewrites
 #      the report in place with evidence chains, per-file change assessment, risks and a release gate.
 #      Skipped with --no-ai / SKIP_REPORT_AI=1 / AI usage None in Settings.
-#      SKIP_SUMMARY=1 only skips the fetch-container summary agent; it does NOT skip report AI.
 #
 # Output: jira-intern/reports/<KEY>.json  (+ reports/index.js for file:// via sync-reports.mjs).
 # Exit codes: 0 ok · 2 ticket has no PR / not found.

@@ -28,7 +28,7 @@ import sys
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config import endpoints, load_config  # noqa: E402
+from _config import endpoints, load_config, now_iso as configured_now_iso, time_zone  # noqa: E402
 
 INTERN = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(INTERN, "data.json")
@@ -47,7 +47,7 @@ TONE_RANK = {"danger": 4, "warning": 3, "info": 2, "success": 1, "neutral": 0, "
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 def now_iso():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return configured_now_iso(INTERN)
 
 
 def esc(s):
@@ -367,8 +367,8 @@ def build_base(t, src, cfg):
         gate("fixVersion set", "Pass" if a["fix"] else "Fail", ", ".join(a["fix"]) or "none", "Yes"),
         gate("Target is a release branch", "Pass" if o and RELEASE_BRANCH.match(o.get("destinationBranch") or "") else ("Not verified" if not o else "Fail"),
              (o.get("destinationBranch") or "?") if o else "no open PR", "No"),
-        gate("CI green", "Not verified", "filled by the AI pass from Bitbucket build status", "No"),
-        gate("Security scan (Checkmarx) clean", "Not verified", "filled by the AI pass", "No"),
+        gate("CI green", "Not verified", "Read from Bitbucket when the report is enriched", "No"),
+        gate("Security scan (Checkmarx) clean", "Not verified", "Read when this is a vulnerability fix", "No"),
     ]
     blockers_yes = sum(1 for g in gates if g["cells"][1] == "Fail" and g["cells"][3] == "Yes")
 
@@ -549,11 +549,12 @@ def build_base(t, src, cfg):
     ]}
 
     return {
-        "schemaVersion": SCHEMA_VERSION, "key": key, "title": t.get("title") or key, "generatedAt": now_iso(),
+        "schemaVersion": SCHEMA_VERSION, "key": key, "title": t.get("title") or key,
+        "timeZone": time_zone(INTERN), "generatedAt": now_iso(),
         "fingerprint": fingerprint(t), "enriched": False, "enrichedAt": None, "generator": GENERATOR,
         "verdict": verdict, "stats": stats, "tabs": [verdict_tab, evidence_tab, scope_tab, sources_tab], "links": links,
         "sources": "Jira (last fetch) · Bitbucket via Jira dev-status. Deterministic — no AI, no live calls.",
-        "warnings": ["CI / Checkmarx / live production telemetry were not queried. File-only AI (when enabled) fills business impact and per-file notes; those three gates stay Not verified."],
+        "warnings": ["CI, Checkmarx, or Dynatrace is added for the matching ticket type when the report is enriched."],
     }
 
 

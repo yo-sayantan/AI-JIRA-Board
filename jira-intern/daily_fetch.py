@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import devinfo  # noqa: E402  (needs the path fix above when run from another cwd)
-from _config import endpoints, identity, load_config  # noqa: E402
+from _config import endpoints, identity, load_config, load_secrets  # noqa: E402
 from _sprint import apply_sprint  # noqa: E402
 from datafile import atomic_dump, atomic_write, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
@@ -93,13 +93,8 @@ def is_excluded(key):
 
 
 def load_env():
-    p = os.path.expanduser("~/.cursor/mcp-secrets.env")
-    if os.path.isfile(p):
-        for line in open(p):
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    for key, value in load_secrets(INTERN).items():
+        os.environ.setdefault(key, value)
 
 
 def _is_transient_net(exc):

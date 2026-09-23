@@ -2,13 +2,14 @@ import type { CompletedTicket, JiraData, Ticket } from './types'
 import { mapStatusToColumn } from './lib/columns'
 import { projectOf } from './lib/format'
 import { fixture } from './fixtures'
+import { APP_CONFIG } from './lib/appConfig'
 
 export type DataSource = 'live' | 'fixture' | 'empty'
 
 /** How long a freshly-Done ticket stays visible on the board as a "recent win"
  *  before it retires to the Completed archive. Enforced HERE (deterministically,
  *  on every load) so the rule holds even if the intern's dump lags behind. */
-export const DONE_BOARD_DAYS = 5
+export const DONE_BOARD_DAYS = APP_CONFIG.doneBoardDays ?? 5
 
 function normalizeTicket(t: Ticket): Ticket {
   return {

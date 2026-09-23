@@ -39,10 +39,15 @@ def atomic_dump(path, obj):
 
 
 def _app_config():
-    """The app-facing config slice, exposed so the built board picks up branding and
-    thresholds at runtime off file:// without a rebuild."""
+    """Safe non-secret config exposed to the built board at runtime."""
     try:
-        return load_config(INTERN).get("app")
+        cfg = load_config(INTERN)
+        return {
+            **(cfg.get("app") or {}),
+            "reports": cfg.get("reports") or {},
+            "archive": cfg.get("archive") or {},
+            "ai": cfg.get("ai") or {},
+        }
     except Exception:
         return None
 

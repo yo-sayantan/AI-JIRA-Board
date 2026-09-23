@@ -68,9 +68,13 @@ or **not verified** (a gap — shown, never hidden). A ring shows the 0–100 re
 
 **How reports are produced.** Two passes, so a report always exists once a PR appears:
 1. *Deterministic base* — `jira-intern/pr_report.py`, from the fetched ticket data. No AI, no network.
-2. *AI enrichment* — **JIRA-AI-Intern** (Ollama locally, or a cloud chat API) merges structured JSON
+2. *AI enrichment* — **JIRA-AI-Intern** (Ollama locally, or Cloud AI) merges structured JSON
    (business impact, per-file notes when a file list exists, risks). Settings **None** stops after
-   the base. **Max** is the longest timeout (`full`). CI / Checkmarx / live Dynatrace stay Not verified.
+   the base. **Max** is the longest timeout (`full`). Cloud AI is Claude or Cursor; the intern
+   reads `ANTHROPIC_API_KEY`, `CURSOR_API_KEY`, or `GEMINI_API_KEY` only from `~/.cursor/mcp-secrets.env`.
+   Cursor lists a few Gemini Flash models, GPT-4o, Grok, and Chinese models (Qwen, DeepSeek, Kimi, GLM).
+   Cursor effort is **low** (default) or **medium**. Local models see on-disk
+   intern data plus live Jira/Bitbucket (MCP tokens). CI / Checkmarx / live Dynatrace stay Not verified.
 
 **When they are generated.** Automatically after every fetch for any ticket whose PR appeared or
 changed (background, capped by `reports.maxPerRun`), after a single-ticket refresh, or on demand from

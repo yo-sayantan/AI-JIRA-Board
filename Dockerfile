@@ -29,10 +29,7 @@ FROM node:26-bookworm-slim AS runtime
 # Container-friendly defaults; override any of these at `docker run`/compose time.
 ENV NODE_ENV=production \
     BIND_HOST=0.0.0.0 \
-    PORT=4321 \
-    SKIP_SUMMARY=1 \
-    REFRESH_ON_START=1 \
-    REFRESH_INTERVAL=900
+    PORT=4321
 # python3 = the deterministic fetch; tini = clean PID 1 (reaps the Python children
 # that the Refresh button spawns); ca-certificates for TLS. bash + coreutils(timeout)
 # already ship in the base image and cover the runner scripts.
@@ -44,6 +41,7 @@ WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY serve.mjs package.json ./
 COPY jira-intern ./jira-intern
+COPY config ./config
 # The Setup & Deployment guide, served at /docs/index.html — this is what the board's
 # help (?) button opens, so it must exist inside the image, not just in the repo.
 COPY docs ./docs
