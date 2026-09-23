@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { CompletedTicket, Ticket } from '../types'
-import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, releaseEnvOf, yearOf, hexToRgba, branchesOf, branchStatusOf, prListOf, isMergedPr, shortBranch, cycleTime, fmtDays } from '../lib/format'
+import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, releaseEnvOf, yearOf, hexToRgba, branchesOf, branchStatusOf, prListOf, isMergedPr, isClosedPr, shortBranch, cycleTime, fmtDays } from '../lib/format'
 import { matchRow, parseQuery } from '../lib/search'
 import { Pill, PrBadge, BranchStatusPill, PointsTag } from './ui'
 import { BranchIcon, ChevronIcon, CommentIcon, ExpandAllIcon, PersonIcon, PrStateIcon, SearchIcon, SparkleIcon, TrophyIcon, TypeIcon } from './Icons'
@@ -28,6 +28,19 @@ const RAIL = { comments: 46, env: 64, pr: 44, date: 98 }
  */
 const isMine = (it: CompletedTicket) => it.mine !== false
 
+/** The ticket's own pull requests plus those on its sub-tasks. */
+function archivePrs(it: CompletedTicket) {
+  return [...prListOf(it), ...(it.subtasks ?? []).flatMap((s) => prListOf(s))]
+}
+
+function matchesPrFilter(it: CompletedTicket, filter: null | 'any' | 'merged' | 'declined') {
+  if (!filter) return true
+  const prs = archivePrs(it)
+  if (filter === 'merged') return prs.some(isMergedPr)
+  if (filter === 'declined') return prs.some((p) => p.state === 'declined')
+  return prs.some(isClosedPr)
+}
+
 type MonthGroup = { label: string; rows: CompletedTicket[] }
 
 /** Near-full-screen overlay (slides in from the top) listing every completed ticket. Controlled by App. */
@@ -45,15 +58,16 @@ export function CompletedOverlay({
   /** When a ticket detail is layered on top, ignore Esc here so one keypress closes only the top layer. */
   pauseEsc?: boolean
 }) {
-  // Sub-tasks are first-class rows too — work delivered under someone else's master
-  // ticket must be findable here, not only in Jira. Dedupe by key defensively.
+  // Sub-tasks stay on the parent. The archive also stores each one as its own row so the
+  // detail page can open it; those rows are not listed here.
   const all = useMemo(() => {
     const seen = new Set<string>()
-    return rawItems.filter((it) => !seen.has(it.key) && (seen.add(it.key), true))
+    return rawItems.filter((it) => !it.parentKey && !seen.has(it.key) && (seen.add(it.key), true))
   }, [rawItems])
   const [q, setQ] = useState('')
   const [proj, setProj] = useState<string | null>(null)
   const [typ, setTyp] = useState<string | null>(null)
+  const [prFilter, setPrFilter] = useState<null | 'any' | 'merged' | 'declined'>(null)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
 
   const mineItems = useMemo(() => all.filter(isMine), [all])
@@ -85,6 +99,7 @@ export function CompletedOverlay({
     setQ('')
     setProj(null)
     setTyp(null)
+    setPrFilter(null)
     setExpanded(new Set())
   }, [open])
 
@@ -125,12 +140,13 @@ export function CompletedOverlay({
   const terms = useMemo(() => parseQuery(q), [q])
   const chipsMatch = (it: CompletedTicket) => {
     if (proj && (it.project || projectOf(it.key)) !== proj) return false
+    if (!matchesPrFilter(it, prFilter)) return false
     return !typ || (effectiveType(it) || 'Other').trim() === typ
   }
   const filtered = useMemo(
     () => items.filter((it) => chipsMatch(it) && matchRow(it, terms) !== null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, terms, proj, typ],
+    [items, terms, proj, typ, prFilter],
   )
 
   // Pure chronology: newest first, year → month. Types are surfaced via the row
@@ -161,7 +177,6 @@ export function CompletedOverlay({
   const stats = useMemo(
     () => ({
       merged: mineItems.filter((it) => prListOf(it).some(isMergedPr)).length,
-      subtasks: mineItems.filter((it) => it.parentKey).length,
       releases: mineItems.filter((it) => effectiveType(it) === 'Release').length,
       onboarding: mineItems.filter((it) => effectiveType(it) === 'Onboarding').length,
     }),
@@ -184,7 +199,7 @@ export function CompletedOverlay({
     })
   const toggleAll = () => setExpanded(allExpanded ? new Set() : new Set(filtered.map((it) => it.key)))
   const empty = all.length === 0
-  const filtering = !!q || !!proj || !!typ
+  const filtering = !!q || !!proj || !!typ || !!prFilter
 
   return (
     <AnimatePresence>
@@ -224,12 +239,6 @@ export function CompletedOverlay({
                     ) : (
                       <>
                         <b className="text-[var(--ink-soft)]">{mineItems.length}</b> tickets
-                        {stats.subtasks > 0 && (
-                          <>
-                            {' · '}
-                            <b className="text-[var(--ink-soft)]">{stats.subtasks}</b> sub-tickets
-                          </>
-                        )}
                         {' · '}
                         <b className="text-[var(--ink-soft)]">{projects.length}</b> project{projects.length === 1 ? '' : 's'}
                         {span && ` · ${span}`}
@@ -252,11 +261,10 @@ export function CompletedOverlay({
                 </button>
               </div>
               {!empty && (
-                <div className="grid grid-cols-2 gap-2.5 px-6 pb-5 pt-4 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid grid-cols-2 gap-2.5 px-6 pb-5 pt-4 sm:grid-cols-3 lg:grid-cols-5">
                   <StatTile n={mineItems.length} label="Tickets done" color={DONE} icon={<TrophyIcon size={14} />} />
                   <StatTile n={totalPts} label="Story points" color="#3b82f6" icon={<SparkleIcon size={14} color="#3b82f6" />} />
                   <StatTile n={stats.merged} label="PRs merged" color={CONTEXT} icon={<PrStateIcon state="merged" color={CONTEXT} size={14} />} />
-                  <StatTile n={stats.subtasks} label="Sub-tickets" color={SUB} icon={<TypeIcon type="Sub-task" color={SUB} size={14} />} />
                   <StatTile n={stats.releases} label="Releases" color="#ec4899" icon={<TypeIcon type="Release" color="#ec4899" size={14} />} />
                   <StatTile n={stats.onboarding} label="Onboarding" color="#84cc16" icon={<TypeIcon type="Onboarding" color="#84cc16" size={14} />} />
                 </div>
@@ -334,9 +342,19 @@ export function CompletedOverlay({
                     </div>
 
                     <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                      <FilterChip active={proj === null && typ === null} color={DONE} onClick={() => { setProj(null); setTyp(null) }} title="Clear every filter">
+                      <FilterChip active={proj === null && typ === null && prFilter === null} color={DONE} onClick={() => { setProj(null); setTyp(null); setPrFilter(null) }} title="Clear every filter">
                         All
                       </FilterChip>
+                      <FilterChip active={prFilter === 'any'} color={PR_PURPLE} onClick={() => setPrFilter(prFilter === 'any' ? null : 'any')} n={items.filter((it) => matchesPrFilter(it, 'any')).length} title="Tickets with a merged or declined pull request">
+                        With a PR
+                      </FilterChip>
+                      <FilterChip active={prFilter === 'merged'} color={DONE} onClick={() => setPrFilter(prFilter === 'merged' ? null : 'merged')} n={items.filter((it) => matchesPrFilter(it, 'merged')).length} title="Tickets with a merged pull request">
+                        Merged
+                      </FilterChip>
+                      <FilterChip active={prFilter === 'declined'} color="#ef4444" onClick={() => setPrFilter(prFilter === 'declined' ? null : 'declined')} n={items.filter((it) => matchesPrFilter(it, 'declined')).length} title="Tickets with a declined pull request">
+                        Declined
+                      </FilterChip>
+                      <span className="mx-1 h-5 w-px shrink-0 bg-[var(--line-strong)]" aria-hidden />
                       {projects.map(([p, n]) => (
                         <FilterChip key={p} active={proj === p} color={DONE} onClick={() => setProj(proj === p ? null : p)} n={n} title={`Only ${p} tickets`}>
                           {p}

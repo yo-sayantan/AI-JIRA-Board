@@ -329,6 +329,10 @@ a {
   transform-origin: center;
   animation: trophy-glint 4.5s ease-in-out infinite;
 }
+/* While the archive rebuild is running, the star flashes on a short beat. */
+.jb-archive-busy .trophy-glint {
+  animation-duration: 1.15s;
+}
 @keyframes trophy-glint {
   0%, 3%, 16%, 100% { opacity: 0; transform: scale(0.5); }
   8%                { opacity: 1; transform: scale(1.05); }

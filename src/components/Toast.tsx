@@ -5,6 +5,8 @@ export interface ToastItem {
   id: number
   msg: string
   kind?: ToastKind
+  /** Stays until dismissed. A long job must not be pushed off by a burst of short notices. */
+  sticky?: boolean
 }
 
 const ICON: Record<ToastKind, string> = { info: 'ⓘ', success: '✓', error: '⚠️', loading: '◌' }

@@ -162,6 +162,8 @@ const AI_INTERN = process.env.AI_INTERN_URL || 'http://127.0.0.1:4322'
 const AI_LEVELS = ['none', 'low', 'moderate', 'full']
 const AI_BACKENDS = ['local', 'cloud']
 let reportActive = null
+let reportChild = null
+let skipEnrich = false
 const reportQueue = []
 const reportExits = new Map()
 let reportPumpTimer = null
@@ -309,15 +311,19 @@ async function pumpReportQueue() {
   if (!key) return
   reportActive = key
   const done = (code) => {
+    reportChild = null
     reportActive = null
     reportExits.set(key, code)
     void pumpReportQueue()
   }
   try {
     const child = spawn('python3', [join(INTERN, 'pr_report.py'), 'base', key], { cwd: ROOT, stdio: 'ignore' })
+    reportChild = child
     child.on('exit', async (code, signal) => {
       const exit = signal ? 1 : (code ?? 1)
-      if (exit === 0) {
+      const skip = skipEnrich
+      skipEnrich = false
+      if (exit === 0 && !skip) {
         const settings = await readBoardSettings()
         if ((settings.aiLevel || 'moderate') !== 'none') {
           try {
@@ -333,6 +339,33 @@ async function pumpReportQueue() {
   } catch {
     done(1)
   }
+}
+
+async function stopReports() {
+  reportQueue.length = 0
+  skipEnrich = !!reportChild
+  if (reportChild) {
+    try { reportChild.kill('SIGTERM') } catch {}
+  } else {
+    reportActive = null
+  }
+  try {
+    await writeFile(join(INTERN, '.ai-cancel-report'), '1')
+  } catch {}
+  try {
+    const names = await readdir(AI_QUEUE)
+    for (const n of names) {
+      if (!n.endsWith('.json') || n.startsWith('.')) continue
+      const p = join(AI_QUEUE, n)
+      try {
+        const j = JSON.parse(await readFile(p, 'utf8'))
+        if (j.type === 'enrich-report') await unlink(p)
+      } catch {}
+    }
+  } catch {}
+  try {
+    await writeFile(REPORTS_STATUS, JSON.stringify({ generating: {} }) + '\n')
+  } catch {}
 }
 
 /**
@@ -375,7 +408,11 @@ async function externalGenerating() {
     const out = []
     for (const [key, v] of Object.entries(st?.generating || {})) {
       const pid = Number(v?.pid)
-      if (!Number.isInteger(pid) || pid <= 0) continue
+      // pid 1 is the container's main process, not this report. A pid from the
+      // intern container also matches pid 1 here, so those rows never expire.
+      if (!Number.isInteger(pid) || pid <= 1) continue
+      const started = Date.parse(v?.startedAt || '')
+      if (Number.isFinite(started) && Date.now() - started > 25 * 60 * 1000) continue
       try {
         process.kill(pid, 0)
         out.push(key)
@@ -428,6 +465,7 @@ const HOST = process.env.BIND_HOST || '127.0.0.1'
 
 let running = false
 let archiveRunning = false
+let archiveChild = null
 let lastExit = null
 let lastRunAt = null
 
@@ -488,25 +526,52 @@ const server = createServer(async (req, res) => {
   // The DEEP job: rebuilds the Completed archive (update-completed.sh). Same data.json as the
   // daily run, so the two never overlap — either being busy 409s the other.
   if (path === '/api/run-archive' && req.method === 'POST') {
+    const scope = (url.searchParams.get('scope') || 'all').trim().toLowerCase()
+    const year = (url.searchParams.get('year') || '').trim()
+    const since = (url.searchParams.get('since') || '').trim()
+    const key = (url.searchParams.get('key') || '').trim().toUpperCase()
+    if (!['all', 'year', 'since', 'key'].includes(scope)) return json(res, 400, { ok: false, error: 'bad scope' })
+    if (scope === 'key' && !KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
+    if (scope === 'year' && !/^\d{4}$/.test(year)) return json(res, 400, { ok: false, error: 'bad year' })
+    if (scope === 'since' && !/^\d{4}-\d{2}-\d{2}$/.test(since)) return json(res, 400, { ok: false, error: 'bad since' })
     const { running: locked } = await anyInternRunning()
     if (running || archiveRunning || locked || refreshPendingCount() > 0) return json(res, 409, { ok: false, running: true })
     archiveRunning = true
     lastRunAt = new Date().toISOString()
+    const env = { ...process.env, ARCHIVE_SCOPE: scope }
+    if (scope === 'year') env.ARCHIVE_YEAR = year
+    if (scope === 'since') env.ARCHIVE_SINCE = since
+    if (scope === 'key') env.ARCHIVE_KEY = key
     try {
-      const child = spawn('bash', [ARCHIVE_SCRIPT], { cwd: ROOT, stdio: 'ignore' })
+      const child = spawn('bash', [ARCHIVE_SCRIPT], { cwd: ROOT, env, stdio: 'ignore', detached: true })
+      archiveChild = child
       child.on('exit', (code) => {
         archiveRunning = false
+        archiveChild = null
         lastExit = code
       })
       child.on('error', () => {
         archiveRunning = false
+        archiveChild = null
         lastExit = -1
       })
     } catch {
       archiveRunning = false
+      archiveChild = null
       lastExit = -1
     }
     return json(res, 202, { ok: true, started: true })
+  }
+
+  if (path === '/api/run-archive/stop' && req.method === 'POST') {
+    if (archiveChild?.pid) {
+      try { process.kill(-archiveChild.pid, 'SIGTERM') } catch { try { archiveChild.kill('SIGTERM') } catch {} }
+    }
+    archiveRunning = false
+    archiveChild = null
+    unlink(PROGRESS).catch(() => {})
+    unlink(COMPLETED_LOCK).catch(() => {})
+    return json(res, 200, { ok: true, stopped: true })
   }
 
   if (path === '/api/refresh-ticket' && req.method === 'POST') {
@@ -617,6 +682,11 @@ const server = createServer(async (req, res) => {
   }
   if (path === '/api/settings' && req.method === 'GET') {
     return json(res, 200, { ok: true, settings: await readBoardSettings() })
+  }
+
+  if (path === '/api/reports/stop' && req.method === 'POST') {
+    await stopReports()
+    return json(res, 200, { ok: true, stopped: true })
   }
 
   // Bulk generation — every ticket with a PR, a year, a date window, or an explicit selection.

@@ -28,7 +28,7 @@ from html import escape
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import devinfo  # noqa: E402  (needs the path fix above when run from another cwd)
-from _config import endpoints, load_config  # noqa: E402
+from _config import endpoints, load_config, load_secrets  # noqa: E402
 from _sprint import apply_sprint  # noqa: E402
 from datafile import atomic_write, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
@@ -85,13 +85,8 @@ FLUSH_EVERY = 10
 
 
 def load_env():
-    p = os.path.expanduser("~/.cursor/mcp-secrets.env")
-    if os.path.isfile(p):
-        for line in open(p):
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    for key, value in load_secrets(INTERN).items():
+        os.environ.setdefault(key, value)
 
 
 def _is_transient_net(exc):
@@ -520,6 +515,46 @@ def prepend_status(note):
     atomic_write(STATUS_MD, note + "\n\n" + existing)
 
 
+def _scope():
+    """all | year | since | key, from the board menu. Anything else is a full archive."""
+    scope = (os.environ.get("ARCHIVE_SCOPE") or "all").strip().lower()
+    year = (os.environ.get("ARCHIVE_YEAR") or "").strip()
+    since = (os.environ.get("ARCHIVE_SINCE") or "").strip()[:10]
+    key = (os.environ.get("ARCHIVE_KEY") or "").strip().upper()
+    if scope == "year" and not re.fullmatch(r"\d{4}", year):
+        scope = "all"
+    elif scope == "since" and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
+        scope = "all"
+    elif scope == "key" and not re.fullmatch(r"[A-Z][A-Z0-9]+-\d+", key):
+        scope = "all"
+    elif scope not in ("all", "year", "since", "key"):
+        scope = "all"
+    return scope, year, since, key
+
+
+def upsert_completed(rows):
+    """Replace only these keys inside completed[]. A full rebuild still uses merge_completed_only."""
+    data = json.loads(open(DATA_JSON, "r", encoding="utf-8").read())
+    by = {}
+    for row in data.get("completed") or []:
+        if isinstance(row, dict) and row.get("key"):
+            by[row["key"]] = row
+    for row in rows:
+        by[row["key"]] = row
+    for row in rows:
+        parent = by.get(row.get("parentKey") or "")
+        if not parent or parent.get("key") in {r["key"] for r in rows}:
+            continue
+        subs = [s for s in (parent.get("subtasks") or []) if isinstance(s, dict)]
+        subs = [row if s.get("key") == row["key"] else s for s in subs]
+        if not any(s.get("key") == row["key"] for s in subs):
+            subs.append(row)
+        parent["subtasks"] = subs
+        parent["subtaskCount"] = len(subs)
+    data["completed"] = sorted(by.values(), key=lambda r: (r.get("resolved") or "", r.get("key") or ""), reverse=True)
+    write_outputs(data)
+
+
 def main():
     load_env()
     os.makedirs(CACHE, exist_ok=True)
@@ -546,11 +581,22 @@ def _main(ts):
 
     # ── 1. Everything ever assigned to me — standalone tickets AND my sub-tickets.
     # `was` catches work reassigned away from me after I finished it.
+    # A scoped run (year, since, or one key) narrows the Jira search. The merge then
+    # updates only those rows so the rest of completed[] stays.
     set_progress("archive", done=0, total=0, phase="searching")
-    mine = search_jira(
-        "(assignee was currentUser() OR assignee = currentUser()) ORDER BY resolved DESC",
-        expand="changelog",
-    )
+    scope, year, since, one_key = _scope()
+    scoped = scope != "all"
+    base_jql = "(assignee was currentUser() OR assignee = currentUser())"
+    if scope == "key":
+        jql = f"(key = {one_key} OR (parent = {one_key} AND {base_jql})) ORDER BY resolved DESC"
+    elif scope == "year":
+        y = int(year)
+        jql = f'{base_jql} AND resolved >= "{y}-01-01" AND resolved < "{y + 1}-01-01" ORDER BY resolved DESC'
+    elif scope == "since":
+        jql = f'{base_jql} AND resolved >= "{since}" ORDER BY resolved DESC'
+    else:
+        jql = base_jql + " ORDER BY resolved DESC"
+    mine = search_jira(jql, expand="changelog")
     # Drop excluded projects (config.json → excludeProjects) up front, so their context parents
     # are never pulled in and they never reach completed[].
     if EXCLUDE_PROJECTS:
@@ -589,7 +635,7 @@ def _main(ts):
             except Exception:
                 prior = None
         priors[key] = prior
-        if prior is None or cache_is_stale(prior):
+        if scoped or prior is None or cache_is_stale(prior):
             stale.append(key)
     stale = stale[:MAX_FETCH]
 
@@ -632,7 +678,11 @@ def _main(ts):
                     newly_cached.append(key)
                     pending += 1
                     if pending >= FLUSH_EVERY:
-                        merge_completed_only(assemble(done_keys))
+                        partial = assemble(done_keys)
+                        if scoped:
+                            upsert_completed(partial)
+                        else:
+                            merge_completed_only(partial)
                         pending = 0
                 done_n = len(newly_cached) + len(failed)
                 set_progress("archive", done=done_n, total=total, phase="building", current=key)
@@ -643,8 +693,12 @@ def _main(ts):
             set_progress("archive", done=i, total=total, phase="assembling", current=key)
 
     set_progress("archive", done=total, total=total, phase="writing")
-    completed = assemble(done_keys)
-    merge_completed_only(completed)
+    rows = assemble(done_keys)
+    if scoped:
+        upsert_completed(rows)
+    else:
+        merge_completed_only(rows)
+    completed = rows
 
     mine_count = sum(1 for r in completed if r.get("mine"))
     context_count = len(completed) - mine_count
