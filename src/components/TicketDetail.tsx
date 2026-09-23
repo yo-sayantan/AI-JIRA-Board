@@ -6,6 +6,7 @@ import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf
 import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink } from './ui'
 import { Pipeline } from './Pipeline'
 import { toneColor, type PrReportSummary } from '../lib/reportTypes'
+import { APP_CONFIG } from '../lib/appConfig'
 import {
   ChevronIcon,
   RefreshIcon,
@@ -62,7 +63,7 @@ function PrReportButton({
         <span className="font-bold" style={{ color: ai }}>
           Generating PR readiness report…
         </span>
-        <span className="text-[var(--muted)]">runs in the background — this turns into the report button when it lands</span>
+        <span className="text-[var(--muted)]"></span>
       </div>
     )
   }
@@ -92,7 +93,7 @@ function PrReportButton({
           {typeof v?.score === 'number' && <span className="text-[11px] font-bold tabular-nums text-[var(--ink-soft)]">{v.score}/100</span>}
           <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
             {report.enriched ? 'AI-enriched' : 'derived'}
-            {when ? ` · ${fmtDate(when)}` : ''}
+            {when ? ` · ${fmtDate(when, report.timeZone ?? APP_CONFIG.timeZone)}` : ''}
           </span>
           <ChevronIcon size={11} className="text-[var(--muted)]" />
         </button>

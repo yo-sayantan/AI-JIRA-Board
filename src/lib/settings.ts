@@ -6,10 +6,15 @@
  * decide whether to invoke the agent at all), so served mode mirrors it to the server, which
  * writes jira-intern/.settings.json for `config.mjs shellenv` to pick up.
  */
+import modelCatalog from '../../ai-intern/models.json'
+import { APP_CONFIG } from './appConfig'
 
 export type ThemeMode = 'auto' | 'fixed' | 'schedule'
 export type AiLevel = 'none' | 'low' | 'moderate' | 'full'
 export type AiBackend = 'local' | 'cloud'
+export type AiCloudProvider = 'claude' | 'cursor' | 'gemini'
+/** Cursor reasoning effort. Low is the default; medium is the only step up. */
+export type AiCloudEffort = 'low' | 'medium'
 
 export interface Settings {
   /** auto = follow the OS · fixed = always `theme` · schedule = light between the day hours. */
@@ -23,8 +28,12 @@ export interface Settings {
   aiBackend: AiBackend
   /** Ollama tag to pull/run when aiBackend is local. */
   aiLocalModel: string
-  /** Optional override of config.json models.report when using cloud. */
+  /** Claude, Cursor, or Gemini. Keys stay in ~/.cursor/mcp-secrets.env. */
+  aiCloudProvider: AiCloudProvider
+  /** Model id returned by that provider's list-models API. */
   aiCloudModel: string
+  /** Cursor only. Low by default. Medium is the only other pass. */
+  aiCloudEffort: AiCloudEffort
   /** Talk to Ollama.app on the Mac (Metal) instead of the Linux Docker VM (CPU). */
   aiUseHostOllama: boolean
   features: Record<FeatureKey, boolean>
@@ -125,18 +134,23 @@ export const AI_LEVELS: {
   },
 ]
 
-const DEFAULT_FEATURES = Object.fromEntries(FEATURES.map((f) => [f.key, f.default])) as Record<FeatureKey, boolean>
+const DEFAULT_FEATURES = {
+  ...(Object.fromEntries(FEATURES.map((f) => [f.key, f.default])) as Record<FeatureKey, boolean>),
+  ...(APP_CONFIG.settingsDefaults?.features as Partial<Record<FeatureKey, boolean>> | undefined),
+}
 
 export const DEFAULT_SETTINGS: Settings = {
-  themeMode: 'auto',
-  theme: 'dark',
-  dayStart: 7,
-  dayEnd: 19,
-  aiLevel: 'moderate',
-  aiBackend: 'local',
-  aiLocalModel: 'qwen2.5-coder:7b',
-  aiCloudModel: '',
-  aiUseHostOllama: false,
+  themeMode: APP_CONFIG.settingsDefaults?.themeMode ?? 'auto',
+  theme: APP_CONFIG.settingsDefaults?.theme ?? 'dark',
+  dayStart: APP_CONFIG.settingsDefaults?.dayStart ?? 7,
+  dayEnd: APP_CONFIG.settingsDefaults?.dayEnd ?? 19,
+  aiLevel: APP_CONFIG.ai?.level ?? 'moderate',
+  aiBackend: APP_CONFIG.ai?.backend ?? 'local',
+  aiLocalModel: APP_CONFIG.ai?.localModel || modelCatalog.defaultLocal,
+  aiCloudProvider: APP_CONFIG.ai?.cloudProvider ?? 'cursor',
+  aiCloudModel: APP_CONFIG.ai?.cloudModel ?? '',
+  aiCloudEffort: APP_CONFIG.ai?.cloudEffort ?? 'low',
+  aiUseHostOllama: APP_CONFIG.ai?.useHostOllama ?? false,
   features: DEFAULT_FEATURES,
 }
 
@@ -150,7 +164,13 @@ export function loadSettings(): Settings {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      features: { ...DEFAULT_SETTINGS.features, ...(parsed.features ?? {}) },
+      aiCloudEffort:
+        parsed.aiCloudEffort === undefined
+          ? DEFAULT_SETTINGS.aiCloudEffort
+          : parsed.aiCloudEffort === 'medium'
+            ? 'medium'
+            : 'low',
+      features: { ...DEFAULT_FEATURES, ...(parsed.features ?? {}) },
     }
   } catch {
     return DEFAULT_SETTINGS

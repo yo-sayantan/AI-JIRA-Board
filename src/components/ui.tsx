@@ -278,10 +278,20 @@ export function sanitizeHtml(html: string): string {
 }
 
 /** Renders colleague-authored Jira HTML after allowlist sanitization; opens links in a new tab. */
-export function SafeHtml({ html, className = '' }: { html?: string | null; className?: string }) {
+export function SafeHtml({
+  html,
+  className = '',
+  inline = false,
+}: {
+  html?: string | null
+  className?: string
+  /** span instead of div so keys inside a headline <p> stay valid HTML. */
+  inline?: boolean
+}) {
   const processed = useMemo(() => sanitizeHtml(html ?? ''), [html])
   if (!html) return null
-  return <div className={`prose-mini ${className}`} dangerouslySetInnerHTML={{ __html: processed }} />
+  const Tag = inline ? 'span' : 'div'
+  return <Tag className={`prose-mini ${className}`} dangerouslySetInnerHTML={{ __html: processed }} />
 }
 
 export function ExternalLink({ href, children }: { href?: string | null; children: ReactNode }) {

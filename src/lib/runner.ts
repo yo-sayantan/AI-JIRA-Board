@@ -77,6 +77,15 @@ export interface AiCatalogModel {
   ggufPage?: string
 }
 
+export interface AiPullProgress {
+  model?: string
+  status?: string
+  completed?: number
+  total?: number
+  percent?: number
+  label?: string
+}
+
 export interface AiInternStatus {
   ok?: boolean
   down?: boolean
@@ -85,6 +94,7 @@ export interface AiInternStatus {
   lastError?: string | null
   backend?: string
   model?: string
+  cloudEffort?: string
   useHostOllama?: boolean
   ollamaOk?: boolean
   ollamaError?: string | null
@@ -92,6 +102,8 @@ export interface AiInternStatus {
   catalog?: { models?: AiCatalogModel[]; defaultLocal?: string; source?: string; hostOnlyRamGb?: number }
   memGb?: number | null
   pulling?: string | null
+  /** Live Ollama pull bytes / percent while state is pulling. */
+  pullProgress?: AiPullProgress | null
   queuedKeys?: string[]
   queued?: number
   error?: string
@@ -168,6 +180,8 @@ export async function saveServerSettings(patch: {
   aiBackend?: string
   aiLocalModel?: string
   aiCloudModel?: string
+  aiCloudProvider?: string
+  aiCloudEffort?: string
   aiUseHostOllama?: boolean
 }): Promise<boolean> {
   try {
@@ -256,6 +270,39 @@ export async function getAiStatus(): Promise<AiInternStatus | null> {
   }
 }
 
+export interface CloudModelChoice {
+  id: string
+  label: string
+  /** Cursor effort values this model accepts. Empty for Claude. */
+  efforts?: string[]
+}
+
+export interface CloudProviderModels {
+  configured: boolean
+  models: CloudModelChoice[]
+  error?: string | null
+}
+
+export async function getCloudModels(): Promise<{
+  ok: boolean
+  claude?: CloudProviderModels
+  cursor?: CloudProviderModels
+  gemini?: CloudProviderModels
+  error?: string
+} | null> {
+  try {
+    const r = await fetch('/api/cloud-models', { cache: 'no-store' })
+    return (await r.json()) as {
+      ok: boolean
+      claude?: CloudProviderModels
+      cursor?: CloudProviderModels
+      gemini?: CloudProviderModels
+    }
+  } catch {
+    return { ok: false, error: 'AI intern unreachable' }
+  }
+}
+
 export async function getAiModels(): Promise<{
   ok: boolean
   down?: boolean
@@ -279,9 +326,27 @@ export async function pullAiModel(model: string, useHostOllama = false): Promise
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, useHostOllama }),
     })
-    return r.ok
-  } catch {
+    if (!r.ok) {
+      const text = await r.text().catch(() => '')
+      console.error('[jira-ai] pull failed', r.status, text || model)
+      return false
+    }
+    return true
+  } catch (e) {
+    console.error('[jira-ai] pull failed', model, e)
     return false
+  }
+}
+
+/** Machine-wide AI choices: central defaults overlaid by jira-intern/.settings.json. */
+export async function getServerSettings(): Promise<Record<string, unknown> | null> {
+  try {
+    const r = await fetch('/api/settings', { cache: 'no-store' })
+    if (!r.ok) return null
+    const body = (await r.json()) as { settings?: Record<string, unknown> }
+    return body.settings ?? null
+  } catch {
+    return null
   }
 }
 

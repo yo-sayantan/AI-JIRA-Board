@@ -171,10 +171,20 @@ function reportPendingKeys() {
 }
 
 async function readBoardSettings() {
+  const ai = PROJECT_CONFIG.ai || {}
+  const defaults = {
+    aiLevel: ai.level || 'moderate',
+    aiBackend: ai.backend || 'local',
+    aiLocalModel: ai.localModel || '',
+    aiCloudModel: ai.cloudModel || '',
+    aiCloudProvider: ai.cloudProvider || 'cursor',
+    aiCloudEffort: ai.cloudEffort || 'low',
+    aiUseHostOllama: !!ai.useHostOllama,
+  }
   try {
-    return JSON.parse(await readFile(SETTINGS_FILE, 'utf8'))
+    return { ...defaults, ...JSON.parse(await readFile(SETTINGS_FILE, 'utf8')) }
   } catch {
-    return {}
+    return defaults
   }
 }
 
@@ -209,6 +219,8 @@ async function enqueueEnrich(key, settings) {
       backend === 'cloud'
         ? settings.aiCloudModel || ''
         : settings.aiLocalModel || 'qwen2.5-coder:7b',
+    cloudProvider: ['claude', 'cursor', 'gemini'].includes(settings.aiCloudProvider) ? settings.aiCloudProvider : 'cursor',
+    cloudEffort: settings.aiCloudEffort === 'medium' ? 'medium' : 'low',
     useHostOllama: !!settings.aiUseHostOllama,
     enqueuedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
   }
@@ -394,6 +406,7 @@ async function reportsIndex() {
         out[r.key] = {
           key: r.key,
           title: r.title ?? null,
+          timeZone: r.timeZone ?? null,
           generatedAt: r.generatedAt ?? null,
           enrichedAt: r.enrichedAt ?? null,
           enriched: !!r.enriched,
@@ -574,8 +587,14 @@ const server = createServer(async (req, res) => {
     if (patch.aiLocalModel !== undefined && (typeof patch.aiLocalModel !== 'string' || patch.aiLocalModel.length > 80)) {
       return json(res, 400, { ok: false, error: 'bad aiLocalModel' })
     }
-    if (patch.aiCloudModel !== undefined && (typeof patch.aiCloudModel !== 'string' || patch.aiCloudModel.length > 80)) {
+    if (patch.aiCloudModel !== undefined && (typeof patch.aiCloudModel !== 'string' || patch.aiCloudModel.length > 128)) {
       return json(res, 400, { ok: false, error: 'bad aiCloudModel' })
+    }
+    if (patch.aiCloudProvider !== undefined && !['claude', 'cursor', 'gemini'].includes(patch.aiCloudProvider)) {
+      return json(res, 400, { ok: false, error: 'bad aiCloudProvider' })
+    }
+    if (patch.aiCloudEffort !== undefined && !['low', 'medium'].includes(patch.aiCloudEffort)) {
+      return json(res, 400, { ok: false, error: 'bad aiCloudEffort' })
     }
     let current = {}
     try {
@@ -586,6 +605,8 @@ const server = createServer(async (req, res) => {
     if (patch.aiBackend !== undefined) next.aiBackend = patch.aiBackend
     if (patch.aiLocalModel !== undefined) next.aiLocalModel = patch.aiLocalModel
     if (patch.aiCloudModel !== undefined) next.aiCloudModel = patch.aiCloudModel
+    if (patch.aiCloudProvider !== undefined) next.aiCloudProvider = patch.aiCloudProvider
+    if (patch.aiCloudEffort !== undefined) next.aiCloudEffort = patch.aiCloudEffort
     if (patch.aiUseHostOllama !== undefined) next.aiUseHostOllama = !!patch.aiUseHostOllama
     try {
       await writeFile(SETTINGS_FILE, JSON.stringify(next, null, 2) + '\n')
@@ -595,11 +616,7 @@ const server = createServer(async (req, res) => {
     return json(res, 200, { ok: true, settings: next })
   }
   if (path === '/api/settings' && req.method === 'GET') {
-    try {
-      return json(res, 200, { ok: true, settings: JSON.parse(await readFile(SETTINGS_FILE, 'utf8')) })
-    } catch {
-      return json(res, 200, { ok: true, settings: {} })
-    }
+    return json(res, 200, { ok: true, settings: await readBoardSettings() })
   }
 
   // Bulk generation — every ticket with a PR, a year, a date window, or an explicit selection.
@@ -652,6 +669,10 @@ const server = createServer(async (req, res) => {
 
   if (path === '/api/ai-status' && req.method === 'GET') {
     return json(res, 200, await internAiStatus())
+  }
+  if (path === '/api/cloud-models' && req.method === 'GET') {
+    await proxyAi(req, res, '/api/cloud-models')
+    return
   }
   if (path === '/api/ai-models' && req.method === 'GET') {
     const intern = await internAiStatus()
