@@ -72,8 +72,10 @@ export function TicketCard({
     .filter(Boolean)
     .join(', ')
   const ringSuffix = ring ? `, ${ring}` : ''
-  const baseShadow = `inset 3px 0 0 ${accent}, 0 1px 2px rgba(2,6,23,0.10), 0 10px 22px -12px rgba(2,6,23,0.40)${ringSuffix}`
-  const hoverShadow = `inset 3px 0 0 ${accent}, 0 22px 40px -14px ${hexToRgba(accent, 0.55)}, 0 8px 16px -6px rgba(2,6,23,0.45)${ringSuffix}`
+  // Resting card sits on the board. Hover lifts it: a tight contact shadow plus a
+  // wider ambient shadow tinted with the column color, so the lift reads as depth.
+  const baseShadow = `inset 3px 0 0 ${accent}, 0 1px 2px rgba(2,6,23,0.08), 0 8px 16px -12px rgba(2,6,23,0.32)${ringSuffix}`
+  const hoverShadow = `inset 3px 0 0 ${accent}, inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(2,6,23,0.06), 0 14px 24px -12px rgba(2,6,23,0.42), 0 28px 44px -18px ${hexToRgba(accent, 0.48)}${ringSuffix}`
   const overflowTitle = overflow
     ? `Carried across ${ticket.sprintCount && ticket.sprintCount > 1 ? ticket.sprintCount : 'multiple'} sprints`
     : undefined
@@ -94,29 +96,40 @@ export function TicketCard({
         }
       }}
       initial={{ opacity: 0, y: 8, boxShadow: baseShadow }}
-      animate={{ opacity: 1, y: 0, boxShadow: baseShadow }}
+      animate={{ opacity: 1, y: 0, zIndex: 0, boxShadow: baseShadow }}
       exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-      whileHover={quiet ? undefined : { y: -8, rotateX: 7, rotateY: -1.5, boxShadow: hoverShadow }}
-      whileTap={quiet ? undefined : { scale: 0.985 }}
-      className="group relative flex h-[168px] w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[var(--surface-solid)] p-2.5 text-left"
+      transition={{
+        opacity: { duration: 0.28, ease: 'easeOut' },
+        y: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+        boxShadow: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
+        scale: { duration: 0.16, ease: 'easeOut' },
+      }}
+      whileHover={quiet ? undefined : { y: -6, zIndex: 3, boxShadow: hoverShadow }}
+      whileTap={quiet ? undefined : { y: -2, scale: 0.992 }}
+      className="ticket-card group relative flex h-[168px] w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[var(--surface-solid)] p-2.5 text-left"
       style={{
         boxShadow: baseShadow,
-        borderColor: overflow ? '#dc2626' : 'var(--line)',
-        transformPerspective: 900,
-        transformStyle: 'preserve-3d',
+        borderColor: overflow ? '#dc2626' : undefined,
+        ['--card-accent' as string]: accent,
       }}
     >
-      {/* hover gradient wash + top sheen in the column color */}
+      {/* Status color blooms in slowly — a soft wash, then a thinner top light. */}
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-        style={{ background: `linear-gradient(135deg, ${hexToRgba(accent, 0.18)}, ${hexToRgba(accent, 0.04)} 45%, transparent 70%)` }}
+        className="ticket-card-wash pointer-events-none absolute inset-0"
+        style={{
+          background: `linear-gradient(165deg, ${hexToRgba(accent, 0.22)} 0%, ${hexToRgba(accent, 0.08)} 38%, transparent 72%)`,
+        }}
       />
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[2px] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-        style={{ background: `linear-gradient(90deg, ${accent}, transparent)` }}
+        className="ticket-card-glow pointer-events-none absolute -left-6 -top-10 h-28 w-40 rounded-full blur-2xl"
+        style={{ background: hexToRgba(accent, 0.45) }}
+      />
+      <span
+        aria-hidden
+        className="ticket-card-edge pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{ background: `linear-gradient(90deg, ${accent}, ${hexToRgba(accent, 0.15)} 70%, transparent)` }}
       />
 
       {burst && <DoneBurst />}
