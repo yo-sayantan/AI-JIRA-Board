@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { loadData, loadArchivedKeys, persistArchivedKeys } from './data'
 import { completedToTicket, type ColumnKey, type Ticket } from './types'
-import { isServed, getInternStatus, getServerSettings, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, startBulkReportGeneration, saveServerSettings, type PrReportsIndex, type ReportScope, type AiInternStatus } from './lib/runner'
+import { isServed, getInternStatus, getServerSettings, startInternRun, startArchiveRun, stopArchiveRun, stopReportRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, startBulkReportGeneration, saveServerSettings, type PrReportsIndex, type ReportScope, type ArchiveScope, type AiInternStatus } from './lib/runner'
 import type { PrReport } from './lib/reportTypes'
 import { PrReportOverlay } from './components/PrReport'
 import { Header } from './components/Header'
@@ -23,6 +23,7 @@ import { freshness, isNextSprint, prListOf } from './lib/format'
 import { applySettings, loadSettings, resolveDark, saveSettings, type Settings } from './lib/settings'
 import { SettingsPanel } from './components/Settings'
 import { matches, parseQuery } from './lib/search'
+import { POLLING } from './lib/appConfig'
 
 /** Flatten tickets + their nested sub-tasks into a key→ticket map (recursive). */
 function indexTickets(list: Ticket[] | undefined, map: Map<string, Ticket>) {
@@ -95,12 +96,20 @@ export default function App() {
   const refreshingKeysRef = useRef(refreshingKeys)
   refreshingKeysRef.current = refreshingKeys
   const toastId = useRef(0)
+  const runWatchGeneration = useRef(0)
+  const archiveToastRef = useRef<number | null>(null)
 
   const dismiss = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), [])
   const toast = useCallback(
     (msg: string, kind: ToastItem['kind'] = 'info', ttl = 2800) => {
       const id = ++toastId.current
-      setToasts((t) => [...t, { id, msg, kind }])
+      const sticky = ttl === 0
+      setToasts((t) => {
+        const next = [...t, { id, msg, kind, sticky }]
+        const pinned = next.filter((x) => x.sticky)
+        const rest = next.filter((x) => !x.sticky).slice(-3)
+        return [...pinned, ...rest]
+      })
       if (ttl) setTimeout(() => dismiss(id), ttl)
       return id
     },
@@ -121,17 +130,25 @@ export default function App() {
     setReportsIndex(idx)
     const next = new Set(idx.generating ?? [])
     const prev = reportsGeneratingRef.current
+    const started: string[] = []
+    const ready: string[] = []
+    const failed: string[] = []
     for (const k of prev) {
       if (next.has(k)) continue
       if (idx.reports[k]) {
-        toast(`PR readiness report ready for ${k}.`, 'success', 3500)
-        // Refresh the overlay if it's showing the report that just got rebuilt.
+        ready.push(k)
         if (openReportRef.current?.key === k) void getReport(k).then((r) => r && setOpenReport(r))
       } else {
-        toast(`Report generation for ${k} finished without a report — see jira-intern/logs/.`, 'error', 5000)
+        failed.push(k)
       }
     }
-    for (const k of next) if (!prev.has(k)) toast(`Generating PR readiness report for ${k} in the background…`, 'loading', 3500)
+    for (const k of next) if (!prev.has(k)) started.push(k)
+    if (started.length === 1) toast(`Generating PR readiness report for ${started[0]}…`, 'loading', 3200)
+    else if (started.length > 1) toast(`Generating ${started.length} PR readiness reports…`, 'loading', 3200)
+    if (ready.length === 1) toast(`PR readiness report ready for ${ready[0]}.`, 'success', 3500)
+    else if (ready.length > 1) toast(`${ready.length} PR readiness reports ready.`, 'success', 3500)
+    if (failed.length === 1) toast(`Report generation for ${failed[0]} finished without a report — see jira-intern/logs/.`, 'error', 5000)
+    else if (failed.length > 1) toast(`${failed.length} reports finished without a file — see jira-intern/logs/.`, 'error', 5000)
     setReportsGenerating(next)
     return idx
   }, [toast])
@@ -143,24 +160,34 @@ export default function App() {
     void refreshReportsIndex()
     if (!served || !settings.features.autoRefresh) return
     let timer: ReturnType<typeof setTimeout>
+    let cancelled = false
     const tick = async () => {
       await refreshReportsIndex()
-      timer = setTimeout(tick, reportsGeneratingRef.current.size > 0 ? 4000 : 15000)
+      if (cancelled) return
+      timer = setTimeout(tick, reportsGeneratingRef.current.size > 0 ? POLLING.reportsBusyMs : POLLING.reportsIdleMs)
     }
-    timer = setTimeout(tick, 4000)
-    return () => clearTimeout(timer)
+    timer = setTimeout(tick, POLLING.reportsBusyMs)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [served, refreshReportsIndex, settings.features.prReports, settings.features.autoRefresh])
 
   useEffect(() => {
     if (!served) return
     let timer: ReturnType<typeof setTimeout>
+    let cancelled = false
     const tick = async () => {
       const s = await getInternStatus()
+      if (cancelled) return
       if (s?.ai) setAiStatus(s.ai)
-      timer = setTimeout(tick, s?.ai?.state === 'working' || s?.ai?.state === 'pulling' ? 3000 : 12000)
+      timer = setTimeout(tick, s?.ai?.state === 'working' || s?.ai?.state === 'pulling' ? POLLING.aiBusyMs : POLLING.aiIdleMs)
     }
     void tick()
-    return () => clearTimeout(timer)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [served])
 
   const handleOpenReport = useCallback(
@@ -324,6 +351,7 @@ export default function App() {
       loadingId: number,
       opts?: { ceilingMs?: number; onDone?: () => void; runAtWhenStarted?: string | null },
     ) => {
+      const generation = ++runWatchGeneration.current
       const startTs = Date.now()
       const runAtWhenStarted = opts?.runAtWhenStarted ?? null
       // Ceiling must exceed the runner's own timeout, or the board gives up on a
@@ -331,7 +359,9 @@ export default function App() {
       const ceiling = opts?.ceilingMs ?? 32 * 60 * 1000
       let sawRunning = false
       const poll = async () => {
+        if (generation !== runWatchGeneration.current) return
         const s = await getInternStatus()
+        if (generation !== runWatchGeneration.current) return
         if (s?.running) sawRunning = true
         // Live ticket-count progress → fill the refresh button left→right.
         const p = s?.progress
@@ -463,23 +493,45 @@ export default function App() {
   }, [toast, beginOrWatch])
 
   // The DEEP job: rebuild the Completed archive (every closed ticket + PRs/branches). Slow by design.
-  const handleArchiveRefresh = useCallback(async () => {
+  const handleArchiveRefresh = useCallback(async (target: ArchiveScope = { scope: 'all' }) => {
     if (refreshingRef.current || archiveRefreshingRef.current) return
     if (!isServed()) {
       toast('The archive rebuild needs the local server — run `npm run serve`.', 'info', 4500)
       return
     }
+    const what =
+      target.scope === 'key' ? target.key : target.scope === 'year' ? String(target.year) : target.scope === 'since' ? `since ${target.since}` : 'the full archive'
     setArchiveRefreshing(true)
-    const loading = toast('Rebuilding the Completed archive — the deep scan takes a while…', 'loading', 0)
-    const onDone = () => setArchiveRefreshing(false)
+    const loading = toast(`Rebuilding Completed — ${what}…`, 'loading', 0)
+    archiveToastRef.current = loading
+    const onDone = () => {
+      archiveToastRef.current = null
+      setArchiveRefreshing(false)
+    }
     const before = (await getInternStatus())?.dataModified ?? null
-    await beginOrWatch(startArchiveRun, before, loading, {
+    await beginOrWatch(() => startArchiveRun(target), before, loading, {
       onDone,
       ceilingMs: 130 * 60 * 1000,
       alreadyMsg: 'Another intern job is running — watching it.',
       failMsg: 'Could not start the archive rebuild.',
     })
   }, [toast, beginOrWatch])
+
+  const handleStopReports = useCallback(async () => {
+    await stopReportRun()
+    setReportsGenerating(new Set())
+    toast('Stopped report generation.', 'info', 2500)
+  }, [toast])
+
+  const handleStopArchive = useCallback(async () => {
+    runWatchGeneration.current += 1
+    await stopArchiveRun()
+    if (archiveToastRef.current != null) dismiss(archiveToastRef.current)
+    archiveToastRef.current = null
+    setArchiveRefreshing(false)
+    setRunProgress(null)
+    toast('Stopped the archive rebuild.', 'info', 2500)
+  }, [toast, dismiss])
 
   // Per-ticket background refresh — queue-aware. Several clicks enqueue FIFO on the
   // server; each key is watched until IT leaves the pending set (not until data.json
@@ -573,12 +625,17 @@ export default function App() {
     void (async () => {
       const s = await getInternStatus()
       if (s?.running) {
-        setRefreshing(true)
+        const archive = s.job === 'archive'
+        if (archive) setArchiveRefreshing(true)
+        else setRefreshing(true)
         const id = toast('JIRA Intern Agent is running… the board will reload when it finishes.', 'loading', 0)
         watchRun(s.dataModified ?? null, id, {
-          onDone: () => setRefreshing(false),
+          onDone: () => {
+            setRefreshing(false)
+            setArchiveRefreshing(false)
+          },
           runAtWhenStarted: s.lastRunAt,
-          ceilingMs: s.job === 'archive' ? 130 * 60 * 1000 : undefined,
+          ceilingMs: archive ? 130 * 60 * 1000 : undefined,
         })
       }
     })()
@@ -617,7 +674,10 @@ export default function App() {
     () => data.tickets.some((t) => t.column !== 'hold' && !isNextSprint(t, now)),
     [data.tickets, now],
   )
-  const myCompletedCount = useMemo(() => data.completed.filter((c) => c.mine !== false).length, [data.completed])
+  const myCompletedCount = useMemo(
+    () => data.completed.filter((c) => c.mine !== false && !c.parentKey).length,
+    [data.completed],
+  )
 
   // Tickets a report can be built for. Mirrors pr_report.py's iter_tickets — active tickets,
   // their sub-tasks that carry their own PR, and the completed archive — so the count the menu
@@ -707,6 +767,7 @@ export default function App() {
         served={served}
         onRefresh={handleRefresh}
         onArchiveRefresh={handleArchiveRefresh}
+        onStopArchive={handleStopArchive}
         onOpenSettings={() => {
           if (serverSettingsReady) setSettingsOpen(true)
           else toast('Loading saved settings…', 'loading', 1200)
@@ -720,6 +781,9 @@ export default function App() {
                 reportCount: Object.keys(reportsIndex?.reports ?? {}).length,
                 onBulk: handleBulkReports,
                 onOne: handleGenerateReport,
+                onStop: handleStopReports,
+                currentKey: aiStatus?.current?.type === 'enrich-report' ? aiStatus.current.key : null,
+                modelLabel: aiStatus?.model ? `${aiStatus.model}${aiStatus.cloudEffort ? ` · ${aiStatus.cloudEffort}` : ''}` : null,
               }
             : undefined
         }

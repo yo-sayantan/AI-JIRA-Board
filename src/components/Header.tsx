@@ -2,9 +2,11 @@ import { motion } from 'motion/react'
 import type { ReactNode } from 'react'
 import type { JiraData } from '../types'
 import { currentSprint, fmtDate, fmtDateShort, freshness, hexToRgba, sprintStatus } from '../lib/format'
-import { CalendarIcon, GearIcon, QuestionIcon, RefreshIcon, SearchIcon, SunIcon, MoonIcon, TicketGlyph, TrophyIcon } from './Icons'
-import { guideUrl } from '../lib/runner'
+import { CalendarIcon, GearIcon, QuestionIcon, RefreshIcon, SearchIcon, SunIcon, MoonIcon, TicketGlyph } from './Icons'
+import { guideUrl, type ArchiveScope } from '../lib/runner'
+import { APP_CONFIG } from '../lib/appConfig'
 import { ReportsMenu, type ReportsMenuProps } from './ReportsMenu'
+import { ArchiveMenu } from './ArchiveMenu'
 
 export type RunProgress = {
   done: number
@@ -20,8 +22,8 @@ export type RunProgress = {
  */
 function displayPct(p: RunProgress | null | undefined): number {
   if (!p) return 6
-  const PREP = 24
-  const BUILD_MAX = 96
+  const PREP = APP_CONFIG.progress?.prepPercent ?? 24
+  const BUILD_MAX = APP_CONFIG.progress?.buildMaxPercent ?? 96
   const floor: Record<string, number> = {
     starting: 4,
     searching: 10,
@@ -153,6 +155,7 @@ export function Header({
   served,
   onRefresh,
   onArchiveRefresh,
+  onStopArchive,
   reports,
   onOpenSettings,
 }: {
@@ -168,7 +171,8 @@ export function Header({
   runProgress?: RunProgress | null
   served: boolean
   onRefresh: () => void
-  onArchiveRefresh: () => void
+  onArchiveRefresh: (target: ArchiveScope) => void
+  onStopArchive: () => void
   /** Bulk PR Readiness Report controls — grouped so the header keeps one prop, not five. */
   reports?: ReportsMenuProps
   onOpenSettings?: () => void
@@ -297,17 +301,16 @@ export function Header({
           />
 
           {served && (
-            <ProgressButton
+            <ArchiveMenu
+              served={served}
               busy={archiveRefreshing}
-              progress={archiveProgress}
-              onClick={onArchiveRefresh}
-              disabled={refreshing || archiveRefreshing}
-              ariaLabel="Rebuild the Completed archive (slow, deep scan)"
-              title="DEEP rebuild of the COMPLETED archive — re-scans every closed ticket plus its PRs & branches from Jira and Bitbucket. Takes minutes; run after closing tickets or when the archive looks stale. Not the everyday refresh!"
-              idleLabel="Rebuild archive"
-              gradient="linear-gradient(135deg, #10d29a, #16a34a)"
-              shadow="rgba(16,185,129,0.5)"
-              idleIcon={<TrophyIcon size={15} />}
+              blocked={refreshing}
+              done={archiveProgress?.done ?? 0}
+              total={archiveProgress?.total ?? 0}
+              pct={archiveRefreshing ? Math.round(displayPct(archiveProgress)) : 0}
+              current={archiveProgress?.current}
+              onRun={onArchiveRefresh}
+              onStop={onStopArchive}
             />
           )}
 

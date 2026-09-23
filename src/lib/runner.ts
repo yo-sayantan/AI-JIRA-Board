@@ -338,6 +338,16 @@ export async function pullAiModel(model: string, useHostOllama = false): Promise
   }
 }
 
+export async function getInternStatus(): Promise<InternStatus | null> {
+  try {
+    const r = await fetch('/api/intern-status', { cache: 'no-store' })
+    if (!r.ok) return null
+    return (await r.json()) as InternStatus
+  } catch {
+    return null
+  }
+}
+
 /** Machine-wide AI choices: central defaults overlaid by jira-intern/.settings.json. */
 export async function getServerSettings(): Promise<Record<string, unknown> | null> {
   try {
@@ -345,16 +355,6 @@ export async function getServerSettings(): Promise<Record<string, unknown> | nul
     if (!r.ok) return null
     const body = (await r.json()) as { settings?: Record<string, unknown> }
     return body.settings ?? null
-  } catch {
-    return null
-  }
-}
-
-export async function getInternStatus(): Promise<InternStatus | null> {
-  try {
-    const r = await fetch('/api/intern-status', { cache: 'no-store' })
-    if (!r.ok) return null
-    return (await r.json()) as InternStatus
   } catch {
     return null
   }
@@ -387,7 +387,26 @@ export async function startInternRun(): Promise<RunStartResult> {
   return startRun('/api/run-intern')
 }
 
-/** Kick off the DEEP archive rebuild (update-completed.sh) — slow; re-scans every completed ticket. */
-export async function startArchiveRun(): Promise<RunStartResult> {
-  return startRun('/api/run-archive')
+export type ArchiveScope =
+  | { scope: 'all' }
+  | { scope: 'year'; year: number }
+  | { scope: 'since'; since: string }
+  | { scope: 'key'; key: string }
+
+/** Kick off the Completed archive rebuild. A scope updates only that slice; all rebuilds the whole archive. */
+export async function startArchiveRun(target: ArchiveScope = { scope: 'all' }): Promise<RunStartResult> {
+  const q = new URLSearchParams()
+  q.set('scope', target.scope)
+  if (target.scope === 'year') q.set('year', String(target.year))
+  if (target.scope === 'since') q.set('since', target.since)
+  if (target.scope === 'key') q.set('key', target.key)
+  return startRun(`/api/run-archive?${q.toString()}`)
+}
+
+export async function stopArchiveRun(): Promise<void> {
+  await fetch('/api/run-archive/stop', { method: 'POST' }).catch(() => {})
+}
+
+export async function stopReportRun(): Promise<void> {
+  await fetch('/api/reports/stop', { method: 'POST' }).catch(() => {})
 }
