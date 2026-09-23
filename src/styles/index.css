@@ -96,6 +96,41 @@ a {
   box-shadow: var(--shadow);
 }
 
+/* Board cards: border and status tint ease in on their own clock, slower than the lift,
+   so the column color brightens after the card has started to rise. */
+.ticket-card {
+  --card-accent: var(--muted);
+  border-color: var(--line);
+  transition: border-color 0.7s ease, background-color 0.7s ease;
+}
+.ticket-card:hover {
+  border-color: color-mix(in srgb, var(--card-accent) 46%, var(--line));
+  background-color: color-mix(in srgb, var(--card-accent) 8%, var(--surface-solid));
+}
+.ticket-card-wash,
+.ticket-card-glow,
+.ticket-card-edge {
+  opacity: 0;
+}
+.ticket-card-wash {
+  transition: opacity 0.7s ease;
+}
+.ticket-card-glow {
+  transition: opacity 0.9s ease;
+}
+.ticket-card-edge {
+  transition: opacity 0.55s ease 0.08s;
+}
+.ticket-card:hover .ticket-card-wash {
+  opacity: 1;
+}
+.ticket-card:hover .ticket-card-glow {
+  opacity: 0.55;
+}
+.ticket-card:hover .ticket-card-edge {
+  opacity: 1;
+}
+
 /* ── Scrollbars ─────────────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
