@@ -54,7 +54,7 @@ cd AI-JIRA-Board
 # 1. one-time setup — your token + your details (see setup/). Both live OUTSIDE the repo.
 mkdir -p ~/.cursor ~/.ai
 cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env   # then add your Jira token
-cp jira-intern/config.json        ~/.ai/config.json           # then add your name + URLs
+cp setup/config.example.json      ~/.ai/config.json           # then add your name + URLs
 
 # 2. build, fetch, and serve
 docker compose up -d --build
@@ -100,10 +100,11 @@ committed — both of your files live **outside this repo**:
 
 | File | Holds | Resolution |
 |---|---|---|
-| `~/.cursor/mcp-secrets.env` | Your API tokens | referenced by path from `config.json` |
-| `~/.ai/config.json` | Your name, corporate id, company URLs, branding | `$AI_CONFIG_FILE` → `~/.ai/config.json` → the tracked `jira-intern/config.json` template |
+| `config/jira-board.config.json` | All non-secret project defaults and policy | Always loaded first and schema-validated |
+| `~/.cursor/mcp-secrets.env` | Your API tokens | referenced by the central connector config |
+| `~/.ai/config.json` | Sparse personal override: identity, company URLs, branding | Deep-merged over project defaults |
 
-The `jira-intern/config.json` in this repo contains **placeholders only** and acts as the fallback,
+The central project config contains **placeholders only** and acts as the defaults layer,
 so a fresh clone runs without breaking and your real values never enter git. Check which file is in
 effect with `node jira-intern/local-runner/config.mjs path`. Full walkthrough:
 [`setup/README.md`](setup/README.md) · key-by-key reference: [`jira-intern/CONFIG.md`](jira-intern/CONFIG.md).
@@ -125,8 +126,9 @@ in prose by `jira-intern/prompts/intern-prompt.md`. Keep the two in sync. See
 
 It's safe to push **because your secrets never enter it** — they live only in
 `~/.cursor/mcp-secrets.env` (git-ignored). Before going **public**, confirm no `*.env` with real
-values is staged and sanitize or untrack `jira-intern/config.json` (it holds your name and internal
-hostnames). Checklist: [`setup/README.md → Before you make the repo public`](setup/README.md#before-you-make-the-repo-public).
+values is staged and keep `config/jira-board.config.json` generic (real identity and internal
+hostnames belong in `~/.ai/config.json`). Checklist:
+[`setup/README.md → Before you make the repo public`](setup/README.md#before-you-make-the-repo-public).
 
 ---
 

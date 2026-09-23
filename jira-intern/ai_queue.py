@@ -13,7 +13,7 @@ import os
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from _config import load_config, now_iso as configured_now_iso
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE_DIR = os.path.join(HERE, ".ai-queue")
@@ -26,15 +26,25 @@ VALID_LEVELS = ("none", "low", "moderate", "full")
 
 
 def now_iso():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return configured_now_iso(HERE)
 
 
 def load_settings():
+    ai = (load_config(HERE).get("ai") or {})
+    defaults = {
+        "aiLevel": ai.get("level", "moderate"),
+        "aiBackend": ai.get("backend", "local"),
+        "aiLocalModel": ai.get("localModel", ""),
+        "aiCloudProvider": ai.get("cloudProvider", "cursor"),
+        "aiCloudModel": ai.get("cloudModel", ""),
+        "aiCloudEffort": ai.get("cloudEffort", "low"),
+        "aiUseHostOllama": bool(ai.get("useHostOllama", False)),
+    }
     try:
         with open(SETTINGS_FILE, encoding="utf-8") as f:
-            return json.load(f) or {}
+            return {**defaults, **(json.load(f) or {})}
     except Exception:
-        return {}
+        return defaults
 
 
 def _ensure_queue():
@@ -57,7 +67,13 @@ def enqueue(job):
         "backend": backend,
         "model": job.get("model") or (
             settings.get("aiCloudModel") if backend == "cloud"
-            else settings.get("aiLocalModel") or "qwen2.5-coder:7b"
+            else settings.get("aiLocalModel") or ""
+        ),
+        "cloudProvider": job.get("cloudProvider") if job.get("cloudProvider") in ("claude", "cursor", "gemini") else (
+            settings.get("aiCloudProvider") if settings.get("aiCloudProvider") in ("claude", "cursor", "gemini") else "cursor"
+        ),
+        "cloudEffort": job.get("cloudEffort") if job.get("cloudEffort") in ("low", "medium") else (
+            settings.get("aiCloudEffort") if settings.get("aiCloudEffort") in ("low", "medium") else "low"
         ),
         "useHostOllama": bool(job.get("useHostOllama", settings.get("aiUseHostOllama"))),
         "enqueuedAt": now_iso(),
@@ -140,6 +156,7 @@ def read_status():
 
 
 def write_status(patch):
+    os.makedirs(os.path.dirname(STATUS_FILE) or ".", exist_ok=True)
     cur = read_status() or {}
     cur.update(patch)
     cur["updatedAt"] = now_iso()
@@ -148,7 +165,12 @@ def write_status(patch):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cur, f, indent=2)
         f.write("\n")
-    os.replace(tmp, STATUS_FILE)
+    try:
+        os.replace(tmp, STATUS_FILE)
+    except FileNotFoundError:
+        with open(STATUS_FILE, "w", encoding="utf-8") as f:
+            json.dump(cur, f, indent=2)
+            f.write("\n")
     return cur
 
 

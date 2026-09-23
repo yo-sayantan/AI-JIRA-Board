@@ -29,8 +29,7 @@ The board has **two moving parts**, and they need different things:
 2. **The app** (`src/` → `dist/index.html`) — renders whatever the fetch dumped. Needs **nothing**.
 
 MCP servers are **optional**. Ticket briefs and report enrichment run in **JIRA-AI-Intern**
-(local Ollama or a cloud API). The Docker fetch container runs `SKIP_SUMMARY=1` so the
-board never blocks on an LLM — **to just deploy the board you only need a Jira token**.
+(local Ollama or a cloud API), so the fetch does not block on an LLM.
 
 ---
 
@@ -53,10 +52,10 @@ Tokens** → **Create token**. Copy it immediately (you can't see it again). Rea
 
 Optional, for richer cards: `CONFLUENCE_PERSONAL_TOKEN`, `BITBUCKET_PAT` (see the template).
 
-## Step 2 — Create your personal `config.json` (required)
+## Step 2 — Create a personal override (required for real identity/URLs)
 
-This holds your identity and company URLs. It lives **outside the repo** so your real values
-never enter git:
+Complete non-secret defaults live in `config/jira-board.config.json`. Your sparse override
+holds only identity, company URLs, and personal branding outside git:
 
 ```bash
 mkdir -p ~/.ai
@@ -68,11 +67,8 @@ Edit `~/.ai/config.json` and set your `user` (name **exactly** as Jira shows it,
 "assigned to me" matches), your `endpoints` (company URLs), and the `app.branding` footer.
 Full reference for every key: [`../jira-intern/CONFIG.md`](../jira-intern/CONFIG.md).
 
-**Which file wins**, first match:
-
-1. `$AI_CONFIG_FILE` — explicit override, any path
-2. `~/.ai/config.json` — **yours** (the one you just created)
-3. `jira-intern/config.json` — the tracked template/fallback, placeholders only
+The project config is loaded first. `$AI_CONFIG_FILE` or `~/.ai/config.json` is then
+deep-merged over it, and saved Settings AI choices are the final runtime overlay.
 
 Confirm what's actually in effect:
 
@@ -128,14 +124,9 @@ double-check first:
 
 1. **No secrets file staged.** `git status` should never show `mcp-secrets.env` or any `*.env`
    with real values. The root `.gitignore` already blocks these.
-2. **Sanitize or untrack `jira-intern/config.json`.** It holds your name, corporate ID and
-   internal hostnames — fine for a private repo, but for a **public** one either scrub those
-   values or stop tracking the personalized copy and ship only the template:
-   ```bash
-   git rm --cached jira-intern/config.json
-   echo "jira-intern/config.json" >> .gitignore
-   git add setup/config.example.json      # the sanitized template ships instead
-   ```
+2. **Keep `config/jira-board.config.json` generic.** It is intentionally tracked and must
+   contain placeholders/defaults only. Real identity and internal URLs belong in the
+   untracked `~/.ai/config.json` override.
 
 A quick pre-push scan for anything token-shaped:
 

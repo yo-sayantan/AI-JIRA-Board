@@ -1,39 +1,169 @@
 """Shared config.json resolver for the Python fetch scripts.
 
 Mirrors local-runner/config.mjs's resolveConfigPath() exactly, so every consumer of
-config.json — Node or Python — agrees on which file wins. Real, personal values (your
-name, corporate ID, internal company hostnames) do NOT live in the repo: the tracked
-jira-intern/config.json is a safe, sanitized template so the project can be public.
+configuration — Node or Python — agrees on the deep-merge contract. The tracked root
+config contains safe defaults; personal identity and internal URLs are sparse overrides.
 
-Resolution order (first match wins):
-  1. $AI_CONFIG_FILE                  — explicit override (any path)
-  2. ~/.ai/config.json                — your personal config, OUTSIDE any repo
-  3. <intern_dir>/config.json         — the in-repo template/fallback
+Resolution order:
+  1. <repo>/config/jira-board.config.json — complete tracked defaults
+  2. $AI_CONFIG_FILE or ~/.ai/config.json — optional sparse personal override
 
 See setup/README.md for how to create ~/.ai/config.json.
 """
 import json
 import os
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 
 def config_path(intern_dir):
-    """Which config.json wins for this run — same precedence as config.mjs."""
+    """Optional personal override path; the project config is always loaded."""
     override = os.environ.get("AI_CONFIG_FILE")
     if override:
         return override
     personal = os.path.join(os.path.expanduser("~"), ".ai", "config.json")
     if os.path.isfile(personal):
         return personal
-    return os.path.join(intern_dir, "config.json")
+    return None
+
+
+def project_config_path(intern_dir):
+    return os.path.join(os.path.dirname(os.path.abspath(intern_dir)), "config", "jira-board.config.json")
+
+
+def project_schema_path(intern_dir):
+    return os.path.join(os.path.dirname(os.path.abspath(intern_dir)), "config", "jira-board.config.schema.json")
+
+
+def deep_merge(base, override):
+    """Recursive object merge; arrays/scalars replace. Metadata keys are ignored."""
+    out = dict(base or {})
+    if not isinstance(override, dict):
+        return out
+    for key, value in (override or {}).items():
+        if str(key).startswith("_") or key == "$schema":
+            continue
+        prior = out.get(key)
+        if isinstance(prior, dict) and isinstance(value, dict):
+            out[key] = deep_merge(prior, value)
+        else:
+            out[key] = value
+    return out
+
+
+def _read_json(path, label, required=False):
+    if not path or not os.path.isfile(path):
+        if required:
+            raise RuntimeError(f"{label} missing: {path}")
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as exc:
+        raise RuntimeError(f"{label} is invalid JSON: {exc}") from exc
+
+
+def _type_matches(value, kind):
+    return {
+        "object": isinstance(value, dict),
+        "array": isinstance(value, list),
+        "integer": isinstance(value, int) and not isinstance(value, bool),
+        "number": isinstance(value, (int, float)) and not isinstance(value, bool),
+        "string": isinstance(value, str),
+        "boolean": isinstance(value, bool),
+        "null": value is None,
+    }.get(kind, True)
+
+
+def _schema_errors(value, schema, path="config"):
+    errors = []
+    kinds = schema.get("type")
+    kinds = kinds if isinstance(kinds, list) else ([kinds] if kinds else [])
+    if kinds and not any(_type_matches(value, kind) for kind in kinds):
+        return [f"{path} has the wrong type"]
+    if "const" in schema and value != schema["const"]:
+        errors.append(f"{path} must equal {schema['const']!r}")
+    if "enum" in schema and value not in schema["enum"]:
+        errors.append(f"{path} must be one of {', '.join(map(str, schema['enum']))}")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if schema.get("minimum") is not None and value < schema["minimum"]:
+            errors.append(f"{path} must be >= {schema['minimum']}")
+        if schema.get("maximum") is not None and value > schema["maximum"]:
+            errors.append(f"{path} must be <= {schema['maximum']}")
+    if isinstance(value, str) and schema.get("minLength") is not None and len(value) < schema["minLength"]:
+        errors.append(f"{path} is too short")
+    if isinstance(value, list):
+        if schema.get("minItems") is not None and len(value) < schema["minItems"]:
+            errors.append(f"{path} has too few items")
+        if schema.get("uniqueItems") and len({json.dumps(item, sort_keys=True) for item in value}) != len(value):
+            errors.append(f"{path} must contain unique items")
+        if schema.get("items"):
+            for i, item in enumerate(value):
+                errors += _schema_errors(item, schema["items"], f"{path}[{i}]")
+    if isinstance(value, dict):
+        for key in schema.get("required") or []:
+            if key not in value:
+                errors.append(f"{path}.{key} is required")
+        properties = schema.get("properties") or {}
+        for key, item in value.items():
+            if key in properties:
+                errors += _schema_errors(item, properties[key], f"{path}.{key}")
+            elif schema.get("additionalProperties") is False:
+                errors.append(f"{path}.{key} is not allowed")
+            elif isinstance(schema.get("additionalProperties"), dict):
+                errors += _schema_errors(item, schema["additionalProperties"], f"{path}.{key}")
+    return errors
 
 
 def load_config(intern_dir):
-    """Load the resolved config.json. Missing/invalid → {} (callers already default safely)."""
+    """Deep-merge the optional personal override over the tracked project defaults."""
+    project = _read_json(project_config_path(intern_dir), "project config", required=True)
+    override_path = config_path(intern_dir)
+    if os.environ.get("AI_CONFIG_FILE") and not os.path.isfile(override_path or ""):
+        raise RuntimeError(f"AI_CONFIG_FILE does not exist: {override_path}")
+    merged = deep_merge(project, _read_json(override_path, "personal config"))
+    if str((merged.get("app") or {}).get("timeZone") or "").upper() == "IST":
+        merged.setdefault("app", {})["timeZone"] = "Asia/Kolkata"
     try:
-        with open(config_path(intern_dir)) as f:
-            return json.load(f)
+        ZoneInfo(str((merged.get("app") or {}).get("timeZone") or ""))
     except Exception:
-        return {}
+        merged.setdefault("app", {})["timeZone"] = "UTC"
+    schema = _read_json(project_schema_path(intern_dir), "project config schema", required=True)
+    errors = _schema_errors(merged, schema)
+    if errors:
+        raise RuntimeError("configuration invalid:\n- " + "\n- ".join(errors))
+    return merged
+
+
+def secrets_path(intern_dir):
+    """Secrets path from the active connector; AGENT_SECRETS remains an explicit override."""
+    explicit = os.environ.get("AGENT_SECRETS")
+    if explicit:
+        return os.path.expanduser(explicit)
+    cfg = load_config(intern_dir)
+    connector = cfg.get("connector") or {}
+    active = connector.get("active") or "cursor"
+    path = ((connector.get(active) or {}).get("secretsFile")) or "~/.cursor/mcp-secrets.env"
+    return os.path.expanduser(path)
+
+
+def load_secrets(intern_dir):
+    """Parse KEY=VALUE secrets without putting them in the tracked config."""
+    out = {}
+    path = secrets_path(intern_dir)
+    if not os.path.isfile(path):
+        return out
+    with open(path, encoding="utf-8-sig") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key.startswith("export "):
+                key = key[7:].strip()
+            out[key] = value.strip().strip('"').strip("'")
+    return out
 
 
 def _strip(url):
@@ -64,3 +194,24 @@ def identity(intern_dir):
         "accountId": str(user.get("accountId") or "").strip(),
         "email": str(user.get("email") or "").strip(),
     }
+
+
+def time_zone(intern_dir):
+    """Configured IANA timezone, e.g. Asia/Kolkata. Missing uses TZ, then IST."""
+    name = str(
+        (load_config(intern_dir).get("app") or {}).get("timeZone")
+        or os.environ.get("TZ")
+        or "Asia/Kolkata"
+    ).strip()
+    try:
+        ZoneInfo(name)
+        return name
+    except Exception:
+        return "UTC"
+
+
+def now_iso(intern_dir):
+    """ISO-8601 now in the configured timezone, including its UTC offset."""
+    name = time_zone(intern_dir)
+    zone = ZoneInfo(name) if name != "UTC" else timezone.utc
+    return datetime.now(zone).isoformat(timespec="seconds")

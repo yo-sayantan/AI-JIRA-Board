@@ -1,27 +1,24 @@
-# config.json — the one file to edit when porting this setup
+# Central project configuration
 
-`config.json` is the **single source of truth** for everything user-, company- and
-machine-specific in the jira-board + jira-intern system. A new user creates **one file**
-and everything follows: the agent prompts, the runner scripts, the local server, and the
-app UI all read from it.
+[`config/jira-board.config.json`](../config/jira-board.config.json) is the versioned source
+of truth for every non-secret default and policy in jira-board + jira-intern. Its schema is
+[`config/jira-board.config.schema.json`](../config/jira-board.config.schema.json).
 
-## Where it lives — and which copy wins
+## Precedence
 
-Your **real** values (your name, corporate id, internal company hostnames) must NOT sit in
-the repo — this project is meant to be publishable. So the file is resolved at runtime, in
-this order, first match wins:
+Configuration is deep-merged in this order:
 
 | # | Location | Purpose |
 |---|---|---|
-| 1 | `$AI_CONFIG_FILE` | Explicit override — any path. Handy for CI or testing. |
-| 2 | `~/.ai/config.json` | **Your personal config.** Outside every repo. This is the one you edit. |
-| 3 | `jira-intern/config.json` | The tracked **template/fallback** — placeholders only, safe to commit. |
+| 1 | `config/jira-board.config.json` | Complete tracked defaults and policy. |
+| 2 | `$AI_CONFIG_FILE` or `~/.ai/config.json` | Optional sparse personal override. |
+| 3 | `jira-intern/.settings.json` | Saved runtime AI choices from the Settings window. |
 
-Create yours once:
+Only put fields that differ from project defaults in the personal override:
 
 ```bash
 mkdir -p ~/.ai
-cp jira-intern/config.json ~/.ai/config.json   # then edit it with your real values
+cp setup/config.example.json ~/.ai/config.json
 chmod 600 ~/.ai/config.json
 ```
 
@@ -31,10 +28,9 @@ Check which file is actually in effect at any time:
 node jira-intern/local-runner/config.mjs path
 ```
 
-Every consumer implements the same order: `local-runner/config.mjs` (`resolveConfigPath()`),
-`jira-intern/_config.py` (`config_path()`), `local-runner/sync-datajs.mjs`, and `serve.mjs`.
-Docker mounts `~/.ai/config.json` read-only at `/root/.ai/config.json` so the container
-resolves it identically.
+Node, Python, the local server, shell runners, Docker, and the AI worker all use the same
+deep-merge contract. Run `node jira-intern/local-runner/config.mjs validate` to validate it,
+or `... export` to inspect the effective configuration.
 
 > **Note:** no API tokens live in `config.json` — those go in your secrets env file
 > (see `setup/mcp-secrets.env.template`).
@@ -47,10 +43,9 @@ Consumed by:
 - `local-runner/sync-datajs.mjs` — injects the `app` section into `data.js` as
   `window.__JIRA_CONFIG__`, so the **built** app re-themes at runtime (no rebuild needed).
 
-If `config.json` is missing or invalid, connector/model/timeout values fall back to the
-baked-in defaults (the original cursor setup). **Node.js is required**: prompts are rendered
-through `config.mjs`, and the runners refuse to launch the agent with an unrendered prompt
-(no identity / no MCP policy) rather than run unsafely.
+The tracked project config is required. Invalid JSON, schema fields, port, or AI policy fails
+validation loudly. An invalid timezone falls back to UTC; legacy `IST` normalizes to
+`Asia/Kolkata`.
 
 ---
 
@@ -109,6 +104,12 @@ absolute path of this folder), so the prompts are path-portable with zero config
 | `main` | Model for the daily/weekly/refresh runs. `"auto"` = let the connector pick (no flag passed). Env `MODEL=` overrides per run. |
 | `summary` | Model for the cheap local AI-summary pass — set a fast/cheap one (e.g. `haiku-4.5`, `gpt-4o-mini`, `gemini-2.5-flash`). Env `SUMMARY_MODEL=` overrides. |
 
+## `ai`
+Defaults for Settings and the intern worker: `level`, `backend`, local/cloud models,
+`cloudProvider`, `cloudEffort`, `useHostOllama`, and the allowed effort list. Saved choices
+in `jira-intern/.settings.json` override these defaults. The local model catalog remains
+`ai-intern/models.json`; `models.catalog` points to it.
+
 ## `reports` — PR Readiness Reports
 | key | meaning |
 |---|---|
@@ -116,11 +117,21 @@ absolute path of this folder), so the prompts are path-portable with zero config
 | `year` | Which tickets the automatic pass and `pr-reports-backfill.sh` consider (by created/resolved year). Default `2026`. |
 | `maxPerRun` | Cap per automatic pass so a backlog never runs for hours. Default `5`. Manual backfills are uncapped unless `--max` is given. |
 
-Models: `models.report` picks the agent model for the AI enrichment (`"auto"` = connector default; env
-`REPORT_MODEL=` overrides). `timeouts.reportSec` (default 600) bounds one enrichment run. Skip the AI
-pass entirely with `SKIP_REPORT_AI=1` or Settings AI usage **None**. Docker `SKIP_SUMMARY=1` only skips
-the fetch-container LLM; report enrichment is queued for JIRA-AI-Intern.
+Models: `models.report` picks the connector-agent model (`"auto"` = connector default; env
+`REPORT_MODEL=` overrides). `timeouts.reportSec` (default 600) bounds one enrichment run.
+Settings AI usage **None** skips report AI; otherwise enrichment is queued for JIRA-AI-Intern.
 Reports are written to `jira-intern/reports/` — git-ignored; they contain real ticket and PR content.
+
+`defaultWindowDays` and `presetWindowDays` control the report menu's custom-date default and
+quick ranges.
+
+## `archive`
+`maxFetch`, `workers`, `defaultWindowDays`, and `presetWindowDays` control archive rebuild
+capacity and the archive menu.
+
+## `refresh`
+`onStart` and `intervalSec` control the container's initial and periodic active-ticket fetch.
+Explicit `REFRESH_ON_START` / `REFRESH_INTERVAL` environment values still win.
 
 ## `timeouts` (seconds)
 `dailySec` (default 1800), `weeklySec` (7200, env `TIMEOUT_SEC` overrides), `summarySec` (600),
@@ -131,6 +142,11 @@ Reports are written to `jira-intern/reports/` — git-ignored; they contain real
 |---|---|
 | `servePort` | Port for `npm run serve` (env `PORT` overrides). |
 | `requiredApprovals` | How many PR approvals count as "approved" (badge + pips). |
+| `timeZone` | IANA timezone used for report generation, enrichment, UI, and PDF timestamps. |
+| `doneBoardDays` | Days a newly Done ticket remains on the active board. |
+| `polling` | Busy/idle report and AI polling intervals. |
+| `progress` | Header progress phase percentages. |
+| `settingsDefaults` | Appearance and feature defaults before saved browser choices. |
 | `branding.tagline` | Left footer text. |
 | `branding.badgeText` / `badgeUrl` / `badgeTitle` | The footer "made by" badge — put your own name/portfolio here. |
 
@@ -141,8 +157,8 @@ Reports are written to `jira-intern/reports/` — git-ignored; they contain real
 ---
 
 ## Porting checklist (new user)
-0. `mkdir -p ~/.ai && cp jira-intern/config.json ~/.ai/config.json` — your personal copy,
-   outside the repo. Everything below edits **that** file, never the tracked template.
+0. `mkdir -p ~/.ai && cp setup/config.example.json ~/.ai/config.json` — optional sparse
+   personal override, outside the repo.
 1. Edit `~/.ai/config.json`: your `user`, your `endpoints`, your `connector.active` (+ its
    `secretsFile` with your API key/tokens), your `app.branding`.
 2. Make sure your connector CLI has the three MCP servers (jira / confluence / bitbucket)

@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jira-board.local/config/jira-board.config.schema.json",
+  "title": "Jira Board project configuration",
+  "type": "object",
+  "required": ["version", "user", "endpoints", "connector", "mcp", "ai", "timeouts", "refresh", "reports", "archive", "app"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "user": {
+      "type": "object",
+      "required": ["name", "accountId", "email"],
+      "properties": {
+        "name": { "type": "string" },
+        "accountId": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "endpoints": {
+      "type": "object",
+      "required": ["jiraBase", "confluenceBase", "bitbucketBase"],
+      "properties": {
+        "jiraBase": { "type": "string" },
+        "confluenceBase": { "type": "string" },
+        "bitbucketBase": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "excludeProjects": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "connector": {
+      "type": "object",
+      "required": ["active"],
+      "properties": { "active": { "type": "string", "enum": ["cursor", "claude", "codex"] } },
+      "additionalProperties": {
+        "type": ["object", "string"],
+        "properties": {
+          "bin": { "type": "string" },
+          "binFallbacks": { "type": "array", "items": { "type": "string" } },
+          "promptFlag": { "type": "string" },
+          "extraArgs": { "type": "array", "items": { "type": "string" } },
+          "modelFlag": { "type": "string" },
+          "secretsFile": { "type": "string" },
+          "apiKeyEnv": { "type": "string" },
+          "install": { "type": "string" }
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["enabled", "read", "write"],
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "read": { "type": "boolean" },
+          "write": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "main": { "type": "string" },
+        "summary": { "type": "string" },
+        "report": { "type": "string" },
+        "catalog": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "ai": {
+      "type": "object",
+      "required": ["level", "backend", "cloudProvider", "cloudEffort", "useHostOllama"],
+      "properties": {
+        "level": { "enum": ["none", "low", "moderate", "full"] },
+        "backend": { "enum": ["local", "cloud"] },
+        "localModel": { "type": "string" },
+        "cloudProvider": { "enum": ["claude", "cursor", "gemini"] },
+        "cloudModel": { "type": "string" },
+        "cloudEffort": { "enum": ["low", "medium"] },
+        "useHostOllama": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "timeouts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 1 }
+    },
+    "refresh": {
+      "type": "object",
+      "required": ["onStart", "intervalSec"],
+      "properties": {
+        "onStart": { "type": "boolean" },
+        "intervalSec": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "reports": {
+      "type": "object",
+      "required": ["autoGenerate", "year", "maxPerRun", "defaultWindowDays", "presetWindowDays"],
+      "properties": {
+        "autoGenerate": { "type": "boolean" },
+        "year": { "type": "integer", "minimum": 2000 },
+        "maxPerRun": { "type": "integer", "minimum": 1 },
+        "defaultWindowDays": { "type": "integer", "minimum": 1 },
+        "presetWindowDays": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
+      },
+      "additionalProperties": false
+    },
+    "archive": {
+      "type": "object",
+      "required": ["maxFetch", "workers", "defaultWindowDays", "presetWindowDays"],
+      "properties": {
+        "maxFetch": { "type": "integer", "minimum": 1 },
+        "workers": { "type": "integer", "minimum": 1 },
+        "defaultWindowDays": { "type": "integer", "minimum": 1 },
+        "presetWindowDays": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
+      },
+      "additionalProperties": false
+    },
+    "app": {
+      "type": "object",
+      "required": ["servePort", "requiredApprovals", "timeZone", "doneBoardDays", "polling", "progress", "settingsDefaults", "branding"],
+      "properties": {
+        "servePort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "requiredApprovals": { "type": "integer", "minimum": 1 },
+        "timeZone": { "type": "string", "minLength": 1 },
+        "doneBoardDays": { "type": "integer", "minimum": 0 },
+        "polling": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 250 }
+        },
+        "progress": {
+          "type": "object",
+          "properties": {
+            "prepPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "buildMaxPercent": { "type": "number", "minimum": 0, "maximum": 100 }
+          },
+          "additionalProperties": false
+        },
+        "settingsDefaults": {
+          "type": "object",
+          "properties": {
+            "themeMode": { "enum": ["auto", "fixed", "schedule"] },
+            "theme": { "enum": ["dark", "light"] },
+            "dayStart": { "type": "integer", "minimum": 0, "maximum": 23 },
+            "dayEnd": { "type": "integer", "minimum": 0, "maximum": 23 },
+            "features": { "type": "object", "additionalProperties": { "type": "boolean" } }
+          },
+          "additionalProperties": false
+        },
+        "branding": {
+          "type": "object",
+          "properties": {
+            "tagline": { "type": "string" },
+            "badgeText": { "type": "string" },
+            "badgeUrl": { "type": "string" },
+            "badgeTitle": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

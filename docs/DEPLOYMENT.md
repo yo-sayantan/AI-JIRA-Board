@@ -2,7 +2,8 @@
 
 Three ways to run the board, easiest first. All of them assume you've done the one-time
 [setup](../setup/README.md) (a Jira token in `~/.cursor/mcp-secrets.env` and a filled-in
-`jira-intern/config.json`).
+optional personal override at `~/.ai/config.json`; project defaults are in
+`config/jira-board.config.json`).
 
 ---
 
@@ -24,10 +25,9 @@ Then open **http://localhost:4321/dist/index.html**.
 `docker-compose.yml` builds the board image and starts **JIRA-Board**, **JIRA-AI-Ollama**, and
 **JIRA-AI-Intern**:
 
-- Mounts your secrets read-only: `~/.cursor/mcp-secrets.env → /root/.cursor/mcp-secrets.env:ro`.
-- `REFRESH_ON_START=1` — fetches once on boot.
-- `REFRESH_INTERVAL=900` — re-fetches every 15 min (set `0` to disable).
-- `SKIP_SUMMARY=1` — no LLM in the **fetch** container. Report AI is owned by JIRA-AI-Intern.
+- Mounts `~/.cursor` read-only (so `mcp-secrets.env` stays readable after the file is replaced).
+- Reads refresh startup/interval policy from `config/jira-board.config.json → refresh`
+  (`REFRESH_ON_START` / `REFRESH_INTERVAL` can still override it).
 - Persists data on the host via the `./jira-intern` volume; models on `jira-ai-models`.
 
 ### Everyday commands
@@ -102,7 +102,7 @@ Both rewrite `jira-intern/data.json` + `data.js`; reload the board to see the re
 
 ## PR Readiness Reports
 
-Generated automatically in the background after each fetch (see `config.json → reports`). By hand:
+Generated automatically in the background after each fetch (see `config/jira-board.config.json → reports`). By hand:
 
 ```bash
 bash jira-intern/local-runner/pr-report.sh FRAUDBUSTE-290           # one ticket (base + AI enrichment)

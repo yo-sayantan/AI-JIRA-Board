@@ -1,0 +1,130 @@
+{
+  "$schema": "./jira-board.config.schema.json",
+  "version": 1,
+  "user": {
+    "name": "Your Name (exactly as Jira displays it)",
+    "accountId": "YOUR_CORP_ID",
+    "email": "you@your-company.example"
+  },
+  "endpoints": {
+    "jiraBase": "https://jira.your-company.example",
+    "confluenceBase": "https://confluence.your-company.example",
+    "bitbucketBase": "https://bitbucket.your-company.example"
+  },
+  "excludeProjects": [],
+  "connector": {
+    "active": "cursor",
+    "cursor": {
+      "bin": "cursor-agent",
+      "binFallbacks": ["~/.local/bin/cursor-agent"],
+      "promptFlag": "-p",
+      "extraArgs": ["--output-format", "text", "--force"],
+      "modelFlag": "--model",
+      "secretsFile": "~/.cursor/mcp-secrets.env",
+      "apiKeyEnv": "CURSOR_API_KEY",
+      "install": "curl https://cursor.com/install -fsS | bash"
+    },
+    "claude": {
+      "bin": "claude",
+      "binFallbacks": [],
+      "promptFlag": "-p",
+      "extraArgs": ["--output-format", "text", "--dangerously-skip-permissions"],
+      "modelFlag": "--model",
+      "secretsFile": "~/.cursor/mcp-secrets.env",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "install": "npm install -g @anthropic-ai/claude-code"
+    },
+    "codex": {
+      "bin": "codex",
+      "binFallbacks": [],
+      "promptFlag": "exec",
+      "extraArgs": ["--full-auto"],
+      "modelFlag": "--model",
+      "secretsFile": "~/.cursor/mcp-secrets.env",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "install": "npm install -g @openai/codex"
+    }
+  },
+  "mcp": {
+    "jira": { "enabled": true, "read": true, "write": false },
+    "confluence": { "enabled": true, "read": true, "write": false },
+    "bitbucket": { "enabled": true, "read": true, "write": false },
+    "checkmarx": { "enabled": true, "read": true, "write": false },
+    "dynatrace": { "enabled": true, "read": true, "write": false }
+  },
+  "models": {
+    "main": "auto",
+    "summary": "auto",
+    "report": "auto",
+    "catalog": "ai-intern/models.json"
+  },
+  "ai": {
+    "level": "moderate",
+    "backend": "local",
+    "localModel": "",
+    "cloudProvider": "cursor",
+    "cloudModel": "",
+    "cloudEffort": "low",
+    "useHostOllama": false
+  },
+  "timeouts": {
+    "dailySec": 1800,
+    "weeklySec": 7200,
+    "summarySec": 900,
+    "refreshSec": 600,
+    "reportSec": 600
+  },
+  "refresh": {
+    "onStart": true,
+    "intervalSec": 900
+  },
+  "reports": {
+    "autoGenerate": true,
+    "year": 2026,
+    "maxPerRun": 5,
+    "defaultWindowDays": 30,
+    "presetWindowDays": [30, 90]
+  },
+  "archive": {
+    "maxFetch": 999,
+    "workers": 8,
+    "defaultWindowDays": 30,
+    "presetWindowDays": [30, 90]
+  },
+  "app": {
+    "servePort": 4321,
+    "requiredApprovals": 2,
+    "timeZone": "Asia/Kolkata",
+    "doneBoardDays": 5,
+    "polling": {
+      "reportsIdleMs": 15000,
+      "reportsBusyMs": 4000,
+      "aiIdleMs": 12000,
+      "aiBusyMs": 1000
+    },
+    "progress": {
+      "prepPercent": 24,
+      "buildMaxPercent": 96
+    },
+    "settingsDefaults": {
+      "themeMode": "auto",
+      "theme": "dark",
+      "dayStart": 7,
+      "dayEnd": 19,
+      "features": {
+        "prReports": true,
+        "nextSprint": true,
+        "completedArchive": true,
+        "animations": true,
+        "shortcuts": true,
+        "autoRefresh": true
+      }
+    },
+    "branding": {
+      "tagline": "Built to dodge JIRA · made with ☕ + a refresh button",
+      "badgeText": "",
+      "badgeUrl": "",
+      "badgeTitle": ""
+    }
+  }
+}

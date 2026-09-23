@@ -369,13 +369,11 @@ Copy-Item "setup\config.example.json" "$HOME\.ai\config.json"</pre>
         <p class="small">Edit it — your <b>name exactly as Jira shows it</b> (that's how "assigned to me"
           matches), your company URLs, and the footer branding. Every key is documented in
           <code class="inl">jira-intern/CONFIG.md</code>. <b>No tokens go in this file.</b></p>
-        <div class="note"><b>Which config wins:</b> <code class="inl">$AI_CONFIG_FILE</code> →
-          <code class="inl">~/.ai/config.json</code> → the tracked
-          <code class="inl">jira-intern/config.json</code> template. Check with
+        <div class="note"><b>Config precedence:</b> tracked defaults from
+          <code class="inl">config/jira-board.config.json</code>, then a sparse
+          <code class="inl">$AI_CONFIG_FILE</code> or <code class="inl">~/.ai/config.json</code>
+          override, then saved runtime Settings. Check with
           <code class="inl">node jira-intern/local-runner/config.mjs path</code>.</div>
-        <div class="note warn">Create this file <b>before</b> your first
-          <code class="inl">docker compose up</code> — Docker mounts it, and if the path is missing it
-          silently creates a directory there instead.</div>
       </div>
 
       <div class="step">
@@ -580,8 +578,9 @@ ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
           No UI change is required.</p>
       </div>
 
-      <div class="note warn"><b>Honest gap.</b> File-only AI fills business impact and per-file notes when a file list exists.
-        CI, Checkmarx and live Dynatrace stay <b>Not verified</b> until dedicated REST is added.</div>
+      <div class="note warn"><b>Honest gap.</b> Local models (including Gemma / GPT-OSS / nano) read the intern
+        volume and live Jira/Bitbucket REST (same tokens as Cursor MCP). CI, Checkmarx and live Dynatrace stay
+        <b>Not verified</b> until dedicated REST is added.</div>
 
       <!-- ── RUN WITHOUT DOCKER ───────────────────────────────────── -->
       <h2 id="run">Other ways to run</h2>
@@ -650,8 +649,9 @@ bash jira-intern/local-runner/update-completed.sh  <span class="cmt"># full Comp
 
       <div class="note warn" style="margin-top: 24px">
         <b>Before making the repo public:</b> confirm no <code class="inl">*.env</code> with real values is staged,
-        and sanitize or untrack <code class="inl">jira-intern/config.json</code> (it holds your name and internal
-        hostnames). Checklist in <a href="../setup/README.md">setup/README.md</a>.
+        keep <code class="inl">config/jira-board.config.json</code> generic, and keep real identity/internal
+        hostnames only in <code class="inl">~/.ai/config.json</code>. Checklist in
+        <a href="../setup/README.md">setup/README.md</a>.
       </div>
 
       <footer>Built to dodge JIRA · made with ☕ + a refresh button</footer>

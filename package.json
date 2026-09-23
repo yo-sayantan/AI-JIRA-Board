@@ -8,6 +8,8 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
+    "test:config": "python3 tests/test_config.py",
+    "config:validate": "node jira-intern/local-runner/config.mjs validate",
     "preview": "vite preview",
     "serve": "node serve.mjs",
     "open": "open dist/index.html"

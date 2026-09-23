@@ -1,5 +1,5 @@
-// Config resolver for the jira-intern pipeline. Reads config.json (single source of
-// truth) and serves it to every consumer so portability lives in ONE file:
+// Shared resolver for the project-wide config. The tracked root config owns all
+// non-secret defaults; a personal file may contain only the fields it overrides.
 //
 //   node config.mjs get <dot.path>       → print a value ("user.accountId" → ABC1234)
 //   node config.mjs shellenv             → eval-able lines for the bash runners
@@ -10,20 +10,14 @@
 //   node config.mjs policy               → the generated MCP POLICY block (allow + read/write)
 //   node config.mjs render <prompt.md>   → prompt with {{TOKENS}} substituted, to stdout
 //
-// WHICH config.json? Real, personal values (your name, corporate ID, internal company
-// hostnames) do NOT live in the repo — the tracked jira-intern/config.json is a safe,
-// sanitized template so the project can be public. Resolution order (first match wins):
-//   1. $AI_CONFIG_FILE          — explicit override (any path)
-//   2. ~/.ai/config.json        — your personal config, OUTSIDE any repo (see setup/README.md)
-//   3. <repo>/jira-intern/config.json — the in-repo template/fallback
-// Missing config.json entirely → built-in defaults (current cursor setup), so nothing breaks.
 import { readFileSync, existsSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { homedir } from 'os'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const REPO_CONFIG_PATH = join(HERE, '..', 'config.json')
+const PROJECT_CONFIG_PATH = resolve(HERE, '..', '..', 'config', 'jira-board.config.json')
+const PROJECT_SCHEMA_PATH = resolve(HERE, '..', '..', 'config', 'jira-board.config.schema.json')
 const PERSONAL_CONFIG_PATH = join(homedir(), '.ai', 'config.json')
 
 /** Settings the board writes from its Settings panel. Absent/unreadable → {} (config.json wins). */
@@ -35,58 +29,105 @@ function boardSettings() {
   }
 }
 
-/** Same precedence documented above — exported so callers can report which file won. */
+/** Optional override path. The project config is always loaded first. */
 export function resolveConfigPath() {
   if (process.env.AI_CONFIG_FILE) return process.env.AI_CONFIG_FILE
   if (existsSync(PERSONAL_CONFIG_PATH)) return PERSONAL_CONFIG_PATH
-  return REPO_CONFIG_PATH
+  return null
 }
 
-const CONFIG_PATH = resolveConfigPath()
+const OVERRIDE_CONFIG_PATH = resolveConfigPath()
 
-const DEFAULTS = {
-  user: { name: '', accountId: '', email: '' },
-  endpoints: { jiraBase: '', confluenceBase: '', bitbucketBase: '' },
-  connector: {
-    active: 'cursor',
-    cursor: {
-      bin: 'cursor-agent',
-      binFallbacks: ['~/.local/bin/cursor-agent'],
-      promptFlag: '-p',
-      extraArgs: ['--output-format', 'text', '--force'],
-      modelFlag: '--model',
-      secretsFile: '~/.cursor/mcp-secrets.env',
-      apiKeyEnv: 'CURSOR_API_KEY',
-      install: 'curl https://cursor.com/install -fsS | bash',
-    },
-  },
-  mcp: {
-    jira: { enabled: true, read: true, write: false },
-    confluence: { enabled: true, read: true, write: false },
-    bitbucket: { enabled: true, read: true, write: false },
-  },
-  models: { main: 'auto', summary: 'auto', report: 'auto' },
-  timeouts: { dailySec: 1800, weeklySec: 7200, summarySec: 600, refreshSec: 600, reportSec: 600 },
-  // PR Readiness Reports: generated per ticket-with-PR into jira-intern/reports/ (git-ignored).
-  reports: { autoGenerate: true, year: 2026, maxPerRun: 5 },
-  app: { servePort: 4321, requiredApprovals: 2, branding: {} },
-}
-
-function loadConfig() {
-  if (!existsSync(CONFIG_PATH)) return DEFAULTS
+function readJson(path, label, required = false) {
+  if (!path || !existsSync(path)) {
+    if (required) throw new Error(`${label} missing: ${path}`)
+    return {}
+  }
   try {
-    const raw = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'))
-    // Shallow-merge top-level sections over defaults so a sparse config still works.
-    const merged = { ...DEFAULTS }
-    for (const k of Object.keys(raw)) if (!k.startsWith('_')) merged[k] = raw[k]
-    return merged
+    return JSON.parse(readFileSync(path, 'utf8'))
   } catch (e) {
-    process.stderr.write(`config.mjs: config.json invalid (${e.message}) — using defaults\n`)
-    return DEFAULTS
+    throw new Error(`${label} is invalid JSON (${e.message})`)
   }
 }
 
-const cfg = loadConfig()
+export function deepMerge(base, override) {
+  if (!override || typeof override !== 'object' || Array.isArray(override)) return base
+  const out = { ...base }
+  for (const [key, value] of Object.entries(override)) {
+    if (key.startsWith('_') || key === '$schema') continue
+    const prior = out[key]
+    out[key] =
+      value && typeof value === 'object' && !Array.isArray(value) && prior && typeof prior === 'object' && !Array.isArray(prior)
+        ? deepMerge(prior, value)
+        : value
+  }
+  return out
+}
+
+function schemaTypeMatches(value, type) {
+  if (type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value)
+  if (type === 'array') return Array.isArray(value)
+  if (type === 'integer') return Number.isInteger(value)
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value)
+  if (type === 'string') return typeof value === 'string'
+  if (type === 'boolean') return typeof value === 'boolean'
+  if (type === 'null') return value === null
+  return true
+}
+
+function validateAgainstSchema(value, schema, path = 'config') {
+  const errors = []
+  const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : []
+  if (types.length && !types.some((type) => schemaTypeMatches(value, type))) return [`${path} has the wrong type`]
+  if ('const' in schema && value !== schema.const) errors.push(`${path} must equal ${JSON.stringify(schema.const)}`)
+  if (schema.enum && !schema.enum.includes(value)) errors.push(`${path} must be one of ${schema.enum.join(', ')}`)
+  if (typeof value === 'number') {
+    if (schema.minimum != null && value < schema.minimum) errors.push(`${path} must be >= ${schema.minimum}`)
+    if (schema.maximum != null && value > schema.maximum) errors.push(`${path} must be <= ${schema.maximum}`)
+  }
+  if (typeof value === 'string' && schema.minLength != null && value.length < schema.minLength) errors.push(`${path} is too short`)
+  if (Array.isArray(value)) {
+    if (schema.minItems != null && value.length < schema.minItems) errors.push(`${path} has too few items`)
+    if (schema.uniqueItems && new Set(value.map((item) => JSON.stringify(item))).size !== value.length) errors.push(`${path} must contain unique items`)
+    if (schema.items) value.forEach((item, i) => errors.push(...validateAgainstSchema(item, schema.items, `${path}[${i}]`)))
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const key of schema.required || []) if (!(key in value)) errors.push(`${path}.${key} is required`)
+    const properties = schema.properties || {}
+    for (const [key, item] of Object.entries(value)) {
+      if (properties[key]) errors.push(...validateAgainstSchema(item, properties[key], `${path}.${key}`))
+      else if (schema.additionalProperties === false) errors.push(`${path}.${key} is not allowed`)
+      else if (schema.additionalProperties && typeof schema.additionalProperties === 'object')
+        errors.push(...validateAgainstSchema(item, schema.additionalProperties, `${path}.${key}`))
+    }
+  }
+  return errors
+}
+
+export function validateConfig(config) {
+  const schema = readJson(PROJECT_SCHEMA_PATH, 'project config schema', true)
+  return validateAgainstSchema(config, schema)
+}
+
+export function loadConfig() {
+  const project = readJson(PROJECT_CONFIG_PATH, 'project config', true)
+  if (process.env.AI_CONFIG_FILE && !existsSync(process.env.AI_CONFIG_FILE))
+    throw new Error(`AI_CONFIG_FILE does not exist: ${process.env.AI_CONFIG_FILE}`)
+  const merged = deepMerge(project, readJson(OVERRIDE_CONFIG_PATH, 'personal config'))
+  if (String(merged.app?.timeZone || '').toUpperCase() === 'IST') merged.app.timeZone = 'Asia/Kolkata'
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: merged.app?.timeZone }).format()
+  } catch {
+    merged.app.timeZone = 'UTC'
+  }
+  const errors = validateConfig(merged)
+  if (errors.length) throw new Error(`configuration invalid:\n- ${errors.join('\n- ')}`)
+  return merged
+}
+
+export const CONFIG_PATH = OVERRIDE_CONFIG_PATH || PROJECT_CONFIG_PATH
+export const cfg = loadConfig()
+const DEFAULTS = readJson(PROJECT_CONFIG_PATH, 'project config', true)
 const untilde = (p) => (typeof p === 'string' && p.startsWith('~') ? join(homedir(), p.slice(1)) : p)
 
 function getPath(obj, path) {
@@ -151,7 +192,7 @@ function render(file) {
   // timed run fetching nothing. Loud warning (lands in the runner's log via stderr).
   const missing = ['USER_NAME', 'USER_ID', 'JIRA_BASE'].filter((k) => !map[k])
   if (missing.length)
-    process.stderr.write(`config.mjs: WARNING identity tokens empty (fill config.json → user/endpoints): ${missing.join(', ')}\n`)
+    process.stderr.write(`config.mjs: WARNING identity tokens empty (set user/endpoints in the central config or personal override): ${missing.join(', ')}\n`)
   text = text.replace(/\{\{([A-Z_]+)\}\}/g, (m, key) => (key in map ? map[key] : m))
   // Any token we don't know stays literal — flag it so a typo never reaches the agent silently.
   const leftover = [...text.matchAll(/\{\{([A-Z_]+)\}\}/g)].map((m) => m[1])
@@ -187,17 +228,24 @@ function shellenv() {
   out.push(`REPORTS_AUTO=${shq(cfg.reports?.autoGenerate === false ? 0 : 1)}`)
   out.push(`REPORTS_YEAR=${shq(cfg.reports?.year ?? 2026)}`)
   out.push(`REPORTS_MAX_PER_RUN=${shq(cfg.reports?.maxPerRun ?? 5)}`)
+  out.push(`COMPLETED_MAX_FETCH=${shq(cfg.archive?.maxFetch ?? 999)}`)
+  out.push(`COMPLETED_WORKERS=${shq(cfg.archive?.workers ?? 8)}`)
   // The board's Settings panel writes jira-intern/.settings.json; it overrides config.json so a
   // UI change takes effect without editing (or exposing) the user's personal config file.
-  out.push(`REPORTS_AI_LEVEL=${shq(boardSettings().aiLevel ?? cfg.reports?.aiLevel ?? 'moderate')}`)
-  out.push(`AI_BACKEND=${shq(boardSettings().aiBackend ?? 'local')}`)
-  out.push(`AI_LOCAL_MODEL=${shq(boardSettings().aiLocalModel ?? 'qwen2.5-coder:7b')}`)
-  out.push(`AI_USE_HOST_OLLAMA=${shq(boardSettings().aiUseHostOllama ? 1 : 0)}`)
+  const runtime = boardSettings()
+  out.push(`REPORTS_AI_LEVEL=${shq(runtime.aiLevel ?? cfg.ai?.level ?? 'moderate')}`)
+  out.push(`AI_BACKEND=${shq(runtime.aiBackend ?? cfg.ai?.backend ?? 'local')}`)
+  out.push(`AI_LOCAL_MODEL=${shq(runtime.aiLocalModel ?? cfg.ai?.localModel ?? '')}`)
+  out.push(`AI_CLOUD_PROVIDER=${shq(runtime.aiCloudProvider ?? cfg.ai?.cloudProvider ?? 'cursor')}`)
+  out.push(`AI_CLOUD_MODEL=${shq(runtime.aiCloudModel ?? cfg.ai?.cloudModel ?? '')}`)
+  out.push(`AI_CLOUD_EFFORT=${shq(runtime.aiCloudEffort ?? cfg.ai?.cloudEffort ?? 'low')}`)
+  out.push(`AI_USE_HOST_OLLAMA=${shq(runtime.aiUseHostOllama ?? cfg.ai?.useHostOllama ? 1 : 0)}`)
   return out.join('\n')
 }
 
-const [cmd, arg] = process.argv.slice(2)
-switch (cmd) {
+function main() {
+  const [cmd, arg] = process.argv.slice(2)
+  switch (cmd) {
   case 'get': {
     const v = getPath(cfg, arg ?? '')
     if (v === undefined) process.exit(1)
@@ -218,10 +266,18 @@ switch (cmd) {
     process.stdout.write(render(arg))
     break
   case 'path':
-    // Which config.json actually won — the first thing to check when settings don't seem to apply.
-    process.stdout.write(`${CONFIG_PATH}${existsSync(CONFIG_PATH) ? '' : '  (does not exist — using built-in defaults)'}\n`)
+    process.stdout.write(`project: ${PROJECT_CONFIG_PATH}\noverride: ${OVERRIDE_CONFIG_PATH || '(none)'}\n`)
+    break
+  case 'export':
+    process.stdout.write(JSON.stringify(cfg, null, 2) + '\n')
+    break
+  case 'validate':
+    process.stdout.write(`valid: ${PROJECT_CONFIG_PATH}${OVERRIDE_CONFIG_PATH ? ` + ${OVERRIDE_CONFIG_PATH}` : ''}\n`)
     break
   default:
-    process.stderr.write('usage: node config.mjs <get <dot.path> | shellenv | policy | render <file> | path>\n')
+    process.stderr.write('usage: node config.mjs <get <dot.path> | export | validate | shellenv | policy | render <file> | path>\n')
     process.exit(2)
+  }
 }
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()
