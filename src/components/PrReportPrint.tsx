@@ -1,7 +1,9 @@
 import type { PrReport, ReportBlock, ReportStat, ReportTab } from '../lib/reportTypes'
 import { toneColor } from '../lib/reportTypes'
-import { fmtDate, fmtDateTime } from '../lib/format'
-import { SafeHtml } from './ui'
+import { fmtDate, fmtDateTime, fmtReportMetadata } from '../lib/format'
+import { APP_CONFIG } from '../lib/appConfig'
+import { hrefForKey, shareableLinks } from '../lib/reportLinks'
+import { ReportHtml } from './ReportHtml'
 
 /**
  * The report as a PRINTED DOCUMENT — a separate render from the on-screen overlay, not the same
@@ -20,6 +22,8 @@ export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: Rep
   const vc = toneColor(v?.tone)
   const stats = report.stats ?? []
   const { lead, next } = splitHeadline(v?.headline, v?.label)
+  const extras = shareableLinks(report)
+  const ticketHref = hrefForKey(report, report.key)
 
   return (
     <div className="jb-pdf">
@@ -29,9 +33,15 @@ export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: Rep
         <header className="jb-pdf-mast">
           <div className="jb-pdf-eyebrow">
             <span>PR Readiness Report</span>
-            <span className="jb-pdf-eyebrow-right">{fmtDate(report.generatedAt)}</span>
+            <span className="jb-pdf-eyebrow-right">{fmtDate(report.generatedAt, report.timeZone ?? APP_CONFIG.timeZone)}</span>
           </div>
-          <div className="jb-pdf-key">{report.key}</div>
+          {ticketHref ? (
+            <a href={ticketHref} className="jb-pdf-key">
+              {report.key}
+            </a>
+          ) : (
+            <div className="jb-pdf-key">{report.key}</div>
+          )}
           <h1 className="jb-pdf-title">{report.title}</h1>
         </header>
 
@@ -40,11 +50,15 @@ export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: Rep
             <div className="jb-pdf-verdict-label" style={{ color: vc }}>
               {v?.label ?? 'No verdict'}
             </div>
-            {lead && <p className="jb-pdf-lead">{lead}</p>}
+            {lead && (
+              <p className="jb-pdf-lead">
+                <ReportHtml html={lead} report={report} inline />
+              </p>
+            )}
             {next && (
               <p className="jb-pdf-next">
                 <span className="jb-pdf-next-label">Next</span>
-                {next}
+                <ReportHtml html={next} report={report} inline />
               </p>
             )}
           </div>
@@ -91,10 +105,20 @@ export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: Rep
                 : 'Measured directly from Jira and Bitbucket. No AI interpretation applied.'}
             </p>
             <p className="jb-pdf-colophon-meta">
-              Generated {fmtDateTime(report.generatedAt)}
-              {report.enriched && report.enrichedAt ? ` · enriched ${fmtDateTime(report.enrichedAt)}` : ''}
+              Generated {fmtDateTime(report.generatedAt, report.timeZone ?? APP_CONFIG.timeZone)}
+              {report.enriched && report.enrichedAt ? ` · enriched ${fmtDateTime(report.enrichedAt, report.timeZone ?? APP_CONFIG.timeZone)}` : ''}
               {report.generator ? ` · ${report.generator}` : ''}
             </p>
+            {extras.length > 0 && (
+              <p className="jb-pdf-colophon-meta jb-pdf-cover-links">
+                {extras.map((l, i) => (
+                  <span key={l.href}>
+                    {i > 0 ? ' · ' : ''}
+                    <a href={l.href}>{l.label}</a>
+                  </span>
+                ))}
+              </p>
+            )}
             {report.sources && <p className="jb-pdf-colophon-meta">Sources: {report.sources}</p>}
             {report.warnings && report.warnings.length > 0 && (
               <p className="jb-pdf-warn">
@@ -116,10 +140,14 @@ export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: Rep
               <span className="jb-pdf-dot" style={{ background: toneColor(t.tone) }} />
               {t.title}
             </h2>
-            {t.summary && <p className="jb-pdf-part-summary">{t.summary}</p>}
+            {t.summary && (
+              <p className="jb-pdf-part-summary">
+                <ReportHtml html={t.summary} report={report} inline />
+              </p>
+            )}
             <div className="jb-pdf-blocks">
               {blocks.map((b, i) => (
-                <PrintBlock key={`${t.id}:${i}`} block={b} />
+                <PrintBlock key={`${t.id}:${i}`} block={b} report={report} />
               ))}
             </div>
           </section>
@@ -217,7 +245,7 @@ function sentenceCase(s: string): string {
 /** Blocks that stay narrow enough to sit two-up; everything else takes the full measure. */
 const NARROW = new Set<ReportBlock['kind']>(['kv', 'list', 'links'])
 
-function PrintBlock({ block }: { block: ReportBlock }) {
+function PrintBlock({ block, report }: { block: ReportBlock; report: PrReport }) {
   const c = toneColor(block.tone)
   const wide = !NARROW.has(block.kind)
   return (
@@ -230,15 +258,15 @@ function PrintBlock({ block }: { block: ReportBlock }) {
       {/* block.note is dropped on paper. It explains how to read the block ("rows are in
           verdict-rule order…") — scaffolding for someone exploring the app, and just noise in a
           document handed to a reader who wants the answer. The screen view still shows it. */}
-      <BlockBody block={block} />
+      <BlockBody block={block} report={report} />
     </section>
   )
 }
 
-function BlockBody({ block }: { block: ReportBlock }) {
+function BlockBody({ block, report }: { block: ReportBlock; report: PrReport }) {
   switch (block.kind) {
     case 'callout':
-      return <SafeHtml html={block.body} className="jb-pdf-prose" />
+      return <ReportHtml html={block.body} report={report} className="jb-pdf-prose" />
 
     case 'stats':
       return (
@@ -264,7 +292,7 @@ function BlockBody({ block }: { block: ReportBlock }) {
               <tr key={i} style={r.tone && r.tone !== 'neutral' ? { boxShadow: `inset 2px 0 0 ${toneColor(r.tone)}` } : undefined}>
                 {r.cells.map((cell, j) => (
                   <td key={j} className={j === 0 ? 'jb-pdf-td-lead' : undefined}>
-                    <SafeHtml html={cell} />
+                    <ReportHtml html={cell} report={report} inline />
                   </td>
                 ))}
               </tr>
@@ -276,20 +304,37 @@ function BlockBody({ block }: { block: ReportBlock }) {
     case 'cards':
       return (
         <div className="jb-pdf-cards">
-          {block.items.map((card, i) => (
-            <div key={i} className="jb-pdf-card" style={{ borderLeftColor: toneColor(card.badgeTone) }}>
-              <div className="jb-pdf-card-head">
-                <span className="jb-pdf-card-title">{card.title}</span>
-                {card.badge && (
-                  <span className="jb-pdf-card-badge" style={{ color: toneColor(card.badgeTone) }}>
-                    {card.badge}
+          {block.items.map((card, i) => {
+            const inner = (
+              <>
+                <div className="jb-pdf-card-head">
+                  <span className="jb-pdf-card-title">
+                    <ReportHtml html={card.title} report={report} inline />
                   </span>
+                  {card.badge && (
+                    <span className="jb-pdf-card-badge" style={{ color: toneColor(card.badgeTone) }}>
+                      {card.badge}
+                    </span>
+                  )}
+                </div>
+                <ReportHtml html={card.body} report={report} className="jb-pdf-prose" />
+                {card.detail && (
+                  <p className="jb-pdf-card-detail">
+                    <ReportHtml html={card.detail} report={report} inline />
+                  </p>
                 )}
+              </>
+            )
+            return card.href ? (
+              <a key={i} href={card.href} className="jb-pdf-card" style={{ borderLeftColor: toneColor(card.badgeTone) }}>
+                {inner}
+              </a>
+            ) : (
+              <div key={i} className="jb-pdf-card" style={{ borderLeftColor: toneColor(card.badgeTone) }}>
+                {inner}
               </div>
-              <SafeHtml html={card.body} className="jb-pdf-prose" />
-              {card.detail && <p className="jb-pdf-card-detail">{card.detail}</p>}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )
 
@@ -299,7 +344,7 @@ function BlockBody({ block }: { block: ReportBlock }) {
           {block.items.map((it, i) => (
             <li key={i}>
               <span className="jb-pdf-dot jb-pdf-dot-sm" style={{ background: toneColor(it.tone) }} />
-              {it.text}
+              <ReportHtml html={it.text} report={report} inline />
             </li>
           ))}
         </ul>
@@ -312,8 +357,15 @@ function BlockBody({ block }: { block: ReportBlock }) {
             <li key={i}>
               <span className="jb-pdf-when">{e.when ?? '—'}</span>
               <span>
-                <b>{e.label}</b>
-                {e.detail ? ` — ${e.detail}` : ''}
+                <b>
+                  <ReportHtml html={e.label} report={report} inline />
+                </b>
+                {e.detail ? (
+                  <>
+                    {' '}
+                    — <ReportHtml html={e.detail} report={report} inline />
+                  </>
+                ) : null}
               </span>
             </li>
           ))}
@@ -325,8 +377,10 @@ function BlockBody({ block }: { block: ReportBlock }) {
         <ul className="jb-pdf-links">
           {block.items.map((l, i) => (
             <li key={i}>
-              <b>{l.label}</b>
-              <span className="jb-pdf-url">{l.href}</span>
+              <a href={l.href}>
+                <b>{l.label}</b>
+                <span className="jb-pdf-url">{l.href}</span>
+              </a>
             </li>
           ))}
         </ul>
@@ -338,7 +392,13 @@ function BlockBody({ block }: { block: ReportBlock }) {
           {block.items.map((kv, i) => (
             <div key={i}>
               <dt>{kv.label}</dt>
-              <dd style={kv.tone && kv.tone !== 'neutral' ? { color: toneColor(kv.tone) } : undefined}>{kv.value}</dd>
+              <dd style={kv.tone && kv.tone !== 'neutral' ? { color: toneColor(kv.tone) } : undefined}>
+                {kv.href ? (
+                  <a href={kv.href}>{kv.value}</a>
+                ) : (
+                  <ReportHtml html={fmtReportMetadata(kv.label, kv.value, report.timeZone ?? APP_CONFIG.timeZone)} report={report} inline />
+                )}
+              </dd>
             </div>
           ))}
         </dl>

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { AI_LEVELS, FEATURES, type FeatureKey, type Settings } from '../lib/settings'
-import { getAiModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus } from '../lib/runner'
+import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice } from '../lib/runner'
 import fallbackCatalog from '../../ai-intern/models.json'
 import { hexToRgba } from '../lib/format'
 import { CalendarIcon, DocIcon, DownloadIcon, MoonIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from './Icons'
@@ -32,155 +32,9 @@ function withAppearance(s: Settings, key: AppearanceKey): Settings {
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const hourLabel = (h: number) => `${String(h).padStart(2, '0')}:00`
 
-export function SettingsPanel({
-  open,
-  settings,
-  onChange,
-  onClose,
-  aiLevelSynced,
-  aiStatus,
-}: {
-  open: boolean
-  settings: Settings
-  onChange: (next: Settings) => void
-  onClose: () => void
-  /** false when the AI level is local-only because there is no server to tell. */
-  aiLevelSynced: boolean
-  aiStatus?: AiInternStatus | null
-}) {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.stopImmediatePropagation()
-      e.preventDefault()
-      onClose()
-    }
-    document.addEventListener('keydown', onKey, true)
-    return () => document.removeEventListener('keydown', onKey, true)
-  }, [open, onClose])
-
-  const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value })
-  const setFeature = (key: keyof Settings['features'], value: boolean) =>
-    onChange({ ...settings, features: { ...settings.features, [key]: value } })
-
+function Section({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-black/60 p-3 backdrop-blur-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          role="dialog"
-          aria-modal
-          aria-label="Board settings"
-        >
-          <motion.section
-            className="flex max-h-[calc(100dvh-24px)] w-full max-w-[960px] flex-col overflow-visible rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
-            initial={{ y: 20, scale: 0.98 }}
-            animate={{ y: 0, scale: 1 }}
-            exit={{ y: 12, scale: 0.98 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] px-4 py-2.5">
-              <h2 className="flex-1 text-[15px] font-extrabold text-[var(--ink)]">Settings</h2>
-              <button
-                type="button"
-                onClick={onClose}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:border-[var(--muted)] hover:text-[var(--ink)]"
-                aria-label="Close settings"
-              >
-                ✕
-              </button>
-            </header>
-
-            <div className="grid min-h-0 grid-cols-1 gap-x-6 gap-y-3 px-4 py-3 md:grid-cols-2">
-              <div className="flex flex-col gap-3">
-                <Section title="Appearance">
-                  <div className="flex flex-wrap gap-1.5">
-                    {APPEARANCE.map((m) => (
-                      <Choice
-                        key={m.key}
-                        active={appearanceKey(settings) === m.key}
-                        label={m.label}
-                        hint={m.hint}
-                        icon={m.key === 'light' ? <SunIcon size={13} /> : m.key === 'dark' ? <MoonIcon size={13} /> : undefined}
-                        onClick={() => onChange(withAppearance(settings, m.key))}
-                      />
-                    ))}
-                  </div>
-                  {/* Fixed slot so Light / Time based never shove Features down. */}
-                  <div className="relative mt-1.5 h-8">
-                    <div
-                      className={`absolute inset-0 flex items-center gap-2 text-[12px] text-[var(--ink-soft)] ${settings.themeMode === 'schedule' ? '' : 'invisible'}`}
-                      aria-hidden={settings.themeMode !== 'schedule'}
-                    >
-                      <span>Light from</span>
-                      <HourSelect value={settings.dayStart} onChange={(v) => set('dayStart', v)} disabled={settings.themeMode !== 'schedule'} />
-                      <span>to</span>
-                      <HourSelect value={settings.dayEnd} onChange={(v) => set('dayEnd', v)} disabled={settings.themeMode !== 'schedule'} />
-                      <span className="text-[var(--muted)]">· dark outside those hours</span>
-                    </div>
-                    <p
-                      className={`absolute inset-0 flex items-center text-[12px] text-[var(--muted)] ${settings.themeMode === 'schedule' ? 'invisible' : ''}`}
-                    >
-                      {APPEARANCE.find((m) => m.key === appearanceKey(settings))?.hint}
-                    </p>
-                  </div>
-                </Section>
-
-                <Section title="Features">
-                  <div className="grid grid-cols-2 gap-2">
-                    {FEATURES.map((f) => (
-                      <FeatureCard
-                        key={f.key}
-                        feature={f}
-                        on={settings.features[f.key]}
-                        onToggle={(v) => setFeature(f.key, v)}
-                      />
-                    ))}
-                  </div>
-                </Section>
-              </div>
-
-              <Section title="AI usage">
-                <div className="grid grid-cols-2 gap-1.5">
-                  {AI_LEVELS.map((l, i) => (
-                    <AiLevelCard
-                      key={l.key}
-                      level={l}
-                      active={settings.aiLevel === l.key}
-                      alignEnd={i % 2 === 1}
-                      dropUp={i >= 2}
-                      onClick={() => set('aiLevel', l.key)}
-                    />
-                  ))}
-                </div>
-                <p className="mt-1.5 truncate text-[11px] text-[var(--muted)]" title={aiLevelSynced
-                    ? 'Applies to the next Regenerate / bulk / auto report. None writes the deterministic base only.'
-                    : 'Saved on this device only — without the local server the intern cannot be told, so it keeps its last saved level.'}>
-                  {aiLevelSynced
-                    ? 'Next Regenerate / bulk / auto. Hover a card for pros and cons.'
-                    : 'Saved on this device only — intern is not reachable, so it keeps its last level.'}
-                </p>
-                {aiLevelSynced && (
-                  <AiInternControls settings={settings} onChange={onChange} aiStatus={aiStatus} />
-                )}
-              </Section>
-            </div>
-          </motion.section>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="min-w-0">
+    <section className={`min-w-0 ${className}`}>
       <h3 className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-[var(--muted)]">{title}</h3>
       {children}
     </section>
@@ -288,15 +142,193 @@ function AiLevelCard({
   )
 }
 
+export function SettingsPanel({
+  open,
+  settings: saved,
+  onChange: commit,
+  onClose,
+  aiLevelSynced,
+  aiStatus,
+}: {
+  open: boolean
+  settings: Settings
+  onChange: (next: Settings) => void
+  onClose: () => void
+  /** false when the AI level is local-only because there is no server to tell. */
+  aiLevelSynced: boolean
+  aiStatus?: AiInternStatus | null
+}) {
+  const [draft, setDraft] = useState(saved)
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (open && !wasOpen.current) setDraft(saved)
+    wasOpen.current = open
+  }, [open, saved])
+
+  const settings = draft
+  const onChange = setDraft
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopImmediatePropagation()
+      e.preventDefault()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [open, onClose])
+
+  const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value })
+  const setFeature = (key: keyof Settings['features'], value: boolean) =>
+    onChange({ ...settings, features: { ...settings.features, [key]: value } })
+  const save = () => {
+    commit(draft)
+    onClose()
+  }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-black/60 p-3 backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+          role="dialog"
+          aria-modal
+          aria-label="Board settings"
+        >
+          <motion.section
+            className="flex max-h-[calc(100dvh-24px)] w-full max-w-[960px] flex-col overflow-visible rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
+            initial={{ y: 20, scale: 0.98 }}
+            animate={{ y: 0, scale: 1 }}
+            exit={{ y: 12, scale: 0.98 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="flex shrink-0 items-center gap-2 border-b border-[var(--line)] px-4 py-2.5">
+              <h2 className="flex-1 text-[15px] font-extrabold text-[var(--ink)]">Settings</h2>
+              <button
+                type="button"
+                onClick={save}
+                className="rounded-lg px-3 py-1.5 text-[12px] font-bold text-white"
+                style={{ background: AI }}
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:border-[var(--muted)] hover:text-[var(--ink)]"
+                aria-label="Close settings without saving"
+                title="Close without saving"
+              >
+                ✕
+              </button>
+            </header>
+
+            <div className="grid min-h-0 grid-cols-1 gap-x-6 gap-y-3 px-4 py-3 md:grid-cols-2">
+              <div className="flex min-h-0 flex-col gap-3">
+                <Section title="Appearance">
+                  <div className="flex flex-wrap gap-1.5">
+                    {APPEARANCE.map((m) => (
+                      <Choice
+                        key={m.key}
+                        active={appearanceKey(settings) === m.key}
+                        label={m.label}
+                        hint={m.hint}
+                        icon={m.key === 'light' ? <SunIcon size={13} /> : m.key === 'dark' ? <MoonIcon size={13} /> : undefined}
+                        onClick={() => onChange(withAppearance(settings, m.key))}
+                      />
+                    ))}
+                  </div>
+                  {/* Fixed slot so Light / Time based never shove Features down. */}
+                  <div className="relative mt-1.5 h-8">
+                    <div
+                      className={`absolute inset-0 flex items-center gap-2 text-[12px] text-[var(--ink-soft)] ${settings.themeMode === 'schedule' ? '' : 'invisible'}`}
+                      aria-hidden={settings.themeMode !== 'schedule'}
+                    >
+                      <span>Light from</span>
+                      <HourSelect value={settings.dayStart} onChange={(v) => set('dayStart', v)} disabled={settings.themeMode !== 'schedule'} />
+                      <span>to</span>
+                      <HourSelect value={settings.dayEnd} onChange={(v) => set('dayEnd', v)} disabled={settings.themeMode !== 'schedule'} />
+                      <span className="text-[var(--muted)]">· dark outside those hours</span>
+                    </div>
+                    <p
+                      className={`absolute inset-0 flex items-center text-[12px] text-[var(--muted)] ${settings.themeMode === 'schedule' ? 'invisible' : ''}`}
+                    >
+                      {APPEARANCE.find((m) => m.key === appearanceKey(settings))?.hint}
+                    </p>
+                  </div>
+                </Section>
+
+                <Section title="Features" className="flex min-h-0 flex-1 flex-col">
+                  <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-2">
+                    {FEATURES.map((f) => (
+                      <FeatureCard
+                        key={f.key}
+                        feature={f}
+                        on={settings.features[f.key]}
+                        onToggle={(v) => setFeature(f.key, v)}
+                      />
+                    ))}
+                  </div>
+                </Section>
+              </div>
+
+              <div className="flex min-h-0 flex-col gap-3">
+                <Section title="AI usage">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {AI_LEVELS.map((l, i) => (
+                      <AiLevelCard
+                        key={l.key}
+                        level={l}
+                        active={settings.aiLevel === l.key}
+                        alignEnd={i % 2 === 1}
+                        dropUp={i >= 2}
+                        onClick={() => set('aiLevel', l.key)}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-1.5 truncate text-[11px] text-[var(--muted)]" title={aiLevelSynced
+                      ? 'Applies to the next Regenerate / bulk / auto report. None writes the deterministic base only.'
+                      : 'Saved on this device only — without the local server the intern cannot be told, so it keeps its last saved level.'}>
+                    {aiLevelSynced
+                      ? 'Next Regenerate / bulk / auto. Hover a card for pros and cons.'
+                      : 'Saved on this device only — intern is not reachable, so it keeps its last level.'}
+                  </p>
+                </Section>
+
+                <Section title="AI intern">
+                  {aiLevelSynced ? (
+                    <AiInternControls settings={settings} onChange={onChange} aiStatus={aiStatus} />
+                  ) : (
+                    <p className="h-8 text-[11px] leading-snug text-[var(--muted)]">
+                      Local / Cloud and the model picker need JIRA-AI-Intern running.
+                    </p>
+                  )}
+                </Section>
+              </div>
+            </div>
+          </motion.section>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 /** Each feature carries its own accent so an enabled board reads as a set of live controls
  *  rather than six identical purple boxes. Off = no accent at all, deliberately inert. */
 const FEATURE_STYLE: Record<FeatureKey, { color: string; icon: (c: string) => React.ReactNode }> = {
-  prReports: { color: '#a855f7', icon: (c) => <DocIcon size={15} color={c} /> },
-  nextSprint: { color: '#2684ff', icon: (c) => <CalendarIcon size={15} color={c} /> },
-  completedArchive: { color: '#b45309', icon: () => <TrophyIcon size={15} /> },
-  animations: { color: '#ec4899', icon: (c) => <SparkleIcon size={15} color={c} /> },
-  shortcuts: { color: '#14b8a6', icon: (c) => <SearchIcon size={15} color={c} /> },
-  autoRefresh: { color: '#10b981', icon: (c) => <RefreshIcon size={15} color={c} /> },
+  prReports: { color: '#a855f7', icon: (c) => <DocIcon size={13} color={c} /> },
+  nextSprint: { color: '#2684ff', icon: (c) => <CalendarIcon size={13} color={c} /> },
+  completedArchive: { color: '#b45309', icon: () => <TrophyIcon size={13} /> },
+  animations: { color: '#ec4899', icon: (c) => <SparkleIcon size={13} color={c} /> },
+  shortcuts: { color: '#14b8a6', icon: (c) => <SearchIcon size={13} color={c} /> },
+  autoRefresh: { color: '#10b981', icon: (c) => <RefreshIcon size={13} color={c} /> },
 }
 
 function FeatureCard({
@@ -318,7 +350,7 @@ function FeatureCard({
       aria-checked={on}
       aria-label={`${feature.label}, ${on ? 'on' : 'off'}. ${feature.hint}`}
       onClick={() => onToggle(!on)}
-      className="flex w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-all"
+      className="flex h-full min-h-0 w-full items-start gap-2 rounded-lg border px-3 py-2.5 text-left transition-all"
       style={{
         borderColor: on ? hexToRgba(color, 0.5) : 'var(--line)',
         background: on ? hexToRgba(color, 0.1) : 'var(--surface-2)',
@@ -326,14 +358,14 @@ function FeatureCard({
       }}
     >
       <span
-        className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md"
+        className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-md"
         style={{ background: hexToRgba(on ? color : '#94a3b8', 0.16), filter: on ? undefined : 'grayscale(1)' }}
       >
         {icon(tint)}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
-          <span className="min-w-0 flex-1 truncate text-[12px] font-bold leading-tight" style={{ color: on ? color : 'var(--muted)' }}>
+          <span className="min-w-0 flex-1 truncate text-[11px] font-bold leading-tight" style={{ color: on ? color : 'var(--muted)' }}>
             {feature.label}
           </span>
           <span
@@ -341,7 +373,7 @@ function FeatureCard({
             style={{ background: on ? color : 'transparent', border: on ? 'none' : '1.5px solid var(--muted)' }}
           />
         </span>
-        <span className="mt-0.5 block text-[11px] leading-snug" style={{ color: on ? 'var(--ink-soft)' : 'var(--muted)' }}>
+        <span className="mt-0.5 block text-[10px] leading-snug" style={{ color: on ? 'var(--ink-soft)' : 'var(--muted)' }}>
           {feature.hint}
         </span>
       </span>
@@ -368,7 +400,13 @@ function HourSelect({ value, onChange, disabled }: { value: number; onChange: (v
 
 function internLine(ai: AiInternStatus | null | undefined): string {
   if (!ai || ai.down) return 'AI intern is down — reports stay deterministic until JIRA-AI-Intern is running'
-  if (ai.state === 'pulling') return `Downloading ${ai.pulling || ai.current?.model || 'model'}…`
+  if (ai.state === 'pulling') {
+    const name = ai.pulling || ai.current?.model || 'model'
+    const pct = ai.pullProgress?.percent
+    return typeof pct === 'number' && pct > 0
+      ? `Downloading ${name} · ${pct}%`
+      : `Downloading ${name}…`
+  }
   if (ai.state === 'working' && ai.current?.type === 'enrich-report') return `Enriching ${ai.current.key}`
   if (ai.state === 'working' && ai.current?.type === 'summarize-active') return 'Writing ticket briefs…'
   if (ai.state === 'working') return `Working · ${ai.current?.type || 'job'}`
@@ -415,12 +453,16 @@ function AiInternControls({
     setPulling(aiStatus?.pulling ?? (aiStatus?.state === 'pulling' ? aiStatus.current?.model ?? null : null))
   }, [aiStatus])
 
+  useEffect(() => {
+    if (aiStatus?.lastError) console.error('[jira-ai]', aiStatus.lastError)
+  }, [aiStatus?.lastError])
+
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value })
 
   return (
-    <div className="mt-2 flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <p
-        className="truncate rounded-lg border px-2.5 py-1 text-[11px] leading-snug"
+        className="h-8 truncate rounded-lg border px-2.5 py-1 text-[11px] leading-6"
         title={internLine(aiStatus)}
         style={{
           borderColor: aiStatus?.down ? 'rgba(220,38,38,0.45)' : hexToRgba(AI, 0.35),
@@ -431,7 +473,7 @@ function AiInternControls({
         {internLine(aiStatus)}
       </p>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <div className="flex h-8 flex-wrap items-center gap-x-3">
         <Choice
           active={settings.aiBackend === 'local'}
           label="Local AI"
@@ -441,43 +483,178 @@ function AiInternControls({
         <Choice
           active={settings.aiBackend === 'cloud'}
           label="Cloud AI"
-          hint="OpenAI / Anthropic / compatible API. Faster; burns tokens."
+          hint="Claude, Cursor, or Gemini. Keys stay in ~/.cursor/mcp-secrets.env."
           onClick={() => set('aiBackend', 'cloud')}
         />
-        {settings.aiBackend === 'local' && (
-          <label
-            className="flex items-center gap-1.5 text-[12px] text-[var(--ink-soft)]"
-            title="Talk to Ollama.app on this Mac (Metal) instead of the Linux Docker VM"
-          >
-            <input
-              type="checkbox"
-              checked={settings.aiUseHostOllama}
-              onChange={(e) => set('aiUseHostOllama', e.target.checked)}
-            />
-            Host Ollama
-          </label>
-        )}
+        <label
+          className={`flex items-center gap-1.5 text-[12px] text-[var(--ink-soft)] ${settings.aiBackend === 'local' ? '' : 'invisible'}`}
+          title="Talk to Ollama.app on this Mac (Metal) instead of the Linux Docker VM"
+          aria-hidden={settings.aiBackend !== 'local'}
+        >
+          <input
+            type="checkbox"
+            checked={settings.aiUseHostOllama}
+            onChange={(e) => set('aiUseHostOllama', e.target.checked)}
+            disabled={settings.aiBackend !== 'local'}
+            tabIndex={settings.aiBackend === 'local' ? 0 : -1}
+          />
+          Host Ollama
+        </label>
       </div>
 
-      {settings.aiBackend === 'cloud' ? (
-        <p className="text-[11px] leading-snug text-[var(--muted)]">
-          <code className="font-mono">models.report</code> in <code className="font-mono">~/.ai/config.json</code> plus
-          API keys in <code className="font-mono">~/.cursor/mcp-secrets.env</code>.
-        </p>
-      ) : (
-        <LocalModelPicker
-          catalog={catalog}
-          installed={installed}
-          pulling={pulling}
-          settings={settings}
-          onSelect={(id) => set('aiLocalModel', id)}
+      <div className="min-h-[9.75rem]">
+        {settings.aiBackend === 'cloud' ? (
+          <CloudModelPicker settings={settings} onChange={onChange} />
+        ) : (
+          <LocalModelPicker
+            catalog={catalog}
+            installed={installed}
+            pulling={pulling}
+            pullProgress={aiStatus?.state === 'pulling' ? aiStatus.pullProgress ?? null : null}
+            settings={settings}
+            onSelect={(id) => set('aiLocalModel', id)}
           onDownload={async (m) => {
             setPulling(m.id)
             const ok = await pullAiModel(m.pull, settings.aiUseHostOllama || m.fits === 'host')
-            if (!ok) setPulling(null)
+            if (!ok) {
+              console.error('[jira-ai] pull enqueue failed', m.pull)
+              setPulling(null)
+            }
           }}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+const CLOUD_EFFORTS: { id: Settings['aiCloudEffort']; label: string }[] = [
+  { id: 'low', label: 'Low' },
+  { id: 'medium', label: 'Medium' },
+]
+
+function CloudModelPicker({ settings, onChange }: { settings: Settings; onChange: (s: Settings) => void }) {
+  const [claude, setClaude] = useState<CloudModelChoice[]>([])
+  const [cursor, setCursor] = useState<CloudModelChoice[]>([])
+  const [gemini, setGemini] = useState<CloudModelChoice[]>([])
+  const [claudeErr, setClaudeErr] = useState<string | null>(null)
+  const [cursorErr, setCursorErr] = useState<string | null>(null)
+  const [geminiErr, setGeminiErr] = useState<string | null>(null)
+  const [claudeKey, setClaudeKey] = useState(false)
+  const [cursorKey, setCursorKey] = useState(false)
+  const [geminiKey, setGeminiKey] = useState(false)
+  const [loadedFor, setLoadedFor] = useState<'claude' | 'cursor' | 'gemini' | null>(null)
+
+  const provider: 'claude' | 'cursor' | 'gemini' =
+    settings.aiCloudProvider === 'claude' || settings.aiCloudProvider === 'gemini' ? settings.aiCloudProvider : 'cursor'
+
+  useEffect(() => {
+    const which = provider
+    let cancelled = false
+    setLoadedFor(null)
+    void getCloudModels().then((res) => {
+      if (cancelled || !res) return
+      setClaude(res.claude?.models ?? [])
+      setCursor(res.cursor?.models ?? [])
+      setGemini(res.gemini?.models ?? [])
+      setClaudeErr(res.claude?.error ?? null)
+      setCursorErr(res.cursor?.error ?? null)
+      setGeminiErr(res.gemini?.error ?? res.error ?? null)
+      setClaudeKey(!!res.claude?.configured)
+      setCursorKey(!!res.cursor?.configured)
+      setGeminiKey(!!res.gemini?.configured)
+      setLoadedFor(which)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [provider])
+
+  const models = provider === 'cursor' ? cursor : provider === 'gemini' ? gemini : claude
+  const err = provider === 'cursor' ? cursorErr : provider === 'gemini' ? geminiErr : claudeErr
+  const hasKey = provider === 'cursor' ? cursorKey : provider === 'gemini' ? geminiKey : claudeKey
+  const selected = models.find((m) => m.id === settings.aiCloudModel) ?? null
+  const efforts = selected?.efforts ?? []
+
+  useEffect(() => {
+  if (loadedFor !== provider || !models.length) return
+  if (settings.aiCloudModel) return
+    const prefer =
+      provider === 'claude' ? models.find((m) => /haiku/i.test(m.id)) || models[0] : models[0]
+    onChange({ ...settings, aiCloudModel: prefer.id })
+  }, [loadedFor, models, provider, settings, onChange])
+
+  const hint = !hasKey
+    ? provider === 'cursor'
+      ? 'CURSOR_API_KEY is read from ~/.cursor/mcp-secrets.env (Cursor Dashboard → API Keys).'
+      : provider === 'gemini'
+        ? 'Add GEMINI_API_KEY to ~/.cursor/mcp-secrets.env (aistudio.google.com → API keys).'
+        : 'Add ANTHROPIC_API_KEY to ~/.cursor/mcp-secrets.env (console.anthropic.com → API keys).'
+    : err
+      ? err
+      : provider === 'cursor'
+        ? 'A few Gemini Flash models, GPT-4o, Grok, and Chinese models. Low is the default.'
+        : provider === 'gemini'
+          ? 'Gemini Flash models from your Google API key. Pro and Ultra are left off.'
+          : 'Haiku only. Opus and Sonnet are left off this list.'
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex h-8 items-center gap-1.5">
+        <Choice
+          active={provider === 'cursor'}
+          label="Cursor"
+          hint="Cursor Cloud Agents API"
+          onClick={() => onChange({ ...settings, aiCloudProvider: 'cursor', aiCloudModel: '' })}
         />
+        <Choice
+          active={provider === 'gemini'}
+          label="Gemini"
+          hint="Google Gemini API"
+          onClick={() => onChange({ ...settings, aiCloudProvider: 'gemini', aiCloudModel: '' })}
+        />
+        <Choice
+          active={provider === 'claude'}
+          label="Claude"
+          hint="Anthropic Messages API"
+          onClick={() => onChange({ ...settings, aiCloudProvider: 'claude', aiCloudModel: '' })}
+        />
+      </div>
+      <select
+        value={selected?.id ?? ''}
+        onChange={(e) => onChange({ ...settings, aiCloudModel: e.target.value })}
+        aria-label={provider === 'cursor' ? 'Cursor model' : provider === 'gemini' ? 'Gemini model' : 'Claude model'}
+        disabled={!models.length}
+        className="h-8 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--muted)] disabled:opacity-60"
+      >
+        {!models.length && (
+          <option value="">{loadedFor !== provider ? 'Loading models…' : hasKey ? 'No cheaper models on this key' : 'No key yet'}</option>
+        )}
+        {models.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.label === m.id ? m.label : `${m.label} · ${m.id}`}
+          </option>
+        ))}
+      </select>
+      {provider === 'cursor' && efforts.length > 0 ? (
+        <select
+          value={efforts.includes(settings.aiCloudEffort) ? settings.aiCloudEffort : efforts[0]}
+          onChange={(e) => onChange({ ...settings, aiCloudEffort: e.target.value as Settings['aiCloudEffort'] })}
+          aria-label="Cursor effort"
+          className="h-8 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--muted)]"
+        >
+          {CLOUD_EFFORTS.filter((e) => efforts.includes(e.id)).map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <div className="h-8" />
       )}
+      <p className="h-8 line-clamp-2 text-[10px] leading-4 text-[var(--muted)]" title={hint}>
+        {hint}
+      </p>
     </div>
   )
 }
@@ -486,6 +663,7 @@ function LocalModelPicker({
   catalog,
   installed,
   pulling,
+  pullProgress,
   settings,
   onSelect,
   onDownload,
@@ -493,6 +671,7 @@ function LocalModelPicker({
   catalog: AiCatalogModel[]
   installed: string[]
   pulling: string | null
+  pullProgress: AiPullProgress | null
   settings: Settings
   onSelect: (id: string) => void
   onDownload: (m: AiCatalogModel) => void
@@ -504,6 +683,13 @@ function LocalModelPicker({
   const selected = options.find((m) => m.id === settings.aiLocalModel) ?? options[0]
   const have = selected ? modelInstalled(installed, selected.id) : false
   const downloading = !!(pulling && selected && (pulling === selected.id || pulling === selected.pull))
+  const pct = Math.max(0, Math.min(100, Math.round(pullProgress?.percent ?? 0)))
+  const known = !!(pullProgress?.total && pullProgress.total > 0)
+  const barLabel = downloading
+    ? known
+      ? `${pct}% · ${pullProgress?.label || ''}`
+      : pullProgress?.status || pullProgress?.label || 'Starting download…'
+    : null
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -563,11 +749,44 @@ function LocalModelPicker({
           <QuestionIcon size={14} />
         </a>
       </div>
-      {selected?.why && (
-        <p className="truncate text-[11px] leading-snug text-[var(--muted)]" title={selected.why}>
-          {selected.why}
-        </p>
-      )}
+      <div className="relative h-8">
+        <div
+          className={`absolute inset-0 flex flex-col justify-center gap-0.5 ${downloading ? '' : 'invisible'}`}
+          aria-hidden={!downloading}
+        >
+          <div
+            className="h-1.5 w-full overflow-hidden rounded-full"
+            style={{ background: hexToRgba(AI, 0.18) }}
+            role={downloading ? 'progressbar' : undefined}
+            aria-valuemin={downloading ? 0 : undefined}
+            aria-valuemax={downloading ? 100 : undefined}
+            aria-valuenow={downloading && known ? pct : undefined}
+            aria-busy={downloading || undefined}
+            aria-label={downloading ? barLabel || 'Downloading model' : undefined}
+          >
+            {downloading && known && (
+              <div
+                className="h-full rounded-full transition-[width] duration-300 ease-out"
+                style={{ width: `${Math.max(4, pct)}%`, background: AI }}
+              />
+            )}
+            {downloading && !known && (
+              <div className="relative h-full w-full overflow-hidden">
+                <div className="ai-pull-indet absolute inset-y-0 w-1/3 rounded-full" style={{ background: AI }} />
+              </div>
+            )}
+          </div>
+          <p className="truncate text-[10.5px] leading-snug text-[var(--muted)]" title={barLabel || undefined}>
+            {barLabel || 'Starting download…'}
+          </p>
+        </div>
+      </div>
+      <p
+        className="h-8 overflow-hidden text-[11px] leading-4 line-clamp-2 text-[var(--muted)]"
+        title={selected?.why || undefined}
+      >
+        {selected?.why || '\u00a0'}
+      </p>
     </div>
   )
 }

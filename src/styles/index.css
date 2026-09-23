@@ -249,6 +249,14 @@ a {
   100% { background-position: 200% 0; }
 }
 
+@keyframes ai-pull-indet {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+.ai-pull-indet {
+  animation: ai-pull-indet 1.2s ease-in-out infinite;
+}
+
 /* ── Completed pill: metallic gold sheen (always-on "active" animation) ──
    Replaces the old box-shadow pulse. Reads as light travelling across
    polished gold: the base gradient slowly pans, a glossy highlight rakes
@@ -853,12 +861,35 @@ a {
     padding: 1mm 0;
     border-bottom: 1px solid #f0f2f6;
   }
+  .jb-pdf-links a {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
   .jb-pdf-url {
     display: block;
     font-family: var(--font-mono);
     font-size: 8px;
-    color: #6b7690;
+    color: #1a4fd0;
+    text-decoration: underline;
     word-break: break-all;
+  }
+  .jb-pdf a {
+    color: #1a4fd0;
+    text-decoration: underline;
+  }
+  a.jb-pdf-key,
+  a.jb-pdf-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+  a.jb-pdf-key {
+    color: #1a4fd0;
+  }
+  .jb-pdf-cover-links a {
+    color: #1a4fd0;
+    text-decoration: underline;
   }
 
   .jb-pdf-kv {

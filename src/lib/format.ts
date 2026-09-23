@@ -1,4 +1,5 @@
 import type { PrState, PullRequest, UpdateLogEntry } from '../types'
+import { APP_CONFIG } from './appConfig'
 import { mapStatusToColumn } from './columns'
 
 // ── Priority ────────────────────────────────────────────────────────────
@@ -213,16 +214,71 @@ function parseDate(v?: string | null): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
-export function fmtDate(v?: string | null): string {
+export function fmtDate(v?: string | null, timeZone?: string | null): string {
   const d = parseDate(v)
   if (!d) return v ?? '—'
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  const zone = timeZone ?? APP_CONFIG.timeZone
+  try {
+    return d.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      ...(zone ? { timeZone: zone } : {}),
+    })
+  } catch {
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  }
 }
 
-export function fmtDateTime(v?: string | null): string {
+export function fmtDateTime(v?: string | null, timeZone?: string | null): string {
   const d = parseDate(v)
   if (!d) return v ?? '—'
-  return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const zone = timeZone ?? APP_CONFIG.timeZone
+  try {
+    return d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(zone ? { timeZone: zone, timeZoneName: 'short' } : {}),
+    })
+  } catch {
+    return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+}
+
+/** Humanise the two ISO timestamps stored in the report's Run metadata block. */
+export function fmtReportMetadata(label: string, value: string, timeZone?: string | null): string {
+  if (label === 'Generated' && parseDate(value)) return fmtDateTime(value, timeZone)
+  if (label === 'AI enrichment') {
+    const match = /^run\s+(.+)$/.exec(value)
+    if (match && parseDate(match[1])) return `run ${fmtDateTime(match[1], timeZone)}`
+  }
+  return value
+}
+
+/** YYYY-MM-DD for N calendar days ago in the configured timezone. */
+export function dateInputDaysAgo(days: number, timeZone?: string | null): string {
+  const zone = timeZone ?? APP_CONFIG.timeZone
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone || undefined,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = Object.fromEntries(formatter.formatToParts(new Date()).map((p) => [p.type, p.value]))
+  const utc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day) - days)
+  return new Date(utc).toISOString().slice(0, 10)
+}
+
+export function currentYear(timeZone?: string | null): number {
+  const zone = timeZone ?? APP_CONFIG.timeZone
+  return Number(
+    new Intl.DateTimeFormat('en-US', { timeZone: zone || undefined, year: 'numeric' })
+      .formatToParts(new Date())
+      .find((p) => p.type === 'year')?.value ?? new Date().getFullYear(),
+  )
 }
 
 /** "3d ago", "2h ago", "just now". `now` is injected so it stays deterministic per render. */
@@ -245,7 +301,8 @@ export function relTime(v?: string | null, now: number = Date.now()): string {
 
 export function yearOf(v?: string | null): string {
   const d = parseDate(v)
-  return d ? String(d.getFullYear()) : 'Undated'
+  if (!d) return 'Undated'
+  return new Intl.DateTimeFormat('en-US', { timeZone: APP_CONFIG.timeZone || undefined, year: 'numeric' }).format(d)
 }
 
 /**
@@ -260,7 +317,7 @@ export function freshness(
 ): { label: string; color: string; level: 'fresh' | 'aging' | 'stale' | 'unknown'; full: string; stale: boolean; ageHours: number } {
   const d = parseDate(v)
   if (!d) return { label: 'no run yet', color: '#94a3b8', level: 'unknown', full: '—', stale: false, ageHours: 0 }
-  const full = d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const full = fmtDateTime(v)
   const h = (now - d.getTime()) / 3_600_000
   if (h < 3) return { label: 'fresh', color: '#22c55e', level: 'fresh', full, stale: false, ageHours: h }
   const ago = h < 48 ? `fetched ${Math.floor(h)}h ago` : `fetched ${Math.round(h / 24)}d ago`

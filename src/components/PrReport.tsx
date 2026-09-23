@@ -10,11 +10,13 @@ import type {
   ReportTone,
 } from '../lib/reportTypes'
 import { toneColor, worstTone } from '../lib/reportTypes'
-import { fmtDateTime, hexToRgba } from '../lib/format'
-import { SafeHtml } from './ui'
+import { fmtDateTime, fmtReportMetadata, hexToRgba } from '../lib/format'
+import { APP_CONFIG } from '../lib/appConfig'
 import { PrinterIcon, RefreshIcon, SparkleIcon } from './Icons'
 import { PrReportPrintDoc } from './PrReportPrint'
+import { ReportHtml } from './ReportHtml'
 import type { AiInternStatus } from '../lib/runner'
+import { hrefForKey, shareableLinks } from '../lib/reportLinks'
 
 /**
  * PR Readiness Report overlay — renders a report GENERICALLY from its block kinds, so the
@@ -92,6 +94,8 @@ export function PrReportOverlay({
   const blockHalfWidth = useMemo(() => halfWidthFlags(blocks), [blocks])
   const v = report?.verdict
   const vc = toneColor(v?.tone)
+  const extras = report ? shareableLinks(report) : []
+  const ticketHref = report ? hrefForKey(report, report.key) : null
 
   // Portalled to <body> so print can hide its siblings with display:none. Hiding them by
   // visibility instead would keep the whole board's height in the layout, and the document would
@@ -130,15 +134,46 @@ export function PrReportOverlay({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[var(--muted)]">
                   <span>PR readiness report</span>
-                  <span className="font-mono normal-case tracking-normal text-[var(--ink-soft)]">{report.key}</span>
+                  {ticketHref ? (
+                    <a
+                      href={ticketHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono normal-case tracking-normal text-[var(--link)] hover:underline"
+                    >
+                      {report.key}
+                    </a>
+                  ) : (
+                    <span className="font-mono normal-case tracking-normal text-[var(--ink-soft)]">{report.key}</span>
+                  )}
                   <ProvenanceChip provenance={report.enriched ? 'ai' : 'derived'} big />
                 </div>
                 <h2 className="mt-1 text-[17px] font-extrabold leading-snug text-[var(--ink)]">{report.title}</h2>
                 {v && (
                   <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--ink-soft)]">
-                    {v.headline}
-                    {v.summary ? <span className="text-[var(--muted)]"> {v.summary}</span> : null}
+                    <ReportHtml html={v.headline} report={report} inline />
+                    {v.summary ? (
+                      <span className="text-[var(--muted)]">
+                        {' '}
+                        <ReportHtml html={v.summary} report={report} inline />
+                      </span>
+                    ) : null}
                   </p>
+                )}
+                {extras.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {extras.map((l) => (
+                      <a
+                        key={l.href}
+                        href={l.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full border border-[var(--line)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--link)] hover:border-[var(--muted)] hover:underline"
+                      >
+                        {l.label} ↗
+                      </a>
+                    ))}
+                  </div>
                 )}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-2">
@@ -235,11 +270,15 @@ export function PrReportOverlay({
                 card grids, stats, callouts) stays full-width so no block is ever left stranded
                 next to blank space. */}
             <div className="px-5 py-5 lg:px-8" role="tabpanel">
-              {active?.summary && <p className="mb-3 text-[13px] text-[var(--ink-soft)]">{active.summary}</p>}
+              {active?.summary && (
+                <p className="mb-3 text-[13px] text-[var(--ink-soft)]">
+                  <ReportHtml html={active.summary} report={report} inline />
+                </p>
+              )}
               <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
                 {blocks.map((b, i) => (
                   <div key={`${active?.id}:${i}`} className={blockHalfWidth[i] ? '' : 'lg:col-span-2'}>
-                    <Block block={b} />
+                    <Block block={b} report={report} />
                   </div>
                 ))}
               </div>
@@ -248,8 +287,8 @@ export function PrReportOverlay({
             {/* Footer */}
             <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--line)] px-5 py-3 text-[11px] text-[var(--muted)] lg:px-8">
               <span>
-                Generated {fmtDateTime(report.generatedAt)}
-                {report.enriched && report.enrichedAt ? ` · AI-enriched ${fmtDateTime(report.enrichedAt)}` : ' · deterministic only'}
+                Generated {fmtDateTime(report.generatedAt, report.timeZone ?? APP_CONFIG.timeZone)}
+                {report.enriched && report.enrichedAt ? ` · AI-enriched ${fmtDateTime(report.enrichedAt, report.timeZone ?? APP_CONFIG.timeZone)}` : ' · deterministic only'}
                 {report.generator ? ` · ${report.generator}` : ''}
               </span>
               {internStatus && (
@@ -418,7 +457,7 @@ function BlockShell({ block, children }: { block: ReportBlock; children: ReactNo
 
 const toneText = (t?: ReportTone | null) => (t && t !== 'neutral' ? toneColor(t) : 'var(--ink)')
 
-function Block({ block }: { block: ReportBlock }) {
+function Block({ block, report }: { block: ReportBlock; report: PrReport }) {
   switch (block.kind) {
     case 'callout': {
       const c = toneColor(block.tone)
@@ -426,7 +465,7 @@ function Block({ block }: { block: ReportBlock }) {
       return (
         <BlockShell block={block}>
           <div style={tinted ? { background: hexToRgba(c, 0.05) } : undefined}>
-            <SafeHtml html={block.body} className="px-3.5 py-3 text-[13.5px] leading-relaxed text-[var(--ink-soft)]" />
+            <ReportHtml html={block.body} report={report} className="px-3.5 py-3 text-[13.5px] leading-relaxed text-[var(--ink-soft)]" />
           </div>
         </BlockShell>
       )
@@ -462,7 +501,7 @@ function Block({ block }: { block: ReportBlock }) {
                     <tr key={i} className="align-top" style={{ background: r.tone && r.tone !== 'neutral' ? hexToRgba(c, 0.06) : undefined, boxShadow: `inset 3px 0 0 ${r.tone ? c : 'transparent'}` }}>
                       {r.cells.map((cell, j) => (
                         <td key={j} className="border-b border-[var(--line)] px-3.5 py-2 text-[var(--ink-soft)]" style={j === 0 ? { fontWeight: 600, color: 'var(--ink)' } : undefined}>
-                          <SafeHtml html={cell} />
+                          <ReportHtml html={cell} report={report} inline />
                         </td>
                       ))}
                     </tr>
@@ -483,15 +522,21 @@ function Block({ block }: { block: ReportBlock }) {
               const body = (
                 <>
                   <div className="flex items-start gap-2">
-                    <span className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[var(--ink)]">{card.title}</span>
+                    <span className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[var(--ink)]">
+                      <ReportHtml html={card.title} report={report} inline />
+                    </span>
                     {card.badge && (
                       <span className="shrink-0 rounded-full px-2 py-[2px] text-[10px] font-bold" style={{ color: c, background: hexToRgba(c, 0.16) }}>
                         {card.badge}
                       </span>
                     )}
                   </div>
-                  <SafeHtml html={card.body} className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--ink-soft)]" />
-                  {card.detail && <p className="mt-1.5 text-[11px] text-[var(--muted)]">{card.detail}</p>}
+                  <ReportHtml html={card.body} report={report} className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--ink-soft)]" />
+                  {card.detail && (
+                    <p className="mt-1.5 text-[11px] text-[var(--muted)]">
+                      <ReportHtml html={card.detail} report={report} inline />
+                    </p>
+                  )}
                 </>
               )
               const cls = 'block rounded-lg border p-3 transition'
@@ -518,7 +563,9 @@ function Block({ block }: { block: ReportBlock }) {
             {block.items.map((it, i) => (
               <li key={i} className="flex items-start gap-2 py-0.5 text-[var(--ink-soft)]">
                 {!block.ordered && <span className="mt-[7px] inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: toneColor(it.tone) }} />}
-                <span style={{ color: it.tone === 'danger' ? toneColor('danger') : undefined }}>{it.text}</span>
+                <span style={{ color: it.tone === 'danger' ? toneColor('danger') : undefined }}>
+                  <ReportHtml html={it.text} report={report} inline />
+                </span>
               </li>
             ))}
           </Tag>
@@ -535,8 +582,15 @@ function Block({ block }: { block: ReportBlock }) {
                 {i < block.items.length - 1 && <span className="absolute left-[3px] top-[19px] h-[calc(100%-8px)] w-px bg-[var(--line)]" />}
                 <span className="w-24 shrink-0 font-mono text-[11px] text-[var(--muted)]">{e.when ?? '—'}</span>
                 <span className="text-[var(--ink-soft)]">
-                  <span className="font-semibold text-[var(--ink)]">{e.label}</span>
-                  {e.detail && <span className="text-[var(--muted)]"> — {e.detail}</span>}
+                  <span className="font-semibold text-[var(--ink)]">
+                    <ReportHtml html={e.label} report={report} inline />
+                  </span>
+                  {e.detail && (
+                    <span className="text-[var(--muted)]">
+                      {' '}
+                      — <ReportHtml html={e.detail} report={report} inline />
+                    </span>
+                  )}
                 </span>
               </li>
             ))}
@@ -571,7 +625,7 @@ function Block({ block }: { block: ReportBlock }) {
                         {kv.value} ↗
                       </a>
                     ) : (
-                      kv.value
+                      <ReportHtml html={fmtReportMetadata(kv.label, kv.value, report.timeZone ?? APP_CONFIG.timeZone)} report={report} inline />
                     )}
                   </dd>
                 </div>

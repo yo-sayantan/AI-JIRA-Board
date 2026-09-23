@@ -137,6 +137,8 @@ export interface PrReport {
   schemaVersion: number
   key: string
   title: string
+  /** IANA timezone used to generate and display report timestamps. */
+  timeZone?: string | null
   /** ISO-8601 — when the base report was built. */
   generatedAt: string
   /** Hash of the PR set (ids + states + approvals + comments + updatedAt) the report describes. */
@@ -161,6 +163,7 @@ export interface PrReport {
 export interface PrReportSummary {
   key: string
   title?: string | null
+  timeZone?: string | null
   generatedAt?: string | null
   enrichedAt?: string | null
   enriched: boolean
@@ -172,6 +175,7 @@ export function summarizeReport(r: PrReport): PrReportSummary {
   return {
     key: r.key,
     title: r.title ?? null,
+    timeZone: r.timeZone ?? null,
     generatedAt: r.generatedAt ?? null,
     enrichedAt: r.enrichedAt ?? null,
     enriched: !!r.enriched,

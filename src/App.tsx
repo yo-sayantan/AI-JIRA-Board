@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { loadData, loadArchivedKeys, persistArchivedKeys } from './data'
 import { completedToTicket, type ColumnKey, type Ticket } from './types'
-import { isServed, getInternStatus, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, startBulkReportGeneration, saveServerSettings, type PrReportsIndex, type ReportScope, type AiInternStatus } from './lib/runner'
+import { isServed, getInternStatus, getServerSettings, startInternRun, startArchiveRun, startTicketRefresh, RUN_COMMAND, getReportsIndex, getReport, startReportGeneration, startBulkReportGeneration, saveServerSettings, type PrReportsIndex, type ReportScope, type AiInternStatus } from './lib/runner'
 import type { PrReport } from './lib/reportTypes'
 import { PrReportOverlay } from './components/PrReport'
 import { Header } from './components/Header'
@@ -63,6 +63,7 @@ export default function App() {
   const anyDrawer = stack.length > 0
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const [settings, setSettings] = useState<Settings>(loadSettings)
+  const [serverSettingsReady, setServerSettingsReady] = useState(!served)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [archiveRefreshing, setArchiveRefreshing] = useState(false)
@@ -273,17 +274,39 @@ export default function App() {
     setDark(resolveDark(settings))
   }, [now, settings])
 
-  // Mirror intern-facing settings to the server so JIRA-AI-Intern jobs honour them.
+  // In served mode, machine-wide AI choices survive browser/localStorage changes.
   useEffect(() => {
     if (!served) return
+    void getServerSettings().then((saved) => {
+      if (saved) {
+        setSettings((current) => ({
+          ...current,
+          aiLevel: (saved.aiLevel as Settings['aiLevel']) ?? current.aiLevel,
+          aiBackend: (saved.aiBackend as Settings['aiBackend']) ?? current.aiBackend,
+          aiLocalModel: (saved.aiLocalModel as string) ?? current.aiLocalModel,
+          aiCloudModel: (saved.aiCloudModel as string) ?? current.aiCloudModel,
+          aiCloudProvider: (saved.aiCloudProvider as Settings['aiCloudProvider']) ?? current.aiCloudProvider,
+          aiCloudEffort: (saved.aiCloudEffort as Settings['aiCloudEffort']) ?? current.aiCloudEffort,
+          aiUseHostOllama: (saved.aiUseHostOllama as boolean) ?? current.aiUseHostOllama,
+        }))
+      }
+      setServerSettingsReady(true)
+    })
+  }, [served])
+
+  // Mirror saved intern-facing settings to the server so JIRA-AI-Intern jobs honour them.
+  useEffect(() => {
+    if (!served || !serverSettingsReady) return
     void saveServerSettings({
       aiLevel: settings.aiLevel,
       aiBackend: settings.aiBackend,
       aiLocalModel: settings.aiLocalModel,
       aiCloudModel: settings.aiCloudModel,
+      aiCloudProvider: settings.aiCloudProvider,
+      aiCloudEffort: settings.aiCloudEffort,
       aiUseHostOllama: settings.aiUseHostOllama,
     })
-  }, [served, settings.aiLevel, settings.aiBackend, settings.aiLocalModel, settings.aiCloudModel, settings.aiUseHostOllama])
+  }, [served, serverSettingsReady, settings.aiLevel, settings.aiBackend, settings.aiLocalModel, settings.aiCloudModel, settings.aiCloudProvider, settings.aiCloudEffort, settings.aiUseHostOllama])
 
   // The header's sun/moon flips the theme directly; doing so pins it, since "auto" or a schedule
   // would otherwise override the click on the next evaluation.
@@ -684,7 +707,10 @@ export default function App() {
         served={served}
         onRefresh={handleRefresh}
         onArchiveRefresh={handleArchiveRefresh}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => {
+          if (serverSettingsReady) setSettingsOpen(true)
+          else toast('Loading saved settings…', 'loading', 1200)
+        }}
         reports={
           settings.features.prReports
             ? {
