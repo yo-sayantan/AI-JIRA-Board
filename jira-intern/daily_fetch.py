@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import devinfo  # noqa: E402  (needs the path fix above when run from another cwd)
 from _config import endpoints, identity, load_config  # noqa: E402
+from _sprint import apply_sprint  # noqa: E402
 from datafile import atomic_dump, atomic_write, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
 
@@ -235,24 +236,7 @@ def wiki_to_html(text):
     return "".join(out) or None
 
 
-def parse_sprint(raw):
-    if not raw:
-        return None
-    if isinstance(raw, list) and raw:
-        raw = raw[-1]
-    if isinstance(raw, str):
-        m = re.search(r"name=([^,\]]+)", raw)
-        state_m = re.search(r"state=([^,\]]+)", raw)
-        start_m = re.search(r"startDate=([^,\]]+)", raw)
-        end_m = re.search(r"endDate=([^,\]]+)", raw)
-        name = m.group(1) if m else raw
-        st = (state_m.group(1) if state_m else "").lower()
-        tag = "active" if st == "active" else ("future" if st == "future" else st)
-        dates = ""
-        if start_m and end_m:
-            dates = f" · {start_m.group(1)[:10]} → {end_m.group(1)[:10]}"
-        return f"{name} ({tag}{dates})"
-    return str(raw)
+# parse_sprint / apply_sprint live in _sprint.py (current sprint + overflow).
 
 
 def ac_list(raw):
@@ -653,13 +637,13 @@ def build_basic_subtask(si, parent_key):
         "created": iso(sf.get("created")),
         "lastUpdate": iso(sf.get("updated")),
         "resolved": iso(sf.get("resolutiondate")) or (changelog_done_date(si.get("changelog")) if col == "done" else None),
-        "sprint": parse_sprint(sf.get("customfield_10404")),
         "commentCount": (sf.get("comment") or {}).get("total"),
         "branch": None,
         "branches": [],
         "pr": {"state": "none"},
         "prs": [],
     }
+    apply_sprint(sub, sf.get("customfield_10404"))
     return apply_code(sub, sk)
 
 
@@ -699,7 +683,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         ticket = copy.deepcopy(prior)
         if ticket.get("resolved") and column != "done":
             ticket["resolved"] = None  # self-heal: a reopened ticket must not keep a resolved date
-        ticket["sprint"] = parse_sprint(f.get("customfield_10404"))
+        apply_sprint(ticket, f.get("customfield_10404"))
         return refresh_prs_only(ticket, key)
 
     inline = comments_from_issue(f)
@@ -764,7 +748,6 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         "done": column == "done",
         "onHold": on_hold,
         "url": f"{JIRA_BASE}/browse/{key}",
-        "sprint": parse_sprint(f.get("customfield_10404")),
         "reporter": person_fmt(f.get("reporter")),
         "assignee": person_fmt(f.get("assignee")),
         "epic": epic,
@@ -784,6 +767,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         "sources": (prior or {}).get("sources") or [{"title": f"Jira {key}", "url": f"{JIRA_BASE}/browse/{key}"}],
         "updateLog": update_log,
     }
+    apply_sprint(ticket, f.get("customfield_10404"))
     if (prior or {}).get("estDays"):
         ticket["estDays"] = prior["estDays"]
 

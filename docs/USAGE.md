@@ -68,9 +68,9 @@ or **not verified** (a gap — shown, never hidden). A ring shows the 0–100 re
 
 **How reports are produced.** Two passes, so a report always exists once a PR appears:
 1. *Deterministic base* — `jira-intern/pr_report.py`, from the fetched ticket data. No AI, no network.
-2. *AI enrichment* — `cursor-agent` with your read-only Jira / Bitbucket / Confluence / Dynatrace MCP
-   servers rewrites it in place with evidence chains, per-file assessment, risks and a ticket-specific
-   release gate. Skipped automatically in Docker (`SKIP_SUMMARY=1`) or when no agent CLI is present.
+2. *AI enrichment* — **JIRA-AI-Intern** (Ollama locally, or a cloud chat API) merges structured JSON
+   (business impact, per-file notes when a file list exists, risks). Settings **None** stops after
+   the base. **Max** is the longest timeout (`full`). CI / Checkmarx / live Dynatrace stay Not verified.
 
 **When they are generated.** Automatically after every fetch for any ticket whose PR appeared or
 changed (background, capped by `reports.maxPerRun`), after a single-ticket refresh, or on demand from
@@ -79,8 +79,10 @@ Backfill a whole year by hand: `bash jira-intern/local-runner/pr-reports-backfil
 
 ## Cards
 
-Each card shows type, key, story points, title, priority, PR state, approvals, branch, and how
-long since it last moved. **Click a card** to open its full detail drawer. On a Done card, the
+Every card is a **fixed height**, full column width. Pills wrap inside a two-line cap so banners
+never grow the shell. Hover lifts with a light 3D tilt (off when motion is disabled). A **red
+border** means the ticket carried across more than one sprint. Done cards spark once on first
+paint after a page load. **Click a card** to open its full detail drawer. On a Done card, the
 trophy button retires it to Completed immediately (undo from the strip under the board).
 
 ## Ticket detail (drawer)

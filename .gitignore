@@ -30,6 +30,8 @@ jira-intern/data.js
 jira-intern/reports/
 # Written by the board's Settings panel (AI usage level) — per-machine, not project config.
 jira-intern/.settings.json
+jira-intern/.ai-queue/
+jira-intern/.ai-status.json
 jira-intern/.report.lock
 jira-intern/cache/
 jira-intern/logs/
@@ -43,6 +45,8 @@ jira-intern/*.bak
 jira-intern/.data.*
 jira-intern/.tmp-*
 jira-intern/jira-export.xml
+# Hand-dropped GGUF weights for local AI (see ai-intern/models.json).
+jira-intern/models/*.gguf
 
 # Retired legacy UI (pre-React) — rendered HTML holds real ticket content
 jira-intern/status.html

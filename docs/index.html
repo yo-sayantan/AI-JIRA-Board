@@ -143,6 +143,7 @@
 
       footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 54px; }
       .ok { color: var(--ok); font-weight: 700; }
+      a.dl { font-weight: 700; white-space: nowrap; }
     </style>
   </head>
   <body>
@@ -154,6 +155,7 @@
         <a href="#git">Git</a>
         <a href="#configure">Configure</a>
         <a href="#docker">Docker</a>
+        <a href="#ai-intern">AI Intern</a>
         <a href="#run">Run</a>
         <a href="#trouble">Troubleshooting</a>
       </div>
@@ -376,6 +378,16 @@ Copy-Item "setup\config.example.json" "$HOME\.ai\config.json"</pre>
           silently creates a directory there instead.</div>
       </div>
 
+      <div class="step">
+        <div class="step-h"><span class="num">3</span><h3>Local AI model catalog</h3></div>
+        <p class="small">Every local LLM the intern can run — Ollama tags <b>and</b> direct GGUF downloads —
+          lives in <code class="inl">ai-intern/models.json</code>. Settings and this guide both read that file.
+          When a new model ships, add an object there (see the <code class="inl">howto</code> field at the top
+          of the file) and restart <code class="inl">JIRA-AI-Intern</code>.</p>
+        <p class="small">Host Ollama (Settings checkbox on): <a href="#ai-ollama">install, pull, where files live</a>.
+          Checkbox off: <a href="#ai-model-files">download a GGUF, where to place it, how to register it</a>.</p>
+      </div>
+
       <!-- ── DOCKER ───────────────────────────────────────────────── -->
       <h2 id="docker">Docker — build &amp; deploy</h2>
       <div class="card">
@@ -427,7 +439,8 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
           <tr><td><code class="inl">PORT</code></td><td>4321</td><td>Host port the board is published on.</td></tr>
           <tr><td><code class="inl">REFRESH_ON_START</code></td><td>1</td><td>Fetch once when the container boots.</td></tr>
           <tr><td><code class="inl">REFRESH_INTERVAL</code></td><td>900</td><td>Seconds between auto-refreshes. <code class="inl">0</code> disables.</td></tr>
-          <tr><td><code class="inl">SKIP_SUMMARY</code></td><td>1</td><td>Deterministic fetch, no LLM — so no AI API key is needed.</td></tr>
+          <tr><td><code class="inl">SKIP_SUMMARY</code></td><td>1</td><td>No LLM in the <b>fetch</b> container. Report enrichment and briefs run in <code class="inl">JIRA-AI-Intern</code>.</td></tr>
+          <tr><td><code class="inl">AI_INTERN_URL</code></td><td>http://jira-ai:4322</td><td>Where the board proxies intern health, jobs, and model pulls.</td></tr>
         </table>
         <pre><button class="copy">Copy</button>PORT=8080 docker compose up -d --build   <span class="cmt"># run on a different port</span></pre>
       </div>
@@ -441,6 +454,134 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
           <code class="inl">setup/Start Jira Board.command.template</code> to your Desktop, set
           <code class="inl">REPO_DIR</code> inside it, then <code class="inl">chmod +x</code> it and double-click.</p>
       </div>
+
+      <h2 id="ai-intern">AI Intern — local &amp; cloud models</h2>
+      <div class="card">
+        <h3>Two containers, one command</h3>
+        <p><code class="inl">docker compose up -d --build</code> starts <b>JIRA-Board</b> (fetch + UI) and
+          <b>JIRA-AI-Intern</b> (report enrichment, ticket briefs, model download). Both stay up with
+          <code class="inl">restart: unless-stopped</code>. Refresh and Regenerate honour Settings — you do not
+          need a host terminal for AI.</p>
+        <p class="small">Settings → AI usage: <b>None / Low / Moderate / Max</b>, then <b>Local</b> or <b>Cloud</b>.
+          Max is the product name for the stored value <code class="inl">full</code> (longest timeout).
+          Local models are a <b>dropdown</b>. If the chosen tag is already on disk, that is enough.
+          If it is not, the download icon beside the list queues a pull. The <b>?</b> next to the list
+          opens the matching section below: Host Ollama when that checkbox is on, otherwise the GGUF
+          download / place / trigger path.</p>
+        <p class="small">The catalog of every local LLM (tags + download links) is
+          <code class="inl">ai-intern/models.json</code> — add a row there when a new model is released.
+          Jump: <a href="#ai-ollama">Host Ollama</a> · <a href="#ai-model-files">GGUF files</a>.</p>
+      </div>
+
+      <h2 id="ai-ollama">Host Ollama — install, pull, deploy</h2>
+      <div class="card">
+        <h3>When the Host Ollama checkbox is on</h3>
+        <p class="small">Settings → Local AI → tick <b>Host Ollama</b>. The intern then talks to
+          Ollama.app on this Mac (Metal) at <code class="inl">host.docker.internal:11434</code> instead of
+          the Linux Docker VM (CPU). Use this for 14B+ if you can, and for every 32B / 70B tag.</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">1</span><h3>Install Ollama and leave it running</h3></div>
+        <p class="small">Download <a href="https://ollama.com/download">Ollama.app</a>, open it once, and keep
+          it in the menu bar. First-run will listen on <code class="inl">127.0.0.1:11434</code>.</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">2</span><h3>Pull a model (or let Settings do it)</h3></div>
+        <p class="small">Easiest: pick the tag in Settings and click the download icon. Same thing from a terminal:</p>
+        <pre><button class="copy">Copy</button>ollama pull qwen2.5-coder:7b</pre>
+        <p class="small">Weights land in <code class="inl">~/.ollama/models</code>. Do not copy blobs into that
+          tree by hand — Ollama owns it. Catalog: <a href="https://ollama.com/library">ollama.com/library</a>.
+          Default tag: <code class="inl">qwen2.5-coder:7b</code>.</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">3</span><h3>Trigger it from the board</h3></div>
+        <p class="small">Host Ollama on, model selected (no download icon once it is installed), AI usage not
+          None. Then <b>Regenerate</b> a PR report or <b>Refresh</b> — JIRA-AI-Intern enqueues enrichment
+          against that tag. Idle status in Settings should read
+          <code class="inl">Idle · local · &lt;tag&gt;</code>.</p>
+      </div>
+      <div class="card">
+        <h3>Ollama library links (from the catalog)</h3>
+        <p class="small">These rows come from <code class="inl">ai-intern/models.json</code>. Add a model there
+          and this table updates the next time you open the guide.</p>
+        <table>
+          <thead>
+            <tr><th>Model</th><th>Tag</th><th>RAM</th><th>Pull</th></tr>
+          </thead>
+          <tbody id="ollama-model-rows">
+            <tr><td colspan="4">Loading catalog…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="ai-model-files">Download a GGUF — place, register, trigger</h2>
+      <div class="card">
+        <h3>When Host Ollama is off</h3>
+        <p class="small">The intern uses the <code class="inl">JIRA-AI-Ollama</code> container. You can still
+          skip <code class="inl">ollama pull</code> and drop in a file you already have — but a raw
+          <code class="inl">.gguf</code> is invisible until you <code class="inl">ollama create</code> it
+          with the <b>same tag</b> the Settings dropdown uses (<code class="inl">id</code> in
+          <code class="inl">ai-intern/models.json</code>).</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">1</span><h3>Download the file</h3></div>
+        <p class="small">Use a <b>direct download</b> from the table (Hugging Face <code class="inl">resolve/main</code>
+          URL — the browser saves the <code class="inl">.gguf</code>). Q4_K_M is the size/quality sweet spot.
+          32B+ files are large and may be split on the repo page; if a direct link 404s, open the repo and
+          pick the matching quant.</p>
+        <table>
+          <thead>
+            <tr><th>Model</th><th>File</th><th>Direct download</th><th>Repo</th></tr>
+          </thead>
+          <tbody id="gguf-model-rows">
+            <tr><td colspan="4">Loading catalog…</td></tr>
+          </tbody>
+        </table>
+        <p class="small">Other sources: <a href="https://huggingface.co/models?library=gguf">Hugging Face GGUF</a>,
+          <a href="https://huggingface.co/bartowski">bartowski quants</a>,
+          <a href="https://ollama.com/library">Ollama library</a> (pull instead of a file).</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">2</span><h3>Where to place it</h3></div>
+        <p class="small">Save the file in <code class="inl">jira-intern/models/</code> (git-ignored) or
+          Downloads. Ollama will not see it there until you register it.</p>
+        <pre><button class="copy">Copy</button>mkdir -p jira-intern/models
+# move the downloaded .gguf in here, e.g.
+# mv ~/Downloads/qwen2.5-coder-7b-instruct-q4_k_m.gguf jira-intern/models/</pre>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">3</span><h3>Register the tag (how to trigger)</h3></div>
+        <p class="small"><b>In-container</b> (Host Ollama <b>off</b>) — copy into the Ollama container, then create
+          with the Settings tag:</p>
+        <pre><button class="copy">Copy</button>docker cp jira-intern/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf JIRA-AI-Ollama:/tmp/model.gguf
+docker exec JIRA-AI-Ollama sh -c 'printf "FROM /tmp/model.gguf\n" &gt; /tmp/Modelfile &amp;&amp; ollama create qwen2.5-coder:7b -f /tmp/Modelfile'</pre>
+        <p class="small">Created blobs live on volume <code class="inl">jira-ai-models</code>
+          (<code class="inl">/root/.ollama</code> inside the container).</p>
+        <p class="small"><b>Host Ollama</b> — same file, then:</p>
+        <pre><button class="copy">Copy</button>cat &gt; /tmp/Modelfile &lt;&lt;'EOF'
+FROM /absolute/path/to/qwen2.5-coder-7b-instruct-q4_k_m.gguf
+EOF
+ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
+        <p class="small">That writes into <code class="inl">~/.ollama/models</code>. Tick <b>Host Ollama</b> so
+          the intern uses it.</p>
+        <p class="small"><b>Then from the board:</b> Settings → pick the matching tag (download icon disappears
+          once the tag exists) → AI usage not None → <b>Regenerate</b> / <b>Refresh</b>. The intern enqueues
+          the job; you do not need a host console.</p>
+      </div>
+      <div class="card">
+        <h3>Add a newly released model</h3>
+        <p class="small">Edit <code class="inl">ai-intern/models.json</code>. Copy an existing object, set
+          <code class="inl">id</code> / <code class="inl">pull</code> to the Ollama tag you will
+          <code class="inl">ollama create</code> or <code class="inl">ollama pull</code>, fill
+          <code class="inl">ollama</code> (library URL) and <code class="inl">gguf</code> (direct
+          <code class="inl">.gguf</code> URL), then restart the intern:</p>
+        <pre><button class="copy">Copy</button>docker compose up -d --build jira-ai</pre>
+        <p class="small">The Settings dropdown and both tables on this page pick up the new row from that file.
+          No UI change is required.</p>
+      </div>
+
+      <div class="note warn"><b>Honest gap.</b> File-only AI fills business impact and per-file notes when a file list exists.
+        CI, Checkmarx and live Dynatrace stay <b>Not verified</b> until dedicated REST is added.</div>
 
       <!-- ── RUN WITHOUT DOCKER ───────────────────────────────────── -->
       <h2 id="run">Other ways to run</h2>
@@ -553,6 +694,59 @@ bash jira-intern/local-runner/update-completed.sh  <span class="cmt"># full Comp
       }
       tabs.forEach(function (t) { t.addEventListener('click', function () { pickOS(t.dataset.os); }); });
       pickOS(detectOS());
+
+      function esc(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/"/g, '&quot;');
+      }
+      function fillCatalog(data) {
+        var models = data.models || [];
+        var ollama = document.getElementById('ollama-model-rows');
+        var gguf = document.getElementById('gguf-model-rows');
+        if (ollama) {
+          ollama.innerHTML = models.map(function (m) {
+            var href = m.ollama || ('https://ollama.com/library/' + encodeURIComponent(m.pull || m.id));
+            return '<tr><td>' + esc(m.label) + '</td><td><code class="inl">' + esc(m.pull || m.id) +
+              '</code></td><td>~' + esc(m.ramGb) + ' GB' + (m.fits === 'host' ? ' · host' : '') +
+              '</td><td><a class="dl" href="' + esc(href) + '">ollama.com</a></td></tr>';
+          }).join('') || '<tr><td colspan="4">No models in catalog.</td></tr>';
+        }
+        if (gguf) {
+          gguf.innerHTML = models.map(function (m) {
+            var file = m.ggufFile || '—';
+            var dl = m.gguf ? '<a class="dl" href="' + esc(m.gguf) + '">Download GGUF</a>' : '—';
+            var page = m.ggufPage ? '<a href="' + esc(m.ggufPage) + '">repo</a>' : '—';
+            return '<tr><td>' + esc(m.label) + '</td><td><code class="inl">' + esc(file) +
+              '</code></td><td>' + dl + '</td><td>' + page + '</td></tr>';
+          }).join('') || '<tr><td colspan="4">No models in catalog.</td></tr>';
+        }
+      }
+      function loadCatalog() {
+        var urls = [];
+        try { urls.push(new URL('../ai-intern/models.json', location.href).href); } catch (e) { /* ignore */ }
+        try {
+          if (location.origin && location.origin !== 'null') urls.push(location.origin + '/ai-intern/models.json');
+        } catch (e) { /* ignore */ }
+        var i = 0;
+        function next() {
+          if (i >= urls.length) {
+            var miss = '<tr><td colspan="4">Could not load <code class="inl">ai-intern/models.json</code>. Open this guide from the board, or edit that file to add a model.</td></tr>';
+            var a = document.getElementById('ollama-model-rows');
+            var b = document.getElementById('gguf-model-rows');
+            if (a) a.innerHTML = miss;
+            if (b) b.innerHTML = miss;
+            return;
+          }
+          fetch(urls[i++]).then(function (r) {
+            if (!r.ok) throw new Error(String(r.status));
+            return r.json();
+          }).then(fillCatalog).catch(next);
+        }
+        next();
+      }
+      loadCatalog();
     </script>
   </body>
 </html>

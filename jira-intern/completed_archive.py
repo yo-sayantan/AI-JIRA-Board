@@ -29,6 +29,7 @@ from html import escape
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import devinfo  # noqa: E402  (needs the path fix above when run from another cwd)
 from _config import endpoints, load_config  # noqa: E402
+from _sprint import apply_sprint  # noqa: E402
 from datafile import atomic_write, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
 
@@ -215,26 +216,6 @@ def wiki_to_html(text):
     if in_ul:
         out.append("</ul>")
     return "".join(out) or None
-
-
-def parse_sprint(raw):
-    if not raw:
-        return None
-    if isinstance(raw, list) and raw:
-        raw = raw[-1]
-    if isinstance(raw, str):
-        m = re.search(r"name=([^,\]]+)", raw)
-        state_m = re.search(r"state=([^,\]]+)", raw)
-        start_m = re.search(r"startDate=([^,\]]+)", raw)
-        end_m = re.search(r"endDate=([^,\]]+)", raw)
-        name = m.group(1) if m else raw
-        st = (state_m.group(1) if state_m else "").lower()
-        tag = "active" if st == "active" else ("future" if st == "future" else st)
-        dates = ""
-        if start_m and end_m:
-            dates = f" · {start_m.group(1)[:10]} → {end_m.group(1)[:10]}"
-        return f"{name} ({tag}{dates})"
-    return str(raw)
 
 
 def ac_list(raw):
@@ -465,7 +446,6 @@ def build_completed(issue, prior, dev_map, children, pr_overrides, mine):
         "onHold": column == "hold",
         "mine": mine,
         "url": f"{JIRA_BASE}/browse/{key}",
-        "sprint": parse_sprint(f.get("customfield_10404")),
         "reporter": person_fmt(f.get("reporter")),
         "assignee": person_fmt(f.get("assignee")),
         "epic": epic,
@@ -488,6 +468,7 @@ def build_completed(issue, prior, dev_map, children, pr_overrides, mine):
         "subtasks": subtasks,
         "subtaskCount": len(subtasks),
     }
+    apply_sprint(ticket, f.get("customfield_10404"))
     ticket.update(dev_fields(key, dev_map, prior))
     if pr_overrides.get(key) and ticket["pr"].get("state") == "none":
         ticket["pr"] = pr_overrides[key]
@@ -496,7 +477,7 @@ def build_completed(issue, prior, dev_map, children, pr_overrides, mine):
 
 COMPLETED_KEYS = (
     "key", "title", "type", "priority", "status", "created", "resolved", "storyPoints",
-    "branch", "branches", "pr", "prs", "url", "lastUpdate", "sprint", "reporter", "assignee",
+    "branch", "branches", "pr", "prs", "url", "lastUpdate", "sprint", "sprintOverflow", "sprintCount", "reporter", "assignee",
     "epic", "parentKey", "parentTitle", "mine", "labels", "components", "fixVersions",
     "description", "acceptanceCriteria", "comments", "commentCount", "related", "confluence",
     "externalLinks", "proposedSolution", "effortEstimate", "openQuestions", "sources",

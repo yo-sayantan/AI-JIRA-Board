@@ -17,8 +17,10 @@ export function isServed(): boolean {
  * Deliberately a plain relative path so it works with no server at all — the guide is the
  * thing you reach for WHEN the server is broken.
  */
-export function guideUrl(): string {
-  return isServed() ? '/docs/index.html' : '../docs/index.html'
+export function guideUrl(hash?: string): string {
+  const base = isServed() ? '/docs/index.html' : '../docs/index.html'
+  if (!hash) return base
+  return `${base}#${hash.replace(/^#/, '')}`
 }
 
 export interface InternProgress {
@@ -53,6 +55,46 @@ export interface InternStatus {
   reportsGenerating?: string[]
   /** Exit codes for recently finished report generations (key → code). */
   reportExits?: Record<string, number>
+  /** JIRA-AI-Intern health, current job, installed models. */
+  ai?: AiInternStatus
+}
+
+export interface AiCatalogModel {
+  id: string
+  label: string
+  pull: string
+  params: string
+  ramGb: number
+  level: string
+  fits: 'container' | 'host' | string
+  why: string
+  /** Ollama library page for this tag. */
+  ollama?: string
+  /** Direct Hugging Face .gguf download (Q4_K_M when available). */
+  gguf?: string
+  ggufFile?: string
+  /** Repo to browse if the GGUF is split across files. */
+  ggufPage?: string
+}
+
+export interface AiInternStatus {
+  ok?: boolean
+  down?: boolean
+  state?: string
+  current?: { type?: string; key?: string; model?: string } | null
+  lastError?: string | null
+  backend?: string
+  model?: string
+  useHostOllama?: boolean
+  ollamaOk?: boolean
+  ollamaError?: string | null
+  installedModels?: string[]
+  catalog?: { models?: AiCatalogModel[]; defaultLocal?: string; source?: string; hostOnlyRamGb?: number }
+  memGb?: number | null
+  pulling?: string | null
+  queuedKeys?: string[]
+  queued?: number
+  error?: string
 }
 
 // ── PR Readiness Reports ──────────────────────────────────────────────────────
@@ -121,7 +163,13 @@ export async function startReportGeneration(key: string): Promise<ReportStart | 
  * Push the settings the shell runners care about to the server. Only the AI level matters to
  * them; everything else is presentation and stays in localStorage.
  */
-export async function saveServerSettings(patch: { aiLevel?: string }): Promise<boolean> {
+export async function saveServerSettings(patch: {
+  aiLevel?: string
+  aiBackend?: string
+  aiLocalModel?: string
+  aiCloudModel?: string
+  aiUseHostOllama?: boolean
+}): Promise<boolean> {
   try {
     const r = await fetch('/api/settings', {
       method: 'POST',
@@ -195,6 +243,45 @@ export async function startTicketRefresh(key: string): Promise<TicketRefreshStar
     return (await r.json()) as TicketRefreshStart
   } catch {
     return null
+  }
+}
+
+export async function getAiStatus(): Promise<AiInternStatus | null> {
+  try {
+    const r = await fetch('/api/ai-status', { cache: 'no-store' })
+    if (!r.ok) return { ok: false, down: true, state: 'down', error: `HTTP ${r.status}` }
+    return (await r.json()) as AiInternStatus
+  } catch {
+    return { ok: false, down: true, state: 'down', error: 'AI intern unreachable' }
+  }
+}
+
+export async function getAiModels(): Promise<{
+  ok: boolean
+  down?: boolean
+  catalog?: AiInternStatus['catalog']
+  installed?: string[]
+  ollamaOk?: boolean
+  memGb?: number | null
+} | null> {
+  try {
+    const r = await fetch('/api/ai-models', { cache: 'no-store' })
+    return (await r.json()) as { ok: boolean; down?: boolean; catalog?: AiInternStatus['catalog']; installed?: string[] }
+  } catch {
+    return { ok: false, down: true }
+  }
+}
+
+export async function pullAiModel(model: string, useHostOllama = false): Promise<boolean> {
+  try {
+    const r = await fetch('/api/ai-models/pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, useHostOllama }),
+    })
+    return r.ok
+  } catch {
+    return false
   }
 }
 

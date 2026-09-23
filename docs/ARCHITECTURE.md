@@ -37,8 +37,10 @@ Key scripts:
 | `prompts/intern-prompt.md` | The schema the fetch must produce, in prose — mirrors `src/types.ts`. |
 | `config.json` | **Single source of truth** for identity, endpoints, connector, policy, branding. |
 | `pr_report.py` | **PR Readiness Reports** — deterministic base per ticket-with-PR → `reports/<KEY>.json`; validation; staleness by PR fingerprint. |
+| `ai_queue.py` | File queue `jira-intern/.ai-queue/` for JIRA-AI-Intern jobs (enrich, summarize, pull-model). |
+| `ai-intern/worker.py` | Queue worker + HTTP (`/health`, `/api/models`, `/api/jobs`). Local Ollama or cloud HTTP. |
 | `prompts/pr-readiness-prompt.md` | The AI enrichment brief (evidence chain, per-file assessment, risks, release gate) — mirrors `src/lib/reportTypes.ts`. |
-| `local-runner/pr-report.sh` · `pr-reports-backfill.sh` | One ticket / every ticket-with-PR of a year. Auto-launched in the background by `run-intern.sh` and `refresh-ticket.sh`. |
+| `local-runner/pr-report.sh` · `pr-reports-backfill.sh` | One ticket / every ticket-with-PR of a year. Writes the base then enqueues enrichment. |
 | `local-runner/sync-reports.mjs` | `reports/*.json` → `reports/index.js` (`window.__JIRA_PR_REPORTS__`) so reports open on `file://` too. |
 
 **PR Readiness Reports** are a second data file family beside `data.json`: one JSON per ticket in
@@ -64,7 +66,7 @@ inlined) so it runs from a double-click. It reads `window.__JIRA_DATA__` at load
 | `src/lib/columns.ts` | Jira status → board column mapping + colours; the Next Sprint / On Hold section identities. |
 | `src/lib/format.ts` | Priority / type / PR / date / sprint helpers (incl. `isNextSprint`, `futureSprintOf`). |
 | `src/components/` | `Header`, `Stats`, `Board`, `Column`, `TicketCard`, `OnHold`, `NextSprint`, `Completed`, `TicketDetail`, … |
-| `serve.mjs` | Zero-dependency Node server for the *optional* live mode (the in-app **Refresh** button runs the fetch). |
+| `serve.mjs` | Zero-dependency Node server for the *optional* live mode (the in-app **Refresh** button runs the fetch). Proxies `/api/ai-*` to JIRA-AI-Intern. |
 | `vite.config.ts` | Single-file build; injects the external `../jira-intern/data.js` `<script>`. |
 
 ## How data reaches the screen
@@ -97,3 +99,12 @@ the page (or press `r`) and the latest dump shows.
 | **Live server** | `npm run serve` | Runs the fetch on your machine | Node + a working local fetch |
 
 See [`DEPLOYMENT.md`](DEPLOYMENT.md) for step-by-step instructions.
+
+## JIRA-AI-Intern
+
+`docker-compose.yml` starts three services: **JIRA-Board** (fetch + UI), **JIRA-AI-Ollama**, and
+**JIRA-AI-Intern** (queue worker). They share `./jira-intern`. Settings `aiLevel` / `aiBackend` /
+`aiLocalModel` live in `jira-intern/.settings.json`. The board writes a deterministic report in
+seconds, then enqueues `{type: enrich-report}` unless the level is None. Local inference is Ollama
+(CPU in Docker, or host Metal via `host.docker.internal`). Cloud uses the HTTP API and keys in
+`~/.cursor/mcp-secrets.env`. CI / Checkmarx / Dynatrace stay **Not verified** on the file-only pass.

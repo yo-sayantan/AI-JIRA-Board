@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { motion } from 'motion/react'
 import type { Ticket } from '../types'
 import { COLUMN_META } from '../lib/columns'
@@ -15,6 +16,17 @@ function archivesInDays(t: Ticket, now: number): number | null {
   if (Number.isNaN(ts)) return null
   const left = ts + DONE_BOARD_DAYS * 86_400_000 - now
   return left > 0 ? Math.ceil(left / 86_400_000) : null
+}
+
+const celebratedDone = new Set<string>()
+
+function motionOff(): boolean {
+  try {
+    if (document.documentElement.classList.contains('jb-no-anim')) return true
+    return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  } catch {
+    return false
+  }
 }
 
 export function TicketCard({
@@ -44,12 +56,27 @@ export function TicketCard({
   const prKnownState = pr && pr.state && pr.state !== 'none'
   const branches = branchesOf(ticket)
   const archiveIn = archivesInDays(ticket, now)
+  const overflow = !!ticket.sprintOverflow
+  const quiet = motionOff()
+  const burst = useMemo(() => {
+    if (ticket.column !== 'done' || quiet) return false
+    if (celebratedDone.has(ticket.key)) return false
+    celebratedDone.add(ticket.key)
+    return true
+  }, [ticket.key, ticket.column, quiet])
 
-  // Real drop shadow + a stronger, accent-tinted lift on hover. (The accent bar is an inset shadow,
-  // so it must be composed together with the drop shadow in ONE box-shadow value.)
-  const ring = urgent ? `, 0 0 0 1px ${hexToRgba(prio.color, 0.3)}` : ''
-  const baseShadow = `inset 3px 0 0 ${accent}, 0 1px 2px rgba(2,6,23,0.10), 0 10px 22px -12px rgba(2,6,23,0.40)${ring}`
-  const hoverShadow = `inset 3px 0 0 ${accent}, 0 16px 34px -12px ${hexToRgba(accent, 0.5)}, 0 6px 14px -6px rgba(2,6,23,0.4)${ring}`
+  const ring = [
+    urgent ? `0 0 0 1px ${hexToRgba(prio.color, 0.3)}` : '',
+    overflow ? '0 0 0 2px #dc2626' : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
+  const ringSuffix = ring ? `, ${ring}` : ''
+  const baseShadow = `inset 3px 0 0 ${accent}, 0 1px 2px rgba(2,6,23,0.10), 0 10px 22px -12px rgba(2,6,23,0.40)${ringSuffix}`
+  const hoverShadow = `inset 3px 0 0 ${accent}, 0 22px 40px -14px ${hexToRgba(accent, 0.55)}, 0 8px 16px -6px rgba(2,6,23,0.45)${ringSuffix}`
+  const overflowTitle = overflow
+    ? `Carried across ${ticket.sprintCount && ticket.sprintCount > 1 ? ticket.sprintCount : 'multiple'} sprints`
+    : undefined
 
   return (
     // Card shell is a div[role=button], NOT a <button>, so the dismiss/refresh controls inside it
@@ -58,6 +85,7 @@ export function TicketCard({
       role="button"
       tabIndex={0}
       aria-label={`Open ${ticket.key}: ${ticket.title}`}
+      title={overflowTitle}
       onClick={() => onOpen(ticket.key)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -69,10 +97,15 @@ export function TicketCard({
       animate={{ opacity: 1, y: 0, boxShadow: baseShadow }}
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-      whileHover={{ y: -4, boxShadow: hoverShadow }}
-      whileTap={{ scale: 0.985 }}
-      className="group relative w-full cursor-pointer overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] p-3 text-left"
-      style={{ boxShadow: baseShadow }}
+      whileHover={quiet ? undefined : { y: -8, rotateX: 7, rotateY: -1.5, boxShadow: hoverShadow }}
+      whileTap={quiet ? undefined : { scale: 0.985 }}
+      className="group relative flex h-[168px] w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[var(--surface-solid)] p-2.5 text-left"
+      style={{
+        boxShadow: baseShadow,
+        borderColor: overflow ? '#dc2626' : 'var(--line)',
+        transformPerspective: 900,
+        transformStyle: 'preserve-3d',
+      }}
     >
       {/* hover gradient wash + top sheen in the column color */}
       <span
@@ -85,6 +118,8 @@ export function TicketCard({
         className="pointer-events-none absolute inset-x-0 top-0 h-[2px] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         style={{ background: `linear-gradient(90deg, ${accent}, transparent)` }}
       />
+
+      {burst && <DoneBurst />}
 
       {onArchive && (
         <button
@@ -129,6 +164,7 @@ export function TicketCard({
 
       <div className="relative flex items-center justify-between gap-2">
         <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-wide" style={{ color: accent }}>
+          {ticket.column === 'done' && <TrophyIcon size={12} />}
           <TypeIcon type={effectiveType(ticket)} color={tm.color} size={13} />
           {ticket.key}
           <PointsTag points={ticket.storyPoints} />
@@ -140,13 +176,18 @@ export function TicketCard({
         {ticket.title}
       </div>
 
-      <div className="relative mt-2.5 flex flex-wrap items-center gap-1.5">
+      <div className="relative mt-1.5 flex max-h-[40px] flex-wrap items-center gap-1 overflow-hidden">
         <PriorityGlyph priority={ticket.priority} />
         {pr && (prKnownState ? <PrBadge state={pr.state} /> : <Pill color="#94a3b8" title="Pull request linked">⊙ PR</Pill>)}
         {pr && !isClosedPr(pr) && <Approvals approvals={pr.approvals} />}
         {prs.length > 1 && (
           <Pill color="#a855f7" title={`${prs.length} pull requests`}>
             +{prs.length - 1} PR
+          </Pill>
+        )}
+        {overflow && (
+          <Pill color="#dc2626" title={overflowTitle}>
+            overflow
           </Pill>
         )}
         {archiveIn != null && (
@@ -156,7 +197,7 @@ export function TicketCard({
         )}
       </div>
 
-      <div className="relative mt-2.5 flex items-center gap-3 text-[10.5px] text-[var(--muted)]">
+      <div className="relative mt-auto flex items-center gap-3 pt-1 text-[10.5px] text-[var(--muted)]">
         {typeof ticket.commentCount === 'number' && ticket.commentCount > 0 && (
           <span className="inline-flex items-center gap-1">
             <CommentIcon size={12} /> {ticket.commentCount}
@@ -170,5 +211,26 @@ export function TicketCard({
         )}
       </div>
     </motion.div>
+  )
+}
+
+function DoneBurst() {
+  const sparks = Array.from({ length: 10 }, (_, i) => i)
+  return (
+    <span aria-hidden className="pointer-events-none absolute right-3 top-3 z-20 h-0 w-0">
+      {sparks.map((i) => {
+        const a = (i / sparks.length) * Math.PI * 2
+        return (
+          <motion.span
+            key={i}
+            className="absolute h-1.5 w-1.5 rounded-full"
+            style={{ background: i % 2 ? '#f59e0b' : '#fde68a', boxShadow: '0 0 6px #f59e0b' }}
+            initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+            animate={{ opacity: 0, x: Math.cos(a) * 28, y: Math.sin(a) * 22, scale: 0.2 }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+          />
+        )
+      })}
+    </span>
   )
 }

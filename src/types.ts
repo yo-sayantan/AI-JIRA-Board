@@ -102,6 +102,10 @@ export interface Ticket {
   subtaskCount?: number | null
   url?: string | null
   sprint?: string | null
+  /** True when Jira lists more than one distinct sprint — the ticket carried over. */
+  sprintOverflow?: boolean
+  /** Distinct sprint names seen on the issue (1 = never carried). */
+  sprintCount?: number
   reporter?: string | null
   assignee?: string | null
   epic?: LinkRef | null
@@ -169,6 +173,9 @@ export interface CompletedTicket {
   // ── optional richer detail for the full detail page (may be sparse) ──
   lastUpdate?: string | null
   sprint?: string | null
+  /** True when Jira lists more than one distinct sprint — the ticket carried over. */
+  sprintOverflow?: boolean
+  sprintCount?: number
   reporter?: string | null
   assignee?: string | null
   epic?: LinkRef | null

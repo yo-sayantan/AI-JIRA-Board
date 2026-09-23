@@ -525,6 +525,17 @@ export function QuestionIcon({ size = 14, color = 'currentColor' }: IP) {
     </svg>
   )
 }
+
+/** Tray + downward arrow — queue an Ollama pull for the selected local model. */
+export function DownloadIcon({ size = 14, color = 'currentColor' }: IP) {
+  return (
+    <svg {...svg(size, '')}>
+      <path d="M12 4v10" {...line(color, 1.9)} />
+      <path d="M8 10.5L12 15l4-4.5" {...line(color, 1.9)} />
+      <path d="M5 18h14" {...line(color, 1.9)} />
+    </svg>
+  )
+}
 export function PaperclipIcon({ size = 14, color = 'currentColor' }: IP) {
   return (
     <svg {...svg(size, '')}>

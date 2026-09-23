@@ -1,0 +1,20 @@
+You enrich ONE PR readiness report using ONLY the ticket JSON and the deterministic base report already on disk.
+Do not invent CI, Checkmarx, Dynatrace, or file diffs you cannot see.
+
+Return a single JSON object with exactly these keys:
+{
+  "verdictSummary": "one sentence or empty string",
+  "businessImpact": "who is affected and what changes when it ships, <=25 words",
+  "reviewFocus": ["up to 5 bullets an approver must check"],
+  "risks": [{"risk": "...", "why": "...", "mitigation": "..."}],
+  "files": [{"path": "path or unknown", "badge": "Required|Neutral cleanup|Risky|Unrelated", "body": "what changed", "detail": "blast radius"}],
+  "productionProof": "No production evidence: <reason>",
+  "releaseGate": "the one proof that the fix is live, or unknown",
+  "evidenceRows": [{"cells": ["Source", "Observed", "Conclusion"], "tone": "info"}]
+}
+
+Rules:
+- Use only facts in the ticket (description, comments, PRs, confluence excerpts, labels, fixVersions).
+- If you have no changed-file list, set files to [] and say so in productionProof.
+- Never change the verdict id, label, tone, or score — those are not in your output.
+- Empty arrays are allowed. Do not wrap the JSON in markdown.
