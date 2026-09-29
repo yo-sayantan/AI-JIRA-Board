@@ -20,8 +20,9 @@ export interface Settings {
   /** Local hours [start, end) during which the LIGHT theme applies in `schedule` mode. */
   dayStart: number
   dayEnd: number
-  /** Effort of the AI pass (how long a model may think). 'none' is legacy — the mode carries Off now. */
+  /** AI usage: 'none' = deterministic reports (the off switch); the rest is how long a model may think. */
   aiLevel: AiLevel
+  /** Where the AI runs when aiLevel is not 'none'. ('off' is accepted for compatibility, never chosen in the UI.) */
   aiMode: AiMode
   /** Ollama model name for Local — a registered .gguf from jira-intern/models/ or a pulled tag. */
   aiLocalModel: string
@@ -105,9 +106,9 @@ export const DEFAULT_SETTINGS: Settings = {
   dayStart: 7,
   dayEnd: 19,
   aiLevel: 'moderate',
-  // Off until a runtime is chosen: Local needs a model file, Cloud needs a key — neither should
-  // start spending time or tokens by surprise.
-  aiMode: 'off',
+  // "None" in AI usage is the off switch (as it always was); this only says WHERE the AI runs when a
+  // level is chosen. Cloud by default — it works the moment a key is in the secrets file.
+  aiMode: 'cloud',
   aiLocalModel: '',
   aiCloudProvider: 'anthropic',
   aiCloudModel: DEFAULT_CLOUD_MODEL,
@@ -126,10 +127,10 @@ export function loadSettings(): Settings {
       ...parsed,
       features: { ...DEFAULT_SETTINGS.features, ...(parsed.features ?? {}) },
     }
-    // Before modes existed, "None" was the off switch. Carry that choice over, then use a real effort.
-    if (merged.aiLevel === 'none') {
-      if (parsed.aiMode === undefined) merged.aiMode = 'off'
-      merged.aiLevel = 'moderate'
+    // A briefly-shipped build stored "off" as a mode; the off switch is AI usage = None, so map it back.
+    if ((merged.aiMode as string) === 'off') {
+      merged.aiMode = 'cloud'
+      merged.aiLevel = 'none'
     }
     return merged
   } catch {

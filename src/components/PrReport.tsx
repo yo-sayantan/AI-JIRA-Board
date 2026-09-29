@@ -277,8 +277,8 @@ export function PrReportOverlay({
                   {generating
                     ? 'Being enriched in the AI Intern container with the model set in Settings — this report refreshes here when it lands.'
                     : aiEnrichment?.worker?.mode === 'off'
-                      ? 'AI usage is Off in Settings, so Regenerate keeps this report deterministic. Choose Local model or Cloud API there to enrich it.'
-                      : 'Regenerate rebuilds this report with AI enrichment in the AI Intern container, using the model and effort set in Settings.'}
+                      ? 'AI usage is None in Settings, so Regenerate keeps this report deterministic. Choose Low, Moderate or Full there to enrich it.'
+                      : 'Regenerate rebuilds this report with AI enrichment in the AI Intern container, using the level, runtime and model set in Settings.'}
                 </span>
               )}
               {!report.enriched && aiWorker && aiEnrichment?.worker?.last && !aiEnrichment.worker.last.ok && aiEnrichment.worker.last.key === report.key && (

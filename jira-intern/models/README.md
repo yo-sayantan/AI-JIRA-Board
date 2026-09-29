@@ -1,6 +1,6 @@
 # Local model files
 
-Drop `.gguf` model files here for **Settings → AI usage → Local model**. The AI Intern container
+Drop `.gguf` model files here for **Settings → AI Intern → Local model**. The AI Intern container
 registers every file it finds with the JIRA-LLM runtime (Ollama) under a name derived from the file
 name — `Qwen3-8B-Q4_K_M.gguf` becomes `qwen3-8b-q4_k_m` — and Settings lists it as ready.
 

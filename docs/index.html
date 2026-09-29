@@ -451,8 +451,9 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
         <h3>How it works</h3>
         <p class="small">The board container runs no AI. When a PR Readiness Report is generated it writes the deterministic base and
           hands the ticket to a second container from the same image, <code class="inl">JIRA-AI-Intern</code>, which enriches the
-          report the way <b>Settings → AI usage</b> says. Nothing runs on your Mac outside Docker, and there is no terminal step:
-          <b>Regenerate</b> and the bulk runs follow the mode you chose. <b>Off</b> keeps reports deterministic.</p>
+          report the way <b>Settings</b> says: <b>AI usage</b> sets the level (None = deterministic), <b>AI Intern</b> sets where the AI
+          runs and with which model. Nothing runs on your Mac outside Docker, and there is no terminal step:
+          <b>Regenerate</b> and the bulk runs follow what you chose.</p>
         <table>
           <tr><th>Mode</th><th>What runs</th><th>Speed / cost</th><th>Needs</th></tr>
           <tr><td><b>Local model</b></td><td>Ollama in the <code class="inl">JIRA-LLM</code> container, CPU-only</td><td>Slow — a few tokens per second on an 8B model — free, nothing leaves your machine</td><td>a <code class="inl">.gguf</code> file in <code class="inl">jira-intern/models/</code></td></tr>
@@ -496,7 +497,7 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
             <code class="inl">-00001-of-0000N</code> set).</li>
           <li>Move it into <code class="inl">jira-intern/models/</code> in this repository. Keep the file name simple (letters,
             digits, dots, dashes).</li>
-          <li>In the board: Settings → AI usage → <b>Local model</b>, then <code class="inl">bash start-jira-board.sh</code> once so
+          <li>In the board: Settings → AI Intern → <b>Local model</b> (and a level other than None in AI usage), then <code class="inl">bash start-jira-board.sh</code> once so
             the JIRA-LLM runtime starts. Within a minute the file shows under <i>Ready in the runtime</i> — click it.</li>
         </ol>
         <pre><button class="copy">Copy</button><span class="cmt"># alternative when the network is fast: let Ollama fetch a model by tag</span>
@@ -512,7 +513,7 @@ docker logs -f JIRA-AI-Intern</pre>
       <div class="card">
         <h3>Cloud API instead</h3>
         <p class="small">Add the key to your secrets file (<code class="inl">~/.cursor/mcp-secrets.env</code>), redeploy, then pick
-          <b>Cloud API</b> in Settings and a model — <code class="inl">claude-opus-5</code> is the default, <code class="inl">claude-sonnet-5</code>
+          <b>Cloud API</b> under Settings → AI Intern and a model — <code class="inl">claude-opus-5</code> is the default, <code class="inl">claude-sonnet-5</code>
           is cheaper and faster. For an OpenAI-compatible endpoint set <code class="inl">OPENAI_BASE_URL</code> as well.</p>
         <pre><button class="copy">Copy</button>ANTHROPIC_API_KEY=sk-ant-…          <span class="cmt"># Claude</span>
 OPENAI_API_KEY=…                    <span class="cmt"># OpenAI-compatible</span>

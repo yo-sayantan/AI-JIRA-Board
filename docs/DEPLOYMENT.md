@@ -119,11 +119,12 @@ PR/Jira content never leaves the machine.
 The board's container runs no AI (`SKIP_SUMMARY=1`). When a report is generated there, `pr-report.sh` writes
 the deterministic base and leaves a hand-off marker in `jira-intern/reports/.enrich/`. A second container from
 the **same image**, `JIRA-AI-Intern` (`jira-intern/ai_intern.py`), watches that folder and enriches each
-report the way **Settings → AI usage** says — nothing runs on the host, no terminal step:
+report the way **Settings** says (AI usage = the level; AI Intern = the runtime) — nothing runs on the host,
+no terminal step:
 
-| Mode | What runs | Speed / cost | Needs |
+| Setting | What runs | Speed / cost | Needs |
 | --- | --- | --- | --- |
-| **Off** | nothing — reports stay deterministic | — | — |
+| **AI usage: None** | nothing — reports stay deterministic | — | — |
 | **Local model** | Ollama in the `JIRA-LLM` container (`--profile local-llm`), CPU-only | slow (a few tokens/s on an 8B model), free, private | a `.gguf` in `jira-intern/models/` |
 | **Cloud API** | Claude (Messages API) or any OpenAI-compatible endpoint | fast, uses tokens | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in the secrets file |
 

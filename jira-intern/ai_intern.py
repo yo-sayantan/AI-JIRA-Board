@@ -196,9 +196,13 @@ def run_py(*args, timeout=120):
 
 # ── settings & status ─────────────────────────────────────────────────────────
 def settings():
+    """AI usage = None is the off switch (as in the board's Settings); the mode only says which runtime."""
     s = read_json(SETTINGS, {}) or {}
-    level = s.get("aiLevel") if s.get("aiLevel") in EFFORT else "moderate"
-    mode = s.get("aiMode") if s.get("aiMode") in ("off", "local", "cloud") else "off"
+    raw_level = s.get("aiLevel")
+    level = raw_level if raw_level in EFFORT else "moderate"
+    mode = s.get("aiMode") if s.get("aiMode") in ("local", "cloud") else "cloud"
+    if raw_level == "none" or s.get("aiMode") == "off":
+        mode = "off"
     return {
         "mode": mode,
         "level": level,
@@ -815,6 +819,8 @@ def main():
 
     last_probe = 0.0
     last_wait_log = ""
+    waiting_since = None  # when the current "cannot serve" reason first appeared
+    GRACE = 120  # seconds a hand-off may wait for a runtime that is still coming up
     while True:
         cfg = settings()
         set_state(mode=cfg["mode"], effort=cfg["level"],
@@ -829,16 +835,31 @@ def main():
             if cfg["mode"] == "off":
                 for k in keys:
                     os.remove(os.path.join(QUEUE, k))
-                log(f"AI usage is Off — discarded {len(keys)} stale hand-off(s): {', '.join(keys)}")
+                log(f"AI usage is None — discarded {len(keys)} stale hand-off(s): {', '.join(keys)}")
             else:
                 reason = waiting_reason(cfg)
                 if reason:
                     if reason != last_wait_log:
                         log(f"{len(keys)} hand-off(s) waiting — {reason}")
                         last_wait_log = reason
+                        waiting_since = time.time()
                     set_runtime(error=reason)
+                    # A runtime that is merely starting deserves a moment; a missing key or model does not
+                    # fix itself. Past the grace period the reports go back to the board deterministic,
+                    # with the reason in their footer, instead of showing "generating" indefinitely.
+                    if waiting_since and time.time() - waiting_since > GRACE:
+                        for k in keys:
+                            try:
+                                os.remove(os.path.join(QUEUE, k))
+                            except OSError:
+                                pass
+                            run_py("status-remove", k)
+                        set_state(last={"key": keys[-1], "ok": False, "at": now_iso(), "detail": clip(reason, 400)})
+                        log(f"gave up on {len(keys)} hand-off(s) after {GRACE}s — {reason}")
+                        waiting_since = None
                 else:
                     last_wait_log = ""
+                    waiting_since = None
                     key = keys[0]
                     try:
                         os.remove(os.path.join(QUEUE, key))
