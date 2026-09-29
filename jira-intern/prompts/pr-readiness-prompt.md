@@ -39,8 +39,13 @@ The runner validates your file against the base and RESTORES THE BASE if anythin
 may do — nothing else:
   1. ADD one tab  {id:"ai", title:"AI assessment", tone:"violet"}  after "scope" (before "sources") with:
      stats (files Required / Neutral cleanup / Risky · +/- lines · test files touched · config/migration files),
-     cards — one per changed file (≤12; badge Required|Neutral cleanup|Risky|Unrelated, badgeTone
-     info|neutral|danger|warning; body = what changed and why it is/isn't needed; detail = blast radius),
+     cards — the 8–12 highest-impact changed files (or every file when fewer than 8); assess the complete fetched list,
+     then prioritize Risky/urgent production changes, security/auth/permissions, migrations/schema/data,
+     configuration/deployment, public APIs/contracts, core business logic, concurrency/error handling, and critical
+     tests. Omit generated/lock/formatting/snapshot/routine files first. Order highest impact first and never simply use
+     source order. Badge Required|Neutral cleanup|Risky|Unrelated, badgeTone info|neutral|danger|warning;
+     body = what changed and why it is/isn't needed; detail = blast radius. Use exact paths from the fetched changes.
+     The stats must show total changed, prioritized, and not-itemized counts; label a capped/incomplete fetch honestly,
      list — "Review focus", ≤5 bullets an approver must check, each citing file:line,
      callout — "Production proof": for incident tickets, the live signal (failed spans / Davis problems, with the
      exact DQL) confirming whether the symptom persists; otherwise "No production evidence: <reason>" (neutral),

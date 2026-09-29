@@ -141,7 +141,7 @@ def read_json(path):
 
 def write_json_atomic(path, obj):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".swap"
+    tmp = f"{path}.{os.getpid()}.swap"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
@@ -674,16 +674,24 @@ def _status_load():
     return st
 
 
+def _status_update(fn):
+    """Read-modify-write under an exclusive lock — several report workers run at once."""
+    import fcntl
+
+    os.makedirs(REPORTS, exist_ok=True)
+    with open(STATUS + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        st = _status_load()
+        fn(st["generating"])
+        write_json_atomic(STATUS, st)
+
+
 def status_add(key, pid):
-    st = _status_load()
-    st["generating"][key.upper()] = {"pid": int(pid), "startedAt": now_iso()}
-    write_json_atomic(STATUS, st)
+    _status_update(lambda g: g.__setitem__(key.upper(), {"pid": int(pid), "startedAt": now_iso()}))
 
 
 def status_remove(key):
-    st = _status_load()
-    st["generating"].pop(key.upper(), None)
-    write_json_atomic(STATUS, st)
+    _status_update(lambda g: g.pop(key.upper(), None))
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

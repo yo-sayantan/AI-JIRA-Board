@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
-import { AI_LEVELS, FEATURES, type FeatureKey, type Settings } from '../lib/settings'
+import { AI_LEVELS, FEATURES, LIMITS, clampSetting, type FeatureKey, type Settings } from '../lib/settings'
 import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice } from '../lib/runner'
 import fallbackCatalog from '../../ai-intern/models.json'
 import { hexToRgba } from '../lib/format'
@@ -160,6 +161,8 @@ export function SettingsPanel({
 }) {
   const [draft, setDraft] = useState(saved)
   const wasOpen = useRef(false)
+  const panelRef = useRef<HTMLElement>(null)
+  const [pricesOpen, setPricesOpen] = useState(false)
   useEffect(() => {
     if (open && !wasOpen.current) setDraft(saved)
     wasOpen.current = open
@@ -202,6 +205,7 @@ export function SettingsPanel({
           aria-label="Board settings"
         >
           <motion.section
+            ref={panelRef}
             className="flex max-h-[calc(100dvh-24px)] w-full max-w-[960px] flex-col overflow-visible rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
             initial={{ y: 20, scale: 0.98 }}
             animate={{ y: 0, scale: 1 }}
@@ -304,11 +308,51 @@ export function SettingsPanel({
 
                 <Section title="AI intern">
                   {aiLevelSynced ? (
-                    <AiInternControls settings={settings} onChange={onChange} aiStatus={aiStatus} />
+                    <AiInternControls settings={settings} onChange={onChange} aiStatus={aiStatus} pricesOpen={pricesOpen} onTogglePrices={() => setPricesOpen((v) => !v)} panelRef={panelRef} />
                   ) : (
                     <p className="h-8 text-[11px] leading-snug text-[var(--muted)]">
                       Local / Cloud and the model picker need JIRA-AI-Intern running.
                     </p>
+                  )}
+                </Section>
+
+                <Section title="Jobs & notifications">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                    <NumberField
+                      label="Parallel reports"
+                      hint="AI reports built at once when regenerating"
+                      unit="at once"
+                      limit="reportParallel"
+                      value={settings.reportParallel}
+                      onChange={(v) => set('reportParallel', v)}
+                    />
+                    <NumberField
+                      label="Parallel archive fetches"
+                      hint="Tickets fetched at once when rebuilding the archive"
+                      unit="at once"
+                      limit="archiveParallel"
+                      value={settings.archiveParallel}
+                      onChange={(v) => set('archiveParallel', v)}
+                    />
+                    <NumberField
+                      label="Notification time"
+                      hint="Seconds a notification stays before it closes itself"
+                      unit="sec"
+                      limit="toastSeconds"
+                      value={settings.toastSeconds}
+                      onChange={(v) => set('toastSeconds', v)}
+                    />
+                    <NumberField
+                      label="Notifications on screen"
+                      hint="When more arrive, the oldest close first"
+                      unit="max"
+                      limit="toastMax"
+                      value={settings.toastMax}
+                      onChange={(v) => set('toastMax', v)}
+                    />
+                  </div>
+                  {!aiLevelSynced && (
+                    <p className="mt-1.5 text-[11px] text-[var(--muted)]">Parallel settings reach the intern only when the local server is running.</p>
                   )}
                 </Section>
               </div>
@@ -381,6 +425,60 @@ function FeatureCard({
   )
 }
 
+function NumberField({
+  label,
+  hint,
+  unit,
+  limit,
+  value,
+  onChange,
+}: {
+  label: string
+  hint: string
+  unit: string
+  limit: keyof typeof LIMITS
+  value: number
+  onChange: (v: number) => void
+}) {
+  const { min, max } = LIMITS[limit]
+  const [text, setText] = useState(String(value))
+  useEffect(() => setText(String(value)), [value])
+  const commit = (raw: string) => {
+    const v = clampSetting(limit, raw, value)
+    setText(String(v))
+    if (v !== value) onChange(v)
+  }
+  return (
+    <label className="flex min-w-0 flex-col gap-1" title={`${hint} (${min}–${max})`}>
+      <span className="truncate text-[11px] font-semibold text-[var(--ink-soft)]">{label}</span>
+      <span className="flex items-center gap-1.5">
+        <input
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          step={1}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value)
+            const n = Number(e.target.value)
+            if (e.target.value !== '' && Number.isInteger(n) && n >= min && n <= max) onChange(n)
+          }}
+          onBlur={(e) => commit(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit((e.target as HTMLInputElement).value)
+          }}
+          className="h-8 w-16 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] tabular-nums text-[var(--ink)] outline-none focus:border-[var(--muted)]"
+          aria-label={`${label}, ${min} to ${max}`}
+        />
+        <span className="truncate text-[10.5px] text-[var(--muted)]">
+          {unit} · {min}–{max}
+        </span>
+      </span>
+    </label>
+  )
+}
+
 function HourSelect({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
   return (
     <select
@@ -424,10 +522,16 @@ function AiInternControls({
   settings,
   onChange,
   aiStatus,
+  pricesOpen,
+  onTogglePrices,
+  panelRef,
 }: {
   settings: Settings
   onChange: (next: Settings) => void
   aiStatus?: AiInternStatus | null
+  pricesOpen: boolean
+  onTogglePrices: () => void
+  panelRef: RefObject<HTMLElement | null>
 }) {
   const fallback = (fallbackCatalog.models ?? []) as AiCatalogModel[]
   const [catalog, setCatalog] = useState<AiCatalogModel[]>(aiStatus?.catalog?.models?.length ? aiStatus.catalog.models : fallback)
@@ -504,7 +608,7 @@ function AiInternControls({
 
       <div className="min-h-[9.75rem]">
         {settings.aiBackend === 'cloud' ? (
-          <CloudModelPicker settings={settings} onChange={onChange} />
+          <CloudModelPicker settings={settings} onChange={onChange} pricesOpen={pricesOpen} onTogglePrices={onTogglePrices} panelRef={panelRef} />
         ) : (
           <LocalModelPicker
             catalog={catalog}
@@ -533,7 +637,109 @@ const CLOUD_EFFORTS: { id: Settings['aiCloudEffort']; label: string }[] = [
   { id: 'medium', label: 'Medium' },
 ]
 
-function CloudModelPicker({ settings, onChange }: { settings: Settings; onChange: (s: Settings) => void }) {
+/** Standard (non-fast) list rates, USD per 1M tokens. Medium bills at these rates.
+ *  Source: cursor.com/docs/models-and-pricing. Only models at or under $10 output. */
+const CURSOR_RATES: Record<string, { input: string; cache: string; output: string }> = {
+  'gpt-5.6-luna': { input: '$0.20', cache: '$0.02', output: '$1.20' },
+  'composer-2.5': { input: '$0.50', cache: '$0.20', output: '$2.50' },
+  'gemini-3-flash': { input: '$0.50', cache: '$0.05', output: '$3' },
+  'kimi-k2.7-code': { input: '$0.95', cache: '$0.19', output: '$4' },
+  'glm-5.2': { input: '$1.40', cache: '$0.26', output: '$4.40' },
+  'grok-4.7': { input: '$2', cache: '$0.50', output: '$6' },
+  'grok-4.6': { input: '$2', cache: '$0.50', output: '$6' },
+  'gemini-3.6-flash': { input: '$1.50', cache: '$0.15', output: '$7.50' },
+  'claude-sonnet-5': { input: '$2', cache: '$0.20', output: '$10' },
+}
+
+function CursorPriceCard({
+  anchor,
+  models,
+  onClose,
+}: {
+  anchor: RefObject<HTMLElement | null>
+  models: CloudModelChoice[]
+  onClose: () => void
+}) {
+  const [box, setBox] = useState<{ top: number; left: number; maxH: number } | null>(null)
+  useLayoutEffect(() => {
+    const place = () => {
+      const el = anchor.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const width = Math.min(400, window.innerWidth - 16)
+      const gap = 12
+      const fitsRight = window.innerWidth - r.right - gap >= width
+      const left = fitsRight ? r.right + gap : Math.max(8, r.left - gap - width)
+      const top = Math.max(8, r.top)
+      setBox({ top, left, maxH: Math.max(160, window.innerHeight - top - 8) })
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.visualViewport?.addEventListener('resize', place)
+    window.visualViewport?.addEventListener('scroll', place)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.visualViewport?.removeEventListener('resize', place)
+      window.visualViewport?.removeEventListener('scroll', place)
+    }
+  }, [anchor, models])
+  if (!box) return null
+  return createPortal(
+    <div
+      className="fixed z-[120] w-[min(92vw,400px)] overflow-auto rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] p-2.5 shadow-2xl"
+      style={{ top: box.top, left: box.left, maxHeight: box.maxH }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-[var(--ink)]">Estimate · medium · standard speed</span>
+        <button type="button" onClick={onClose} className="text-[12px] text-[var(--muted)] hover:text-[var(--ink)]" aria-label="Close prices">
+          ×
+        </button>
+      </div>
+      <table className="w-full border-collapse text-[10.5px]">
+        <thead>
+          <tr className="text-left text-[var(--muted)]">
+            <th className="pb-1 pr-2 font-semibold">Model</th>
+            <th className="pb-1 pr-2 font-semibold">Input</th>
+            <th className="pb-1 pr-2 font-semibold">Cache read</th>
+            <th className="pb-1 font-semibold">Output</th>
+          </tr>
+        </thead>
+        <tbody>
+          {models.map((m) => {
+            const rate = CURSOR_RATES[m.id]
+            return (
+              <tr key={m.id} className="border-t border-[var(--line)] text-[var(--ink-soft)]">
+                <td className="py-1 pr-2 font-medium text-[var(--ink)]">{m.label}</td>
+                <td className="py-1 pr-2 tabular-nums">{rate?.input ?? '—'}</td>
+                <td className="py-1 pr-2 tabular-nums">{rate?.cache ?? '—'}</td>
+                <td className="py-1 tabular-nums">{rate?.output ?? '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="mt-1.5 text-[10px] leading-snug text-[var(--muted)]">
+        USD per 1M tokens. Low uses less tokens than Medium.
+      </p>
+    </div>,
+    document.body,
+  )
+}
+
+function CloudModelPicker({
+  settings,
+  onChange,
+  pricesOpen,
+  onTogglePrices,
+  panelRef,
+}: {
+  settings: Settings
+  onChange: (s: Settings) => void
+  pricesOpen: boolean
+  onTogglePrices: () => void
+  panelRef: RefObject<HTMLElement | null>
+}) {
   const [claude, setClaude] = useState<CloudModelChoice[]>([])
   const [cursor, setCursor] = useState<CloudModelChoice[]>([])
   const [gemini, setGemini] = useState<CloudModelChoice[]>([])
@@ -577,10 +783,14 @@ function CloudModelPicker({ settings, onChange }: { settings: Settings; onChange
   const efforts = selected?.efforts ?? []
 
   useEffect(() => {
-  if (loadedFor !== provider || !models.length) return
-  if (settings.aiCloudModel) return
+    if (loadedFor !== provider || !models.length) return
+    if (models.some((m) => m.id === settings.aiCloudModel)) return
     const prefer =
-      provider === 'claude' ? models.find((m) => /haiku/i.test(m.id)) || models[0] : models[0]
+      provider === 'cursor'
+        ? models.find((m) => m.id === 'grok-4.7') || models[0]
+        : provider === 'claude'
+          ? models.find((m) => /haiku/i.test(m.id)) || models[0]
+          : models[0]
     onChange({ ...settings, aiCloudModel: prefer.id })
   }, [loadedFor, models, provider, settings, onChange])
 
@@ -593,7 +803,7 @@ function CloudModelPicker({ settings, onChange }: { settings: Settings; onChange
     : err
       ? err
       : provider === 'cursor'
-        ? 'A few Gemini Flash models, GPT-4o, Grok, and Chinese models. Low is the default.'
+        ? 'Value picks only: capable models at or under $10 output per 1M tokens, standard speed.'
         : provider === 'gemini'
           ? 'Gemini Flash models from your Google API key. Pro and Ultra are left off.'
           : 'Haiku only. Opus and Sonnet are left off this list.'
@@ -620,12 +830,13 @@ function CloudModelPicker({ settings, onChange }: { settings: Settings; onChange
           onClick={() => onChange({ ...settings, aiCloudProvider: 'claude', aiCloudModel: '' })}
         />
       </div>
+      <div className="relative flex items-center gap-1.5">
       <select
         value={selected?.id ?? ''}
         onChange={(e) => onChange({ ...settings, aiCloudModel: e.target.value })}
         aria-label={provider === 'cursor' ? 'Cursor model' : provider === 'gemini' ? 'Gemini model' : 'Claude model'}
         disabled={!models.length}
-        className="h-8 min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--muted)] disabled:opacity-60"
+        className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--muted)] disabled:opacity-60"
       >
         {!models.length && (
           <option value="">{loadedFor !== provider ? 'Loading models…' : hasKey ? 'No cheaper models on this key' : 'No key yet'}</option>
@@ -636,6 +847,20 @@ function CloudModelPicker({ settings, onChange }: { settings: Settings; onChange
           </option>
         ))}
       </select>
+      {provider === 'cursor' && (
+        <button
+          type="button"
+          onClick={onTogglePrices}
+          aria-expanded={pricesOpen}
+          aria-label="Show Cursor model prices"
+          title="Price estimate per model"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--line)] text-[12px] font-bold italic text-[var(--muted)] hover:border-[var(--muted)] hover:text-[var(--ink)]"
+        >
+          i
+        </button>
+      )}
+      {provider === 'cursor' && pricesOpen && <CursorPriceCard anchor={panelRef} models={models} onClose={onTogglePrices} />}
+      </div>
       {provider === 'cursor' && efforts.length > 0 ? (
         <select
           value={efforts.includes(settings.aiCloudEffort) ? settings.aiCloudEffort : efforts[0]}

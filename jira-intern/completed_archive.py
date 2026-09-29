@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 import ssl
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from html import escape
 
@@ -559,7 +559,7 @@ def main():
     load_env()
     os.makedirs(CACHE, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    set_progress("archive", done=0, total=0, phase="starting")
+    set_progress("archive", done=0, total=0, phase="starting", pct=0)
 
     try:
         return _main(ts)
@@ -583,7 +583,7 @@ def _main(ts):
     # `was` catches work reassigned away from me after I finished it.
     # A scoped run (year, since, or one key) narrows the Jira search. The merge then
     # updates only those rows so the rest of completed[] stays.
-    set_progress("archive", done=0, total=0, phase="searching")
+    set_progress("archive", done=0, total=0, phase="searching", pct=0)
     scope, year, since, one_key = _scope()
     scoped = scope != "all"
     base_jql = "(assignee was currentUser() OR assignee = currentUser())"
@@ -609,7 +609,7 @@ def _main(ts):
     # ── 2. Pull in the PARENT of each of my sub-tickets, for lineage/context only — even when
     # it belongs to someone else. We do NOT fetch its other children: a team-mate's sibling
     # sub-ticket I never touched is not my work to track (see the module docstring).
-    set_progress("archive", done=0, total=0, phase="parents")
+    set_progress("archive", done=0, total=0, phase="parents", pct=5)
     for issue in search_keys(sorted(parent_keys), expand="changelog"):
         issues.setdefault(issue["key"], issue)
 
@@ -625,18 +625,27 @@ def _main(ts):
     done_keys.sort(key=lambda k: issues[k]["fields"].get("resolutiondate") or "", reverse=True)
 
     # ── 5. Which of those actually need rebuilding.
+    # "All completed tickets" is an explicit full refresh: Jira is the source of truth, so
+    # rebuild every matching ticket even when a cache entry already exists. Previously an
+    # all-scope run reused every schema-current cache entry; it discovered historical keys
+    # but refreshed none of their details, which made this option behave like a no-op.
+    # Scoped runs are also explicit refreshes, while cache reuse remains available only as
+    # prior/fallback data during a rebuild.
+    clean_rebuild = scope == "all"
     priors, stale = {}, []
     for key in done_keys:
         path = os.path.join(CACHE, f"{key}.json")
         prior = None
-        if os.path.isfile(path):
+        if not clean_rebuild and os.path.isfile(path):
             try:
                 prior = json.load(open(path))
             except Exception:
                 prior = None
         priors[key] = prior
-        if scoped or prior is None or cache_is_stale(prior):
-            stale.append(key)
+        # Every menu action is a requested refresh of its selected result set. Cache entries
+        # still supply fallback fields when an auxiliary lookup (for example dev-status)
+        # fails, but they must not prevent Jira's current data from being rebuilt.
+        stale.append(key)
     stale = stale[:MAX_FETCH]
 
     # Progress denominator: tickets that actually need work this run. If the cache is warm,
@@ -647,17 +656,33 @@ def _main(ts):
     # ── 6. One parallel dev-status batch for the stale tickets AND their children, so no
     # ticket build has to make its own branch/PR calls. (Children are my own sub-tickets, so
     # they are usually already in `stale` — this just guarantees a nested row has its PRs.)
-    set_progress("archive", done=0, total=total, phase="devinfo")
+    set_progress("archive", done=0, total=total, phase="devinfo", pct=5)
     dev_targets = set(stale)
     for key in stale:
         dev_targets.update(c["key"] for c in children_by_parent.get(key, []))
-    dev_map = devinfo.fetch_many(sorted(dev_targets), workers=WORKERS) if dev_targets else {}
+
+    def dev_progress(done, phase_total, key):
+        weighted = 5 + (50 * done / phase_total if phase_total else 50)
+        set_progress("archive", done=done, total=phase_total, phase="devinfo", current=key, pct=weighted)
+
+    dev_map = (
+        devinfo.fetch_many(sorted(dev_targets), workers=WORKERS, on_progress=dev_progress)
+        if dev_targets
+        else {}
+    )
 
     newly_cached, failed = [], []
     pending = 0
 
     def build(key):
         try:
+            # A full rebuild must not inherit stale ticket details. Remove each old cache
+            # immediately before replacing it, after Jira and dev-status have been fetched.
+            if clean_rebuild:
+                try:
+                    os.remove(os.path.join(CACHE, f"{key}.json"))
+                except FileNotFoundError:
+                    pass
             ticket = build_completed(
                 issues[key], priors.get(key), dev_map, children_by_parent.get(key, []),
                 pr_overrides, key in mine_keys,
@@ -668,9 +693,11 @@ def _main(ts):
             return key, e
 
     if stale:
-        set_progress("archive", done=0, total=total, phase="building")
+        set_progress("archive", done=0, total=total, phase="building", pct=55)
         with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-            for key, err in ex.map(build, stale):
+            futures = {ex.submit(build, key): key for key in stale}
+            for future in as_completed(futures):
+                key, err = future.result()
                 if err is not None:
                     sys.stderr.write(f"WARN build {key}: {err}\n")
                     failed.append(key)
@@ -685,14 +712,18 @@ def _main(ts):
                             merge_completed_only(partial)
                         pending = 0
                 done_n = len(newly_cached) + len(failed)
-                set_progress("archive", done=done_n, total=total, phase="building", current=key)
+                weighted = 55 + 43 * done_n / total
+                set_progress("archive", done=done_n, total=total, phase="building", current=key, pct=weighted)
     else:
         # Warm cache — still walk the list so the button fills while we assemble.
-        set_progress("archive", done=0, total=total, phase="assembling")
+        set_progress("archive", done=0, total=total, phase="assembling", pct=55)
         for i, key in enumerate(done_keys, start=1):
-            set_progress("archive", done=i, total=total, phase="assembling", current=key)
+            set_progress(
+                "archive", done=i, total=total, phase="assembling", current=key,
+                pct=55 + 43 * i / total,
+            )
 
-    set_progress("archive", done=total, total=total, phase="writing")
+    set_progress("archive", done=total, total=total, phase="writing", pct=99)
     rows = assemble(done_keys)
     if scoped:
         upsert_completed(rows)
@@ -711,7 +742,7 @@ def _main(ts):
         f"Jira dev-status; merged completed[] only — tickets[] untouched."
     )
     prepend_status(note)
-    set_progress("archive", done=total, total=total, phase="done")
+    set_progress("archive", done=total, total=total, phase="done", pct=100)
     print(json.dumps({
         "completed_in_archive": len(completed),
         "mine": mine_count,
@@ -720,6 +751,7 @@ def _main(ts):
         "with_prs": sum(1 for r in completed if r.get("prs")),
         "universe_scanned": len(issues),
         "rebuilt_this_run": len(newly_cached),
+        "cache_cleared_and_rebuilt": len(newly_cached) if clean_rebuild else 0,
         "reused_cache": len(done_keys) - len(stale),
         "failed": failed[:10],
     }, indent=2))

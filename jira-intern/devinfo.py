@@ -23,7 +23,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from _config import endpoints, load_config
 
@@ -241,9 +241,10 @@ def fetch_one(issue_id, enrich_open=True):
     return {"branches": branches, "prs": prs, "branch": branch, "pr": pr}
 
 
-def fetch_many(keys, ids=None, workers=10, enrich_open=True):
+def fetch_many(keys, ids=None, workers=10, enrich_open=True, on_progress=None):
     """Dev info for many issue keys at once. Keys whose lookup failed are omitted, never
-    reported as empty — an empty result would wipe good cached data."""
+    reported as empty — an empty result would wipe good cached data. `on_progress`, when
+    supplied, receives (completed_count, total_count, key) as each lookup finishes."""
     ids = ids or resolve_issue_ids(keys)
     todo = [(k, ids[k]) for k in keys if k in ids]
     out = {}
@@ -255,7 +256,11 @@ def fetch_many(keys, ids=None, workers=10, enrich_open=True):
         return key, fetch_one(issue_id, enrich_open)
 
     with ThreadPoolExecutor(max_workers=min(workers, len(todo))) as ex:
-        for key, info in ex.map(one, todo):
+        futures = {ex.submit(one, pair): pair[0] for pair in todo}
+        for completed, future in enumerate(as_completed(futures), start=1):
+            key, info = future.result()
             if info is not None:
                 out[key] = info
+            if on_progress:
+                on_progress(completed, len(todo), key)
     return out

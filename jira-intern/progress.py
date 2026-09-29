@@ -14,12 +14,15 @@ INTERN = os.path.dirname(os.path.abspath(__file__))
 PROGRESS_PATH = os.path.join(INTERN, ".progress.json")
 
 
-def set_progress(job, *, done=0, total=0, phase="", current=None):
+def set_progress(job, *, done=0, total=0, phase="", current=None, pct=None):
     """Overwrite the progress snapshot. `done`/`total` drive the button fill; `phase`/`current`
-    are for the label. Safe to call from many threads — each write is atomic."""
+    are for the label. `pct` can represent weighted multi-phase progress while done/total
+    remain the truthful count for the current phase. Safe to call from many threads."""
     total = max(0, int(total or 0))
     done = max(0, min(int(done or 0), total if total else int(done or 0)))
-    pct = round(100.0 * done / total, 1) if total > 0 else 0.0
+    if pct is None:
+        pct = 100.0 * done / total if total > 0 else 0.0
+    pct = round(max(0.0, min(100.0, float(pct))), 1)
     payload = {
         "job": job,  # "daily" | "archive"
         "phase": phase or "",

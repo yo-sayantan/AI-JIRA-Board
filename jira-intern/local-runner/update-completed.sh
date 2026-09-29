@@ -2,8 +2,8 @@
 # Weekly "Completed archive" agent — the SLOW job: fetches EVERY closed ticket I've ever owned, with real
 # Bitbucket branches + all PRs, caches each, and MERGES them into data.json's completed[] (leaving the active
 # tickets[] alone). Keep it SEPARATE from the daily run-intern.sh and schedule it weekly.
-#   bash update-completed.sh             # incremental — reuses cache, only fetches new/stale tickets
-#   FRESH=1 bash update-completed.sh     # wipe the cache and rebuild the whole archive from scratch
+#   bash update-completed.sh             # refresh every completed ticket ever assigned to me
+#   FRESH=1 bash update-completed.sh     # also wipe the cache before rebuilding the whole archive
 #   TIMEOUT_SEC=10800 bash update-completed.sh   # override the 2h ceiling
 set -o pipefail
 
@@ -23,6 +23,8 @@ AGENT_SECRETS="$HOME/.cursor/mcp-secrets.env"; AGENT_INSTALL_HINT='curl https://
 MODEL_MAIN=auto; TIMEOUT_WEEKLY=7200
 command -v node >/dev/null 2>&1 && eval "$(node "$HERE/config.mjs" shellenv 2>/dev/null)"
 if [ -f "$AGENT_SECRETS" ]; then set -a; . "$AGENT_SECRETS"; set +a; fi
+# completed_archive.py reads these from its environment; shellenv only assigns them.
+export COMPLETED_WORKERS COMPLETED_MAX_FETCH
 PROMPT_FILE="$HERE/../prompts/intern-completed-prompt.md"
 GIT_ROOT="$(cd "$HERE/../../.." && pwd)"
 INTERN_DIR="$(cd "$HERE/.." && pwd)"

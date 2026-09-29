@@ -131,6 +131,10 @@ export interface ReportVerdict {
   /** 0–100 readiness score (derived), null when not meaningful. */
   score?: number | null
   provenance?: ReportProvenance
+  /** The evidence behind the label, without the label or the next step. */
+  reason?: string | null
+  /** The one action that moves the ticket forward, when there is one. */
+  next?: { owner?: string | null; action?: string | null; due?: string | null } | null
 }
 
 export interface PrReport {

@@ -7,8 +7,37 @@ import { TrophyIcon } from './Icons'
 
 const GREEN = '#16a34a'
 
+const PHASE_LABEL: Record<string, string> = {
+  starting: 'Starting',
+  searching: 'Finding all assigned tickets',
+  parents: 'Fetching parent context',
+  devinfo: 'Refreshing branches and PRs',
+  building: 'Refreshing ticket details',
+  assembling: 'Assembling archive',
+  writing: 'Saving archive',
+  done: 'Complete',
+}
+
 function daysAgo(n: number): string {
   return dateInputDaysAgo(n, APP_CONFIG.timeZone)
+}
+
+/** Parallel workers only apply during devinfo and building; other phases are serial. */
+function archiveRunningCount(total: number, done: number, phase: string | undefined, parallel: number): number {
+  const remaining = Math.max(0, total - done)
+  if (total <= 0 || remaining <= 0) return 0
+  if (phase === 'devinfo' || phase === 'building') {
+    return Math.min(Math.max(1, parallel), remaining)
+  }
+  return 1
+}
+
+function archiveBusyLine(done: number, total: number, phase: string | undefined, parallel: number): string {
+  const phaseText = PHASE_LABEL[phase || '']
+  if (total <= 0) return `${phaseText || 'Starting the scan'}…`
+  const running = archiveRunningCount(total, done, phase, parallel)
+  if (running) return `${done}/${total} done · ${running} running · ${phaseText || 'Working'}`
+  return `${done}/${total} done · ${phaseText || 'Working'}`
 }
 
 export interface ArchiveMenuProps {
@@ -19,18 +48,19 @@ export interface ArchiveMenuProps {
   done: number
   total: number
   pct: number
-  current?: string | null
+  parallel: number
+  phase?: string
   onRun: (target: ArchiveScope) => void
   onStop: () => void
 }
 
 /** Small green archive button. The scope menu and the progress fill live in the window under it. */
-export function ArchiveMenu({ served, busy, blocked, done, total, pct, current, onRun, onStop }: ArchiveMenuProps) {
+export function ArchiveMenu({ served, busy, blocked, done, total, pct, parallel, phase, onRun, onStop }: ArchiveMenuProps) {
   const [open, setOpen] = useState(false)
   const [since, setSince] = useState(() => daysAgo(APP_CONFIG.archive?.defaultWindowDays ?? 30))
   const [key, setKey] = useState('')
   const wrapRef = useRef<HTMLDivElement>(null)
-  const fill = busy ? Math.max(8, Math.min(100, pct)) : 0
+  const fill = busy ? Math.max(0, Math.min(100, pct)) : 0
   const keyValid = /^[A-Za-z][A-Za-z0-9]+-\d+$/.test(key.trim())
   const thisYear = useMemo(() => currentYear(APP_CONFIG.timeZone), [])
   const windows = APP_CONFIG.archive?.presetWindowDays?.length ? APP_CONFIG.archive.presetWindowDays : [30, 90]
@@ -70,7 +100,7 @@ export function ArchiveMenu({ served, busy, blocked, done, total, pct, current, 
         aria-expanded={open}
         title={
           busy
-            ? `Rebuilding the Completed archive${current ? ` — ${current}` : ''}. Open for progress.`
+            ? 'Rebuilding the Completed archive. Open for progress.'
             : 'Rebuild the Completed archive — all closed tickets, a date range, or one ticket'
         }
         className={`relative grid h-9 w-9 place-items-center overflow-hidden rounded-xl text-white card-shadow${busy ? ' jb-archive-busy' : ''}`}
@@ -104,11 +134,11 @@ export function ArchiveMenu({ served, busy, blocked, done, total, pct, current, 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
-            className="absolute right-0 z-50 mt-2 w-[330px] origin-top-right rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] shadow-2xl"
+            className="absolute right-0 z-50 mt-2 w-[330px] origin-top-right overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] shadow-2xl"
             role="menu"
           >
             <div
-              className="relative overflow-hidden border-b border-[var(--line)] px-3.5 py-2.5"
+              className="relative overflow-hidden rounded-t-xl border-b border-[var(--line)] px-3.5 py-2.5"
               style={{ background: hexToRgba(GREEN, busy ? 0.16 : 0.08) }}
               role={busy ? 'progressbar' : undefined}
               aria-valuenow={busy ? fill : undefined}
@@ -147,13 +177,11 @@ export function ArchiveMenu({ served, busy, blocked, done, total, pct, current, 
               )}
               <div className="relative">
                 <div className="text-[12px] font-extrabold" style={{ color: GREEN }}>
-                  Rebuild Completed archive
+                  {busy ? 'Rebuilding complete archive...' : 'Rebuild Completed archive'}
                 </div>
                 <div className="mt-0.5 text-[11px] text-[var(--muted)]">
                   {busy
-                    ? total > 0
-                      ? `${done}/${total} · ${Math.round(fill)}%${current ? ` · ${current}` : ''}`
-                      : 'Starting the scan…'
+                    ? archiveBusyLine(done, total, phase, parallel)
                     : 'Closed tickets you owned. A range or one ticket updates only those rows.'}
                 </div>
               </div>
@@ -168,7 +196,7 @@ export function ArchiveMenu({ served, busy, blocked, done, total, pct, current, 
               </div>
             ) : (
               <div className="flex flex-col gap-1 p-2">
-                <MenuItem label="All completed tickets" hint="full archive, incremental" disabled={busy || blocked} onClick={() => run({ scope: 'all' })} />
+                <MenuItem label="All completed tickets" hint="clear cached details and refetch your full history" disabled={busy || blocked} onClick={() => run({ scope: 'all' })} />
                 <MenuItem label={`This year (${thisYear})`} hint="resolved this year" disabled={busy || blocked} onClick={() => run({ scope: 'year', year: thisYear })} />
                 {windows.map((days) => (
                   <MenuItem key={days} label={`Last ${days} days`} hint={`resolved since ${daysAgo(days)}`} disabled={busy || blocked} onClick={() => run({ scope: 'since', since: daysAgo(days) })} />
@@ -252,18 +280,21 @@ export function ArchiveMenu({ served, busy, blocked, done, total, pct, current, 
 
 function MenuItem({ label, hint, onClick, disabled }: { label: string; hint: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
       disabled={disabled}
       role="menuitem"
-      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[var(--surface-2)] disabled:opacity-50"
+      whileHover={disabled ? undefined : { y: -1 }}
+      whileTap={disabled ? undefined : { scale: 0.985, y: 0 }}
+      transition={{ type: 'spring', stiffness: 520, damping: 26 }}
+      className="flex w-full items-center gap-2 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-left shadow-none transition-[background-color,border-color,box-shadow] duration-150 hover:border-[#16a34a]/45 hover:bg-[var(--surface-2)] hover:shadow-[0_8px_18px_-12px_rgba(22,163,74,0.9)] active:border-[#16a34a]/60 active:shadow-[0_2px_6px_-2px_rgba(22,163,74,0.55)] disabled:opacity-50 disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:shadow-none"
     >
       <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: GREEN }} />
       <span className="min-w-0 flex-1">
         <span className="block text-[12px] font-semibold text-[var(--ink)]">{label}</span>
         <span className="block text-[10.5px] text-[var(--muted)]">{hint}</span>
       </span>
-    </button>
+    </motion.button>
   )
 }

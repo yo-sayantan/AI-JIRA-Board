@@ -182,6 +182,8 @@ async function readBoardSettings() {
     aiCloudProvider: ai.cloudProvider || 'cursor',
     aiCloudEffort: ai.cloudEffort || 'low',
     aiUseHostOllama: !!ai.useHostOllama,
+    reportParallel: ai.parallel || 4,
+    archiveParallel: PROJECT_CONFIG.archive?.workers || 8,
   }
   try {
     return { ...defaults, ...JSON.parse(await readFile(SETTINGS_FILE, 'utf8')) }
@@ -194,10 +196,15 @@ async function aiQueueKeys() {
   try {
     const names = await readdir(AI_QUEUE)
     const keys = []
+    const freshAfter = Date.now() - 30 * 60 * 1000
     for (const n of names) {
-      if (!n.endsWith('.json')) continue
+      const running = n.endsWith('.json.running')
+      if (!n.endsWith('.json') && !running) continue
       try {
-        const j = JSON.parse(await readFile(join(AI_QUEUE, n), 'utf8'))
+        const path = join(AI_QUEUE, n)
+        // A crashed claim leaves a .running file forever. Only a recent one means the intern is still on it.
+        if (running && (await stat(path)).mtimeMs < freshAfter) continue
+        const j = JSON.parse(await readFile(path, 'utf8'))
         if (j.type === 'enrich-report' && j.key) keys.push(String(j.key).toUpperCase())
       } catch {}
     }
@@ -661,6 +668,13 @@ const server = createServer(async (req, res) => {
     if (patch.aiCloudEffort !== undefined && !['low', 'medium'].includes(patch.aiCloudEffort)) {
       return json(res, 400, { ok: false, error: 'bad aiCloudEffort' })
     }
+    const intIn = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi
+    if (patch.reportParallel !== undefined && !intIn(patch.reportParallel, 1, 6)) {
+      return json(res, 400, { ok: false, error: 'bad reportParallel' })
+    }
+    if (patch.archiveParallel !== undefined && !intIn(patch.archiveParallel, 1, 16)) {
+      return json(res, 400, { ok: false, error: 'bad archiveParallel' })
+    }
     let current = {}
     try {
       current = JSON.parse(await readFile(SETTINGS_FILE, 'utf8'))
@@ -673,6 +687,8 @@ const server = createServer(async (req, res) => {
     if (patch.aiCloudProvider !== undefined) next.aiCloudProvider = patch.aiCloudProvider
     if (patch.aiCloudEffort !== undefined) next.aiCloudEffort = patch.aiCloudEffort
     if (patch.aiUseHostOllama !== undefined) next.aiUseHostOllama = !!patch.aiUseHostOllama
+    if (patch.reportParallel !== undefined) next.reportParallel = patch.reportParallel
+    if (patch.archiveParallel !== undefined) next.archiveParallel = patch.archiveParallel
     try {
       await writeFile(SETTINGS_FILE, JSON.stringify(next, null, 2) + '\n')
     } catch (e) {
@@ -789,6 +805,9 @@ const server = createServer(async (req, res) => {
     } else {
       unlink(PROGRESS).catch(() => {})
     }
+    const ai = await internAiStatus()
+    const aiJobs = Array.isArray(ai?.active) && ai.active.length ? ai.active : ai?.current ? [ai.current] : []
+    const enriching = aiJobs.filter((j) => j?.type === 'enrich-report' && j.key).map((j) => String(j.key).toUpperCase())
     return json(res, 200, {
       running: isRunning,
       job: archiveRunning ? 'archive' : running ? 'daily' : locked ? 'external' : null,
@@ -804,10 +823,11 @@ const server = createServer(async (req, res) => {
       // Exit codes for recently finished per-ticket refreshes (key → number).
       refreshExits: Object.fromEntries(refreshExits),
       progress,
-      // PR Readiness Reports in flight: this server's queue ∪ cron/terminal generations.
-      reportsGenerating: [...new Set([...reportPendingKeys(), ...(await externalGenerating()), ...(await aiQueueKeys())])],
+      // PR Readiness Reports in flight: this server's queue ∪ cron/terminal generations
+      // ∪ the AI enrichment currently running (it leaves the file queue once claimed).
+      reportsGenerating: [...new Set([...reportPendingKeys(), ...(await externalGenerating()), ...(await aiQueueKeys()), ...enriching])],
       reportExits: Object.fromEntries(reportExits),
-      ai: await internAiStatus(),
+      ai,
     })
   }
 

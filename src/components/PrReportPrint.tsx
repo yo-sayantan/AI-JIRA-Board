@@ -1,4 +1,18 @@
-import type { PrReport, ReportBlock, ReportStat, ReportTab } from '../lib/reportTypes'
+import type { ReactNode } from 'react'
+import type {
+  PrReport,
+  ReportBlock,
+  ReportCard,
+  ReportCardsBlock,
+  ReportKvBlock,
+  ReportListBlock,
+  ReportStat,
+  ReportTab,
+  ReportTableBlock,
+  ReportTableRow,
+  ReportTimelineBlock,
+  ReportTone,
+} from '../lib/reportTypes'
 import { toneColor } from '../lib/reportTypes'
 import { fmtDate, fmtDateTime, fmtReportMetadata } from '../lib/format'
 import { APP_CONFIG } from '../lib/appConfig'
@@ -6,405 +20,979 @@ import { hrefForKey, shareableLinks } from '../lib/reportLinks'
 import { ReportHtml } from './ReportHtml'
 
 /**
- * The report as a PRINTED DOCUMENT — a separate render from the on-screen overlay, not the same
- * markup re-coloured.
+ * The report as a widescreen slide deck — a separate render from the on-screen overlay.
  *
- * Restyling the screen UI for paper meant fighting a dark, card-based web layout with overrides,
- * and it still read like a screenshot. Paper has different rules: a cover that owns its page,
- * type that carries hierarchy instead of coloured boxes, and content that flows across pages
- * rather than sitting in scroll containers. Those are easier to state directly than to override,
- * so this component says them once and the print stylesheet stays short.
+ * Each page is one 16:9 slide, so the exported PDF can be cast or dropped straight into a
+ * presentation. Slides are ordered for the audience: the first two answer "is it done, and what
+ * happens next" for leadership; the middle carries the evidence a PM, Scrum Master or architect
+ * wants; the appendix keeps sources for anyone auditing it. Every block in the report lands on
+ * some slide — anything the planner does not place on purpose goes to "Additional detail".
  *
- * Mounted only while printing (see `printing` in PrReportOverlay) and hidden outside @media print.
+ * Hidden on screen and shown only in @media print.
  */
-export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: ReportTab[] }) {
-  const v = report.verdict
-  const vc = toneColor(v?.tone)
-  const stats = report.stats ?? []
-  const { lead, next } = splitHeadline(v?.headline, v?.label)
-  const extras = shareableLinks(report)
-  const ticketHref = hrefForKey(report, report.key)
 
+type Audience = 'Leadership' | 'PM / Scrum Master' | 'Architect / Tech lead' | 'Everyone'
+
+interface Slide {
+  id: string
+  section: string
+  title: string
+  audience: Audience[]
+  body: ReactNode
+  /** The cover is drawn full-bleed and carries no running header or footer. */
+  cover?: boolean
+}
+
+const RAG: Record<ReportTone, string> = {
+  success: 'Green',
+  warning: 'Amber',
+  danger: 'Red',
+  info: 'Blue',
+  violet: 'Blue',
+  neutral: 'Grey',
+}
+
+export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: ReportTab[] }) {
+  const slides = planSlides(report, tabs)
+  const total = slides.length
+  const zone = report.timeZone ?? APP_CONFIG.timeZone
   return (
     <div className="jb-pdf">
-      {/* ── Cover ── fills its own page: masthead at the top, verdict through the middle,
-          figures and colophon anchored to the foot. */}
-      <section className="jb-pdf-cover">
-        <header className="jb-pdf-mast">
-          <div className="jb-pdf-eyebrow">
-            <span>PR Readiness Report</span>
-            <span className="jb-pdf-eyebrow-right">{fmtDate(report.generatedAt, report.timeZone ?? APP_CONFIG.timeZone)}</span>
+      {slides.map((s, i) =>
+        s.cover ? (
+          <section key={s.id} className="jb-slide jb-slide-cover">
+            {s.body}
+          </section>
+        ) : (
+          <section key={s.id} className="jb-slide">
+            <header className="jb-slide-head">
+              <div>
+                <div className="jb-slide-eyebrow">{s.section}</div>
+                <h2 className="jb-slide-title">{s.title}</h2>
+              </div>
+              <div className="jb-slide-aud">
+                {s.audience.map((a) => (
+                  <span key={a} className="jb-chip jb-chip-quiet">
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </header>
+            <div className="jb-slide-body">{s.body}</div>
+            <footer className="jb-slide-foot">
+              <span className="jb-slide-foot-key">{report.key}</span>
+              <span className="jb-slide-foot-title">{report.title}</span>
+              <span>{fmtDate(report.generatedAt, zone)}</span>
+              <span className="jb-slide-num">
+                {i + 1} / {total}
+              </span>
+            </footer>
+          </section>
+        ),
+      )}
+    </div>
+  )
+}
+
+// ── Planning ────────────────────────────────────────────────────────────────
+
+function planSlides(report: PrReport, tabs: ReportTab[]): Slide[] {
+  const used = new Set<ReportBlock>()
+  const take = <T extends ReportBlock>(match: (b: ReportBlock, tab: ReportTab) => boolean): T | null => {
+    for (const tab of tabs) {
+      for (const b of tab.blocks) {
+        if (!used.has(b) && match(b, tab)) {
+          used.add(b)
+          return b as T
+        }
+      }
+    }
+    return null
+  }
+  const titled = (re: RegExp, kind?: ReportBlock['kind']) => (b: ReportBlock) =>
+    (!kind || b.kind === kind) && re.test(b.title ?? '')
+
+  const decision = take(titled(/^decision$/i, 'callout'))
+  take((b) => b.kind === 'stats' && sameStats(b.items, report.stats))
+  const gates = take<ReportTableBlock>(titled(/gate checklist/i, 'table'))
+  const releaseGate = take(titled(/^release gate$/i, 'callout'))
+  const evidence = take<ReportTableBlock>(titled(/evidence/i, 'table'))
+  const prCards = take<ReportCardsBlock>(titled(/pull request/i, 'cards'))
+  const timeline = take<ReportTimelineBlock>((b) => b.kind === 'timeline')
+  const proofs: ReportTableBlock[] = []
+  for (let p = take<ReportTableBlock>(titled(/^proof/i, 'table')); p; p = take<ReportTableBlock>(titled(/^proof/i, 'table'))) proofs.push(p)
+  const blocking = take<ReportTableBlock>(titled(/still blocks|blocks closure|open scope/i, 'table'))
+  const nextActions = take<ReportListBlock>(titled(/next action/i, 'list'))
+  const consistency = take(titled(/consistency/i, 'callout'))
+  const changeShape = take(titled(/change shape/i, 'stats'))
+  const perFile = take<ReportCardsBlock>(titled(/per-file|files?/i, 'cards'))
+  const reviewFocus = take<ReportListBlock>(titled(/review focus/i, 'list'))
+  const prodProof = take(titled(/production proof/i, 'callout'))
+  const deployment = take<ReportKvBlock>(titled(/deploy/i, 'kv'))
+  const risks = take<ReportTableBlock>(titled(/risk/i, 'table'))
+  const links = take((b) => b.kind === 'links')
+  const runMeta = take<ReportKvBlock>(titled(/run metadata|metadata/i, 'kv'))
+
+  const facts = deliveryFacts(report, evidence, prCards)
+  const gateTally = tallyGates(gates)
+  const riskCount = risks?.rows.filter((r) => !/none inferred/i.test(plain(r.cells[0] ?? ''))).length ?? 0
+
+  const slides: Slide[] = []
+  const add = (s: Omit<Slide, 'id'> & { id?: string }) => slides.push({ ...s, id: s.id ?? `s${slides.length}` })
+
+  add({
+    id: 'cover',
+    section: '',
+    title: '',
+    audience: ['Everyone'],
+    cover: true,
+    body: <CoverSlide report={report} />,
+  })
+
+  add({
+    id: 'summary',
+    section: 'Executive summary',
+    title: 'Where this ticket stands',
+    audience: ['Leadership', 'PM / Scrum Master'],
+    body: (
+      <SummarySlide
+        report={report}
+        decision={decision}
+        facts={facts}
+        gateTally={gateTally}
+        riskCount={risks ? riskCount : null}
+        fileCount={perFile?.items.length ?? null}
+      />
+    ),
+  })
+
+  if (gates) {
+    for (const [i, rows] of chunk(gates.rows, 11).entries()) {
+      add({
+        section: 'Delivery gates',
+        title: i === 0 ? 'Is it ready to close?' : 'Delivery gates (continued)',
+        audience: ['PM / Scrum Master', 'Leadership'],
+        body: (
+          <>
+            {i === 0 && gateTally && <GateBar tally={gateTally} />}
+            <StatusTable block={{ ...gates, rows }} report={report} />
+            {i === 0 && releaseGate && releaseGate.kind === 'callout' && (
+              <Callout title="Release gate" tone={releaseGate.tone} html={releaseGate.body} report={report} />
+            )}
+          </>
+        ),
+      })
+    }
+  } else if (releaseGate && releaseGate.kind === 'callout') {
+    add({
+      section: 'Delivery gates',
+      title: 'Release gate',
+      audience: ['PM / Scrum Master', 'Leadership'],
+      body: <Callout title="Release gate" tone={releaseGate.tone} html={releaseGate.body} report={report} />,
+    })
+  }
+
+  if (blocking || nextActions || consistency) {
+    add({
+      section: 'Open items',
+      title: blocking && blocking.rows.length ? 'What still needs to happen' : 'Nothing is blocking closure',
+      audience: ['PM / Scrum Master', 'Leadership'],
+      body: (
+        <div className="jb-grid-2">
+          <div className="jb-col-span">
+            {blocking && blocking.rows.length > 0 ? (
+              <StatusTable block={blocking} report={report} />
+            ) : (
+              <Callout title="Open scope" tone="success" html="<p>No open item blocks closure.</p>" report={report} />
+            )}
           </div>
+          {nextActions && <ActionList block={nextActions} report={report} />}
+          {consistency && consistency.kind === 'callout' && (
+            <Callout title={consistency.title ?? 'Status consistency'} tone={consistency.tone} html={consistency.body} report={report} />
+          )}
+        </div>
+      ),
+    })
+  }
+
+  if (prCards || timeline) {
+    const cardChunks = prCards ? chunk(prCards.items, 4) : [[]]
+    cardChunks.forEach((cards, i) => {
+      add({
+        section: 'Code review',
+        title: i === 0 ? 'Pull requests and delivery timeline' : 'Pull requests (continued)',
+        audience: ['Architect / Tech lead', 'PM / Scrum Master'],
+        body: (
+          <div className={timeline && i === 0 ? 'jb-split' : ''}>
+            <div>
+              {cards.length > 0 && <h3 className="jb-h3">Pull requests</h3>}
+              <div className="jb-cards jb-cards-2">
+                {cards.map((c, j) => (
+                  <Card key={j} card={c} report={report} />
+                ))}
+              </div>
+            </div>
+            {timeline && i === 0 && <Timeline block={timeline} report={report} />}
+          </div>
+        ),
+      })
+    })
+  }
+
+  if (evidence) {
+    for (const [i, rows] of chunk(evidence.rows, 9).entries()) {
+      add({
+        section: 'Evidence',
+        title: i === 0 ? 'What the systems show' : 'Evidence (continued)',
+        audience: ['Architect / Tech lead', 'PM / Scrum Master'],
+        body: <PlainTable block={{ ...evidence, rows }} report={report} />,
+      })
+    }
+  }
+
+  if (proofs.length) {
+    add({
+      section: 'Quality and security',
+      title: 'Build, scan and runtime proof',
+      audience: ['Architect / Tech lead'],
+      body: (
+        <div className="jb-stack">
+          {proofs.map((p, i) => (
+            <div key={i}>
+              <h3 className="jb-h3">{p.title?.replace(/^proof\s*·?\s*/i, '') || 'Proof'}</h3>
+              <StatusTable block={p} report={report} />
+            </div>
+          ))}
+        </div>
+      ),
+    })
+  }
+
+  if (changeShape || reviewFocus || deployment || prodProof) {
+    add({
+      section: 'Technical assessment',
+      title: 'Change overview and release readiness',
+      audience: ['Architect / Tech lead'],
+      body: (
+        <div className="jb-grid-2">
+          {changeShape && changeShape.kind === 'stats' && (
+            <div className="jb-col-span">
+              <Kpis stats={changeShape.items} />
+            </div>
+          )}
+          {reviewFocus && <ActionList block={reviewFocus} report={report} title="Review focus" />}
+          <div className="jb-stack">
+            {deployment && <KvCard block={deployment} report={report} />}
+            {prodProof && prodProof.kind === 'callout' && (
+              <Callout title="Production proof" tone={prodProof.tone} html={prodProof.body} report={report} />
+            )}
+          </div>
+        </div>
+      ),
+    })
+  }
+
+  if (risks) {
+    add({
+      section: 'Risk',
+      title: riskCount ? `${riskCount} risk${riskCount === 1 ? '' : 's'} and how to handle ${riskCount === 1 ? 'it' : 'them'}` : 'No risks found',
+      audience: ['Architect / Tech lead', 'Leadership'],
+      body: <PlainTable block={risks} report={report} />,
+    })
+  }
+
+  if (perFile && perFile.items.length) {
+    for (const [i, cards] of chunk(perFile.items, 6).entries()) {
+      add({
+        section: 'Technical assessment',
+        title: i === 0 ? `What changed, file by file (${perFile.items.length})` : 'What changed (continued)',
+        audience: ['Architect / Tech lead'],
+        body: (
+          <div className="jb-cards jb-cards-3">
+            {cards.map((c, j) => (
+              <Card key={j} card={c} report={report} compact />
+            ))}
+          </div>
+        ),
+      })
+    }
+  }
+
+  const leftovers = tabs.flatMap((t) => t.blocks.filter((b) => !used.has(b)).map((b) => ({ tab: t, block: b })))
+  for (const group of chunk(leftovers, 2)) {
+    add({
+      section: 'Additional detail',
+      title: group.map((g) => g.block.title || g.tab.title).join(' · '),
+      audience: ['Everyone'],
+      body: (
+        <div className="jb-stack">
+          {group.map((g, i) => (
+            <GenericBlock key={i} block={g.block} report={report} />
+          ))}
+        </div>
+      ),
+    })
+  }
+
+  add({
+    id: 'appendix',
+    section: 'Appendix',
+    title: 'Sources and how this report was made',
+    audience: ['Everyone'],
+    body: <AppendixSlide report={report} links={links} runMeta={runMeta} />,
+  })
+
+  const cover = slides[0]
+  cover.body = <CoverSlide report={report} agenda={slides.slice(1)} />
+  return slides
+}
+
+// ── Slides ──────────────────────────────────────────────────────────────────
+
+function CoverSlide({ report, agenda = [] }: { report: PrReport; agenda?: Slide[] }) {
+  const v = report.verdict
+  const tone = v?.tone ?? 'neutral'
+  const c = toneColor(tone)
+  const zone = report.timeZone ?? APP_CONFIG.timeZone
+  const ticketHref = hrefForKey(report, report.key)
+  const sections = dedupeSections(agenda)
+  return (
+    <div className="jb-cover">
+      <div className="jb-cover-band" style={{ background: c }} />
+      <div className="jb-cover-top">
+        <span>PR readiness report</span>
+        <span>{fmtDate(report.generatedAt, zone)}</span>
+      </div>
+      <div className="jb-cover-main">
+        <div className="jb-cover-left">
           {ticketHref ? (
-            <a href={ticketHref} className="jb-pdf-key">
+            <a href={ticketHref} className="jb-cover-key">
               {report.key}
             </a>
           ) : (
-            <div className="jb-pdf-key">{report.key}</div>
+            <div className="jb-cover-key">{report.key}</div>
           )}
-          <h1 className="jb-pdf-title">{report.title}</h1>
-        </header>
-
-        <div className="jb-pdf-verdict">
-          <div className="jb-pdf-verdict-main" style={{ borderLeftColor: vc }}>
-            <div className="jb-pdf-verdict-label" style={{ color: vc }}>
-              {v?.label ?? 'No verdict'}
-            </div>
-            {lead && (
-              <p className="jb-pdf-lead">
-                <ReportHtml html={lead} report={report} inline />
-              </p>
-            )}
-            {next && (
-              <p className="jb-pdf-next">
-                <span className="jb-pdf-next-label">Next</span>
-                <ReportHtml html={next} report={report} inline />
-              </p>
-            )}
+          <h1 className="jb-cover-title">{report.title}</h1>
+          <div className="jb-cover-verdict">
+            <span className="jb-rag" style={{ background: c }}>
+              {RAG[tone]}
+            </span>
+            <span className="jb-cover-label">{v?.label ?? 'No verdict'}</span>
           </div>
-          {typeof v?.score === 'number' && (
-            <div className="jb-pdf-scorebox">
-              <span className="jb-pdf-foot-label">Readiness</span>
-              <span className="jb-pdf-score" style={{ color: vc }}>
-                {v.score}
-              </span>
-              <span className="jb-pdf-score-of">out of 100</span>
-            </div>
+          {(v?.summary || v?.reason) && (
+            <p className="jb-cover-lead">
+              <ReportHtml html={v?.summary || v?.reason || ''} report={report} inline />
+            </p>
           )}
         </div>
-
-        {stats.length > 0 && (
-          <div className="jb-pdf-figures">
-            {stats.map((s, i) => (
-              <Figure key={i} stat={s} />
-            ))}
+        {typeof v?.score === 'number' && (
+          <div className="jb-cover-score">
+            <ScoreRing score={v.score} color={c} size={150} dark />
+            <span>Readiness score</span>
           </div>
         )}
+      </div>
+      <div className="jb-cover-foot">
+        <div>
+          <div className="jb-cover-foot-label">In this deck</div>
+          <ol className="jb-cover-agenda">
+            {sections.map((s) => (
+              <li key={s.section}>
+                <span className="jb-cover-agenda-n">{s.first}</span>
+                {s.section}
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="jb-cover-meta">
+          <div className="jb-cover-foot-label">Prepared</div>
+          <div>{fmtDateTime(report.enrichedAt || report.generatedAt, zone)}</div>
+          <div>{report.enriched ? 'Measured from Jira and Bitbucket, reviewed by AI' : 'Measured from Jira and Bitbucket'}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-        <footer className="jb-pdf-cover-foot">
-          <div className="jb-pdf-contents">
-            <span className="jb-pdf-foot-label">In this report</span>
-            <ol>
-              {tabs.map((t) => (
-                <li key={t.id}>
-                  <span className="jb-pdf-dot" style={{ background: toneColor(t.tone) }} />
-                  {t.title}
-                  <span className="jb-pdf-contents-count">
-                    {visibleBlocks(t.blocks, stats).length} section
-                    {visibleBlocks(t.blocks, stats).length === 1 ? '' : 's'}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </div>
-          <div className="jb-pdf-colophon">
-            <span className="jb-pdf-foot-label">How this was produced</span>
-            <p>
-              {report.enriched
-                ? 'Measured from Jira and Bitbucket, then reviewed by an AI pass over the ticket, pull requests and linked specs.'
-                : 'Measured directly from Jira and Bitbucket. No AI interpretation applied.'}
-            </p>
-            <p className="jb-pdf-colophon-meta">
-              Generated {fmtDateTime(report.generatedAt, report.timeZone ?? APP_CONFIG.timeZone)}
-              {report.enriched && report.enrichedAt ? ` · enriched ${fmtDateTime(report.enrichedAt, report.timeZone ?? APP_CONFIG.timeZone)}` : ''}
-              {report.generator ? ` · ${report.generator}` : ''}
-            </p>
-            {extras.length > 0 && (
-              <p className="jb-pdf-colophon-meta jb-pdf-cover-links">
-                {extras.map((l, i) => (
-                  <span key={l.href}>
-                    {i > 0 ? ' · ' : ''}
-                    <a href={l.href}>{l.label}</a>
-                  </span>
-                ))}
-              </p>
-            )}
-            {report.sources && <p className="jb-pdf-colophon-meta">Sources: {report.sources}</p>}
-            {report.warnings && report.warnings.length > 0 && (
-              <p className="jb-pdf-warn">
-                <span className="jb-pdf-warn-label">Not covered</span>
-                {report.warnings.join(' · ')}
-              </p>
-            )}
-          </div>
-        </footer>
-      </section>
+function SummarySlide({
+  report,
+  decision,
+  facts,
+  gateTally,
+  riskCount,
+  fileCount,
+}: {
+  report: PrReport
+  decision: ReportBlock | null
+  facts: { label: string; value: string; href?: string | null }[]
+  gateTally: GateTally | null
+  riskCount: number | null
+  fileCount: number | null
+}) {
+  const v = report.verdict
+  const tone = v?.tone ?? 'neutral'
+  const c = toneColor(tone)
+  const next = v?.next
+  const impact = decision && decision.kind === 'callout' ? italicLine(decision.body) : null
+  const kpis: ReportStat[] = [
+    ...(typeof v?.score === 'number' ? [{ label: 'Readiness', value: `${v.score} / 100`, tone }] : []),
+    ...(gateTally ? [{ label: 'Gates passed', value: `${gateTally.pass} of ${gateTally.total}`, tone: gateTally.fail ? 'danger' : gateTally.warn ? 'warning' : 'success' } as ReportStat] : []),
+    ...report.stats.filter((s) => !/^last pr activity$/i.test(s.label)),
+    ...(riskCount != null ? [{ label: 'Risks', value: String(riskCount), tone: riskCount ? 'warning' : 'success' } as ReportStat] : []),
+    ...(fileCount != null ? [{ label: 'Files reviewed', value: String(fileCount), tone: 'neutral' } as ReportStat] : []),
+  ].slice(0, 8)
 
-      {/* ── Body ── flows from page two; a section is never split across the fold. */}
-      {tabs.map((t) => {
-        const blocks = visibleBlocks(t.blocks, stats)
-        if (blocks.length === 0) return null
-        return (
-          <section key={t.id} className="jb-pdf-part">
-            <h2 className="jb-pdf-part-title">
-              <span className="jb-pdf-dot" style={{ background: toneColor(t.tone) }} />
-              {t.title}
-            </h2>
-            {t.summary && (
-              <p className="jb-pdf-part-summary">
-                <ReportHtml html={t.summary} report={report} inline />
-              </p>
-            )}
-            <div className="jb-pdf-blocks">
-              {blocks.map((b, i) => (
-                <PrintBlock key={`${t.id}:${i}`} block={b} report={report} />
-              ))}
+  return (
+    <div className="jb-summary">
+      <div className="jb-summary-status" style={{ borderColor: c }}>
+        <div className="jb-summary-row">
+          <span className="jb-rag" style={{ background: c }}>
+            {RAG[tone]}
+          </span>
+          <span className="jb-summary-label" style={{ color: c }}>
+            {v?.label ?? 'No verdict'}
+          </span>
+        </div>
+        {v?.summary && (
+          <p className="jb-summary-lead">
+            <ReportHtml html={v.summary} report={report} inline />
+          </p>
+        )}
+        {v?.reason && (
+          <p className="jb-summary-why">
+            <span className="jb-tag">Why</span>
+            <ReportHtml html={v.reason} report={report} inline />
+          </p>
+        )}
+        {impact && (
+          <p className="jb-summary-why">
+            <span className="jb-tag">Business impact</span>
+            <ReportHtml html={impact} report={report} inline />
+          </p>
+        )}
+      </div>
+
+      <div className="jb-summary-side">
+        <div className="jb-next" style={{ borderColor: next ? c : toneColor('success') }}>
+          <div className="jb-next-label">Next step</div>
+          {next?.action ? (
+            <>
+              <div className="jb-next-action">
+                <ReportHtml html={sentenceCase(next.action)} report={report} inline />
+              </div>
+              <div className="jb-next-meta">
+                {next.owner && (
+                  <span>
+                    <b>Owner</b> {next.owner}
+                  </span>
+                )}
+                {next.due && (
+                  <span>
+                    <b>Due</b> {next.due}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="jb-next-action">Nothing outstanding. No action needed.</div>
+          )}
+        </div>
+        {facts.length > 0 && (
+          <dl className="jb-facts">
+            {facts.map((f) => (
+              <div key={f.label}>
+                <dt>{f.label}</dt>
+                <dd>{f.href ? <a href={f.href}>{f.value}</a> : <ReportHtml html={f.value} report={report} inline />}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+
+      <div className="jb-summary-kpis">
+        <Kpis stats={kpis} />
+      </div>
+    </div>
+  )
+}
+
+function AppendixSlide({ report, links, runMeta }: { report: PrReport; links: ReportBlock | null; runMeta: ReportKvBlock | null }) {
+  const zone = report.timeZone ?? APP_CONFIG.timeZone
+  const all = [...(links && links.kind === 'links' ? links.items : []), ...shareableLinks(report)]
+  const seen = new Set<string>()
+  const uniq = all.filter((l) => (seen.has(l.href) ? false : (seen.add(l.href), true)))
+  return (
+    <div className="jb-split">
+      <div>
+        <h3 className="jb-h3">Links</h3>
+        <ul className="jb-links">
+          {uniq.map((l) => (
+            <li key={l.href}>
+              <a href={l.href}>
+                <b>{l.label}</b>
+                <span>{l.href}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="jb-stack">
+        <div>
+          <h3 className="jb-h3">How this report was made</h3>
+          <p className="jb-prose">
+            {report.enriched
+              ? 'Status, reviews and gates are measured directly from Jira and Bitbucket. An AI pass then read the ticket, the pull requests and linked specs to add business impact, per-file notes and risks. AI findings are marked as such in the app.'
+              : 'Status, reviews and gates are measured directly from Jira and Bitbucket. No AI interpretation was applied.'}
+          </p>
+          {report.sources && <p className="jb-prose jb-muted">Sources: {report.sources}</p>}
+        </div>
+        {report.warnings && report.warnings.length > 0 && (
+          <Callout title="Not covered" tone="warning" html={`<p>${report.warnings.map(esc).join(' · ')}</p>`} report={report} />
+        )}
+        <dl className="jb-facts">
+          <div>
+            <dt>Generated</dt>
+            <dd>{fmtDateTime(report.generatedAt, zone)}</dd>
+          </div>
+          {report.enriched && report.enrichedAt && (
+            <div>
+              <dt>AI reviewed</dt>
+              <dd>{fmtDateTime(report.enrichedAt, zone)}</dd>
             </div>
-          </section>
+          )}
+          {report.generator && (
+            <div>
+              <dt>Generator</dt>
+              <dd>{report.generator}</dd>
+            </div>
+          )}
+          {runMeta?.items
+            .filter((kv) => !/^generated$/i.test(kv.label))
+            .map((kv) => (
+              <div key={kv.label}>
+                <dt>{kv.label}</dt>
+                <dd>
+                  <ReportHtml html={fmtReportMetadata(kv.label, kv.value, zone)} report={report} inline />
+                </dd>
+              </div>
+            ))}
+        </dl>
+      </div>
+    </div>
+  )
+}
+
+// ── Pieces ──────────────────────────────────────────────────────────────────
+
+function Kpis({ stats }: { stats: ReportStat[] }) {
+  return (
+    <div className="jb-kpis" style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(stats.length, 8))}, minmax(0, 1fr))` }}>
+      {stats.map((s, i) => {
+        const toned = s.tone && s.tone !== 'neutral'
+        const c = toneColor(s.tone)
+        return (
+          <div key={i} className="jb-kpi" style={{ borderTopColor: toned ? c : '#cbd2de' }}>
+            <div className="jb-kpi-label">{s.label}</div>
+            <div className="jb-kpi-value" style={toned ? { color: c } : undefined}>
+              <Segments text={sentenceCase(String(s.value ?? ''))} />
+            </div>
+            {s.hint && <div className="jb-kpi-hint">{s.hint}</div>}
+          </div>
         )
       })}
     </div>
   )
 }
 
-/**
- * The generator packs three different things into one headline string: the verdict label, the
- * evidence behind it, and the action that follows. Printed as a single paragraph under a heading
- * that repeats its own opening clause, they all read as equally (un)important. Splitting them lets
- * the cover rank them — the label is already the headline, the evidence is supporting, and the
- * action is the one line a reader has to act on.
- */
-function splitHeadline(headline?: string | null, label?: string | null): { lead: string; next: string | null } {
-  let rest = (headline ?? '').trim()
-  if (label) {
-    for (const sep of [' — ', ' – ', ' - ', ': ']) {
-      if (rest.startsWith(label + sep)) {
-        rest = rest.slice(label.length + sep.length)
-        break
-      }
-    }
-  }
-  let next: string | null = null
-  const at = rest.lastIndexOf('Next:')
-  if (at > 0) {
-    next = rest.slice(at + 'Next:'.length).trim()
-    rest = rest.slice(0, at).trim()
-  }
-  return { lead: sentenceCase(rest), next }
+interface GateTally {
+  pass: number
+  fail: number
+  warn: number
+  total: number
 }
 
-/** The cover repeats the header strip's figures, so an identical stats block is dropped. */
-function visibleBlocks(all: ReportBlock[], headerStats: ReportStat[]): ReportBlock[] {
-  const digest = (items: ReportStat[]) => items.map((s) => `${s.label}=${s.value}`).join('|')
-  const head = digest(headerStats)
-  if (!head) return all
-  return all.filter((b) => !(b.kind === 'stats' && digest(b.items) === head))
-}
-
-/**
- * Label first, value under it. With the label below, a value long enough to wrap (a pull-request
- * tally, say) pushed its own label down a line and knocked it out of alignment with every other
- * label in the row. Leading with the label puts them all on one baseline and lets values wrap
- * freely underneath.
- */
-function Figure({ stat }: { stat: ReportStat }) {
-  const c = toneColor(stat.tone)
-  const toned = stat.tone && stat.tone !== 'neutral'
+function GateBar({ tally }: { tally: GateTally }) {
+  const pct = (n: number) => `${tally.total ? (100 * n) / tally.total : 0}%`
   return (
-    <div className="jb-pdf-fig">
-      <div className="jb-pdf-fig-label">{stat.label}</div>
-      <div className="jb-pdf-fig-value" style={toned ? { color: c } : undefined}>
-        <StatValue text={sentenceCase(String(stat.value ?? ''))} />
+    <div className="jb-gatebar">
+      <div className="jb-gatebar-track">
+        <span style={{ width: pct(tally.pass), background: toneColor('success') }} />
+        <span style={{ width: pct(tally.warn), background: toneColor('warning') }} />
+        <span style={{ width: pct(tally.fail), background: toneColor('danger') }} />
       </div>
-      {stat.hint && <div className="jb-pdf-fig-hint">{stat.hint}</div>}
+      <div className="jb-gatebar-legend">
+        <span>
+          <i style={{ background: toneColor('success') }} /> {tally.pass} passed
+        </span>
+        <span>
+          <i style={{ background: toneColor('warning') }} /> {tally.warn} not verified
+        </span>
+        <span>
+          <i style={{ background: toneColor('danger') }} /> {tally.fail} failing
+        </span>
+      </div>
     </div>
   )
 }
 
-/**
- * A composite figure ("1 merged · 0 open · 1 declined") is several facts in one string. Left to
- * wrap on its own it broke wherever the line ran out — "…0 open · 1" then "declined" — which reads
- * as a sentence cut in half. Each fact is kept whole and the separator travels with the fact it
- * follows, so a break can only ever land between facts.
- */
-function StatValue({ text }: { text: string }) {
+/** A table whose state-like column is drawn as a coloured chip, so pass/fail reads from across a room. */
+function StatusTable({ block, report }: { block: ReportTableBlock; report: PrReport }) {
+  const stateCol = block.headers.findIndex((h) => /^(state|status|result)$/i.test(h.trim()))
+  const blockCol = block.headers.findIndex((h) => /blocks closure/i.test(h))
+  return (
+    <table className="jb-table">
+      <thead>
+        <tr>
+          {block.headers.map((h, i) => (
+            <th key={i}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {block.rows.map((r, i) => {
+          const t = rowTone(r, stateCol)
+          return (
+            <tr key={i} style={{ boxShadow: `inset 3px 0 0 ${toneColor(t)}` }}>
+              {r.cells.map((cell, j) => (
+                <td key={j} className={j === 0 ? 'jb-td-lead' : undefined}>
+                  {j === stateCol ? (
+                    <span className="jb-chip" style={{ color: toneColor(t), borderColor: toneColor(t), background: `${toneColor(t)}14` }}>
+                      {plain(cell)}
+                    </span>
+                  ) : j === blockCol ? (
+                    <span className={/^yes/i.test(plain(cell)) ? 'jb-strong' : 'jb-muted'}>{plain(cell)}</span>
+                  ) : (
+                    <ReportHtml html={cell} report={report} inline />
+                  )}
+                </td>
+              ))}
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
+
+function PlainTable({ block, report }: { block: ReportTableBlock; report: PrReport }) {
+  return (
+    <table className="jb-table">
+      <thead>
+        <tr>
+          {block.headers.map((h, i) => (
+            <th key={i}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {block.rows.map((r, i) => (
+          <tr key={i} style={r.tone && r.tone !== 'neutral' ? { boxShadow: `inset 3px 0 0 ${toneColor(r.tone)}` } : undefined}>
+            {r.cells.map((cell, j) => (
+              <td key={j} className={j === 0 ? 'jb-td-lead' : undefined}>
+                <ReportHtml html={cell} report={report} inline />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function Callout({ title, tone, html, report }: { title: string; tone?: ReportTone; html: string; report: PrReport }) {
+  const c = toneColor(tone)
+  return (
+    <section className="jb-callout" style={{ borderLeftColor: c, background: `${c}0f` }}>
+      <div className="jb-callout-title" style={{ color: c }}>
+        {title}
+      </div>
+      <ReportHtml html={html} report={report} className="jb-prose" />
+    </section>
+  )
+}
+
+function ActionList({ block, report, title }: { block: ReportListBlock; report: PrReport; title?: string }) {
+  return (
+    <section>
+      <h3 className="jb-h3">{title ?? block.title ?? 'Next actions'}</h3>
+      <ol className="jb-actions">
+        {block.items.map((it, i) => (
+          <li key={i}>
+            <span className="jb-action-n" style={{ background: toneColor(it.tone) }}>
+              {i + 1}
+            </span>
+            <span>
+              <ReportHtml html={it.text} report={report} inline />
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+function KvCard({ block, report }: { block: ReportKvBlock; report: PrReport }) {
+  const zone = report.timeZone ?? APP_CONFIG.timeZone
+  return (
+    <section>
+      <h3 className="jb-h3">{block.title ?? 'Details'}</h3>
+      <dl className="jb-facts">
+        {block.items.map((kv, i) => (
+          <div key={i}>
+            <dt>{kv.label}</dt>
+            <dd style={kv.tone && kv.tone !== 'neutral' ? { color: toneColor(kv.tone) } : undefined}>
+              {kv.href ? <a href={kv.href}>{kv.value}</a> : <ReportHtml html={fmtReportMetadata(kv.label, kv.value, zone)} report={report} inline />}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+}
+
+function Card({ card, report, compact }: { card: ReportCard; report: PrReport; compact?: boolean }) {
+  const c = toneColor(card.badgeTone)
+  const inner = (
+    <>
+      <div className="jb-card-head">
+        <span className="jb-card-title">
+          <ReportHtml html={card.title} report={report} inline />
+        </span>
+        {card.badge && (
+          <span className="jb-chip" style={{ color: c, borderColor: c, background: `${c}14` }}>
+            {card.badge}
+          </span>
+        )}
+      </div>
+      <ReportHtml html={card.body} report={report} className={`jb-prose${compact ? ' jb-prose-sm' : ''}`} />
+      {card.detail && (
+        <p className="jb-card-detail">
+          <ReportHtml html={card.detail} report={report} inline />
+        </p>
+      )}
+    </>
+  )
+  return card.href ? (
+    <a href={card.href} className="jb-card" style={{ borderTopColor: c }}>
+      {inner}
+    </a>
+  ) : (
+    <div className="jb-card" style={{ borderTopColor: c }}>
+      {inner}
+    </div>
+  )
+}
+
+function Timeline({ block, report }: { block: ReportTimelineBlock; report: PrReport }) {
+  const items = block.items.slice(0, 12)
+  return (
+    <section>
+      <h3 className="jb-h3">{block.title ?? 'Timeline'}</h3>
+      <ol className="jb-timeline">
+        {items.map((e, i) => (
+          <li key={i}>
+            <span className="jb-tl-dot" style={{ background: toneColor(e.tone) }} />
+            <span className="jb-tl-when">{e.when ?? '—'}</span>
+            <span className="jb-tl-what">
+              <b>
+                <ReportHtml html={e.label} report={report} inline />
+              </b>
+              {e.detail ? (
+                <>
+                  {' '}
+                  — <ReportHtml html={e.detail} report={report} inline />
+                </>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {block.items.length > items.length && <p className="jb-muted jb-small">+{block.items.length - items.length} earlier events in the app</p>}
+    </section>
+  )
+}
+
+function GenericBlock({ block, report }: { block: ReportBlock; report: PrReport }) {
+  switch (block.kind) {
+    case 'callout':
+      return <Callout title={block.title ?? ''} tone={block.tone} html={block.body} report={report} />
+    case 'stats':
+      return (
+        <section>
+          {block.title && <h3 className="jb-h3">{block.title}</h3>}
+          <Kpis stats={block.items} />
+        </section>
+      )
+    case 'table':
+      return (
+        <section>
+          {block.title && <h3 className="jb-h3">{block.title}</h3>}
+          <StatusTable block={block} report={report} />
+        </section>
+      )
+    case 'cards':
+      return (
+        <section>
+          {block.title && <h3 className="jb-h3">{block.title}</h3>}
+          <div className="jb-cards jb-cards-3">
+            {block.items.map((c, i) => (
+              <Card key={i} card={c} report={report} compact />
+            ))}
+          </div>
+        </section>
+      )
+    case 'list':
+      return <ActionList block={block} report={report} />
+    case 'timeline':
+      return <Timeline block={block} report={report} />
+    case 'kv':
+      return <KvCard block={block} report={report} />
+    case 'links':
+      return (
+        <section>
+          <h3 className="jb-h3">{block.title ?? 'Links'}</h3>
+          <ul className="jb-links">
+            {block.items.map((l) => (
+              <li key={l.href}>
+                <a href={l.href}>
+                  <b>{l.label}</b>
+                  <span>{l.href}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    default:
+      return null
+  }
+}
+
+function ScoreRing({ score, color, size, dark }: { score: number; color: string; size: number; dark?: boolean }) {
+  const pct = Math.max(0, Math.min(100, score))
+  const stroke = size * 0.09
+  const r = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="jb-ring">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={dark ? 'rgba(255,255,255,0.14)' : '#e6e9ef'} strokeWidth={stroke} />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        strokeDasharray={`${(pct / 100) * circ} ${circ}`}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" fontSize={size * 0.3} fontWeight={800} fill={dark ? '#fff' : '#10151f'}>
+        {pct}
+      </text>
+    </svg>
+  )
+}
+
+/** Keep each fact of "1 merged · 0 open · 1 declined" whole so a wrap only lands between facts. */
+function Segments({ text }: { text: string }) {
   const parts = text.split(' · ')
   if (parts.length < 2) return <>{text}</>
-  const last = parts.length - 1
   return (
     <>
       {parts.map((p, i) => (
         <span key={i}>
-          {/* The separator rides inside the no-wrap run so it can never start a line, but the
-              space AFTER it stays outside — keep it in and there is no break opportunity left
-              between facts at all, and the value overflows its column instead of wrapping. */}
-          <span className="jb-pdf-seg">{i < last ? `${p} ·` : p}</span>
-          {i < last ? ' ' : ''}
+          <span className="jb-nowrap">{i < parts.length - 1 ? `${p} ·` : p}</span>
+          {i < parts.length - 1 ? ' ' : ''}
         </span>
       ))}
     </>
   )
 }
 
-/** Values like "merged" arrive lower-case from the generator and read as a dropped word under a
- *  capitalised label. Only the first letter is touched; numbers and keys are left alone. */
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function deliveryFacts(report: PrReport, evidence: ReportTableBlock | null, prCards: ReportCardsBlock | null) {
+  const facts: { label: string; value: string; href?: string | null }[] = []
+  const epic = report.links?.find((l) => /^epic\b/i.test(l.label))
+  if (epic) facts.push({ label: 'Epic', value: epic.label.replace(/^epic\s*/i, ''), href: epic.href })
+  const fix = evidence?.rows.find((r) => /fixversion/i.test(plain(r.cells[0] ?? '')))
+  if (fix) facts.push({ label: 'Fix version', value: plain(fix.cells[1] ?? '') })
+  if (report.verdict?.next?.due) facts.push({ label: 'Sprint', value: report.verdict.next.due })
+  const repos = [...new Set((prCards?.items ?? []).map((c) => plain(c.title).split(' · ')[1]).filter(Boolean))]
+  if (repos.length) facts.push({ label: repos.length === 1 ? 'Repository' : 'Repositories', value: repos.join(', ') })
+  const prs = prCards?.items.length
+  if (prs) facts.push({ label: 'Pull requests', value: `${prs} (${prCards!.items.map((c) => c.badge).filter(Boolean).join(', ')})` })
+  const subs = report.links?.filter((l) => /^sub-?task\b/i.test(l.label)).length
+  if (subs) facts.push({ label: 'Sub-tasks', value: String(subs) })
+  return facts
+}
+
+function tallyGates(gates: ReportTableBlock | null): GateTally | null {
+  if (!gates || !gates.rows.length) return null
+  const col = gates.headers.findIndex((h) => /^(state|status|result)$/i.test(h.trim()))
+  const tally = { pass: 0, fail: 0, warn: 0, total: gates.rows.length }
+  for (const r of gates.rows) {
+    const t = rowTone(r, col)
+    if (t === 'success') tally.pass++
+    else if (t === 'danger') tally.fail++
+    else tally.warn++
+  }
+  return tally
+}
+
+function rowTone(r: ReportTableRow, stateCol: number): ReportTone {
+  const s = stateCol >= 0 ? plain(r.cells[stateCol] ?? '').toLowerCase() : ''
+  if (s) {
+    if (/^(pass|passed|done|merged|approved|ok|green|scan read|success)/.test(s)) return 'success'
+    if (/(not verified|unknown|pending|n\/a|skipped|not run)/.test(s)) return 'warning'
+    if (/(fail|block|still open|declined|changes|missing|open)/.test(s)) return 'danger'
+  }
+  return r.tone && r.tone !== 'neutral' ? r.tone : 'neutral'
+}
+
+function sameStats(a: ReportStat[], b: ReportStat[]) {
+  const d = (x: ReportStat[]) => x.map((s) => `${s.label}=${s.value}`).join('|')
+  return !!d(b) && d(a) === d(b)
+}
+
+/** The AI business-impact line is appended to the Decision callout as a trailing italic paragraph. */
+function italicLine(html: string): string | null {
+  const m = html.match(/<p><i>([\s\S]*?)<\/i><\/p>\s*$/)
+  if (!m) return null
+  const text = m[1].trim()
+  return /^(task|bug|story|sub-task|epic|dev task|security)\s·/i.test(plain(text)) ? null : text
+}
+
+function dedupeSections(slides: Slide[]) {
+  const out: { section: string; first: number }[] = []
+  slides.forEach((s, i) => {
+    if (!out.some((o) => o.section === s.section)) out.push({ section: s.section, first: i + 2 })
+  })
+  return out
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  if (!items.length) return []
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+function plain(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .trim()
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function sentenceCase(s: string): string {
   return /^[a-z]/.test(s) ? s[0].toUpperCase() + s.slice(1) : s
-}
-
-/** Blocks that stay narrow enough to sit two-up; everything else takes the full measure. */
-const NARROW = new Set<ReportBlock['kind']>(['kv', 'list', 'links'])
-
-function PrintBlock({ block, report }: { block: ReportBlock; report: PrReport }) {
-  const c = toneColor(block.tone)
-  const wide = !NARROW.has(block.kind)
-  return (
-    <section className={`jb-pdf-block${wide ? ' jb-pdf-wide' : ''}`} style={{ borderLeftColor: c }}>
-      {block.title && (
-        <h3 className="jb-pdf-block-title" style={{ color: c }}>
-          {block.title}
-        </h3>
-      )}
-      {/* block.note is dropped on paper. It explains how to read the block ("rows are in
-          verdict-rule order…") — scaffolding for someone exploring the app, and just noise in a
-          document handed to a reader who wants the answer. The screen view still shows it. */}
-      <BlockBody block={block} report={report} />
-    </section>
-  )
-}
-
-function BlockBody({ block, report }: { block: ReportBlock; report: PrReport }) {
-  switch (block.kind) {
-    case 'callout':
-      return <ReportHtml html={block.body} report={report} className="jb-pdf-prose" />
-
-    case 'stats':
-      return (
-        <div className="jb-pdf-figures jb-pdf-figures-inline">
-          {block.items.map((s, i) => (
-            <Figure key={i} stat={s} />
-          ))}
-        </div>
-      )
-
-    case 'table':
-      return (
-        <table className="jb-pdf-table">
-          <thead>
-            <tr>
-              {block.headers.map((h, i) => (
-                <th key={i}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {block.rows.map((r, i) => (
-              <tr key={i} style={r.tone && r.tone !== 'neutral' ? { boxShadow: `inset 2px 0 0 ${toneColor(r.tone)}` } : undefined}>
-                {r.cells.map((cell, j) => (
-                  <td key={j} className={j === 0 ? 'jb-pdf-td-lead' : undefined}>
-                    <ReportHtml html={cell} report={report} inline />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )
-
-    case 'cards':
-      return (
-        <div className="jb-pdf-cards">
-          {block.items.map((card, i) => {
-            const inner = (
-              <>
-                <div className="jb-pdf-card-head">
-                  <span className="jb-pdf-card-title">
-                    <ReportHtml html={card.title} report={report} inline />
-                  </span>
-                  {card.badge && (
-                    <span className="jb-pdf-card-badge" style={{ color: toneColor(card.badgeTone) }}>
-                      {card.badge}
-                    </span>
-                  )}
-                </div>
-                <ReportHtml html={card.body} report={report} className="jb-pdf-prose" />
-                {card.detail && (
-                  <p className="jb-pdf-card-detail">
-                    <ReportHtml html={card.detail} report={report} inline />
-                  </p>
-                )}
-              </>
-            )
-            return card.href ? (
-              <a key={i} href={card.href} className="jb-pdf-card" style={{ borderLeftColor: toneColor(card.badgeTone) }}>
-                {inner}
-              </a>
-            ) : (
-              <div key={i} className="jb-pdf-card" style={{ borderLeftColor: toneColor(card.badgeTone) }}>
-                {inner}
-              </div>
-            )
-          })}
-        </div>
-      )
-
-    case 'list':
-      return (
-        <ul className="jb-pdf-list">
-          {block.items.map((it, i) => (
-            <li key={i}>
-              <span className="jb-pdf-dot jb-pdf-dot-sm" style={{ background: toneColor(it.tone) }} />
-              <ReportHtml html={it.text} report={report} inline />
-            </li>
-          ))}
-        </ul>
-      )
-
-    case 'timeline':
-      return (
-        <ol className="jb-pdf-timeline">
-          {block.items.map((e, i) => (
-            <li key={i}>
-              <span className="jb-pdf-when">{e.when ?? '—'}</span>
-              <span>
-                <b>
-                  <ReportHtml html={e.label} report={report} inline />
-                </b>
-                {e.detail ? (
-                  <>
-                    {' '}
-                    — <ReportHtml html={e.detail} report={report} inline />
-                  </>
-                ) : null}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )
-
-    case 'links':
-      return (
-        <ul className="jb-pdf-links">
-          {block.items.map((l, i) => (
-            <li key={i}>
-              <a href={l.href}>
-                <b>{l.label}</b>
-                <span className="jb-pdf-url">{l.href}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )
-
-    case 'kv':
-      return (
-        <dl className="jb-pdf-kv">
-          {block.items.map((kv, i) => (
-            <div key={i}>
-              <dt>{kv.label}</dt>
-              <dd style={kv.tone && kv.tone !== 'neutral' ? { color: toneColor(kv.tone) } : undefined}>
-                {kv.href ? (
-                  <a href={kv.href}>{kv.value}</a>
-                ) : (
-                  <ReportHtml html={fmtReportMetadata(kv.label, kv.value, report.timeZone ?? APP_CONFIG.timeZone)} report={report} inline />
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )
-
-    default:
-      return null
-  }
 }

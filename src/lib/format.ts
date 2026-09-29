@@ -241,7 +241,7 @@ export function fmtDateTime(v?: string | null, timeZone?: string | null): string
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      ...(zone ? { timeZone: zone, timeZoneName: 'short' } : {}),
+      ...(zone ? { timeZone: zone } : {}),
     })
   } catch {
     return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })

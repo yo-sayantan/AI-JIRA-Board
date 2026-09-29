@@ -36,7 +36,29 @@ export interface Settings {
   aiCloudEffort: AiCloudEffort
   /** Talk to Ollama.app on the Mac (Metal) instead of the Linux Docker VM (CPU). */
   aiUseHostOllama: boolean
+  /** PR readiness reports the AI intern builds at once. */
+  reportParallel: number
+  /** Tickets the Completed-archive rebuild fetches at once. */
+  archiveParallel: number
+  /** Seconds a notification stays on screen before it dismisses itself. */
+  toastSeconds: number
+  /** Most notifications on screen at once; the oldest go first. */
+  toastMax: number
   features: Record<FeatureKey, boolean>
+}
+
+/** Inclusive bounds for the number boxes. The server clamps to the same ranges. */
+export const LIMITS = {
+  reportParallel: { min: 1, max: 6 },
+  archiveParallel: { min: 1, max: 16 },
+  toastSeconds: { min: 2, max: 10 },
+  toastMax: { min: 1, max: 10 },
+} as const
+
+export function clampSetting(key: keyof typeof LIMITS, v: unknown, fallback: number): number {
+  const n = Math.round(Number(v))
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(LIMITS[key].max, Math.max(LIMITS[key].min, n))
 }
 
 /**
@@ -151,6 +173,10 @@ export const DEFAULT_SETTINGS: Settings = {
   aiCloudModel: APP_CONFIG.ai?.cloudModel ?? '',
   aiCloudEffort: APP_CONFIG.ai?.cloudEffort ?? 'low',
   aiUseHostOllama: APP_CONFIG.ai?.useHostOllama ?? false,
+  reportParallel: clampSetting('reportParallel', APP_CONFIG.ai?.parallel, 4),
+  archiveParallel: clampSetting('archiveParallel', APP_CONFIG.archive?.workers, 8),
+  toastSeconds: 10,
+  toastMax: 4,
   features: DEFAULT_FEATURES,
 }
 
@@ -170,6 +196,10 @@ export function loadSettings(): Settings {
           : parsed.aiCloudEffort === 'medium'
             ? 'medium'
             : 'low',
+      reportParallel: clampSetting('reportParallel', parsed.reportParallel, DEFAULT_SETTINGS.reportParallel),
+      archiveParallel: clampSetting('archiveParallel', parsed.archiveParallel, DEFAULT_SETTINGS.archiveParallel),
+      toastSeconds: clampSetting('toastSeconds', parsed.toastSeconds, DEFAULT_SETTINGS.toastSeconds),
+      toastMax: clampSetting('toastMax', parsed.toastMax, DEFAULT_SETTINGS.toastMax),
       features: { ...DEFAULT_FEATURES, ...(parsed.features ?? {}) },
     }
   } catch {

@@ -65,7 +65,8 @@
     "cloudProvider": "cursor",
     "cloudModel": "",
     "cloudEffort": "low",
-    "useHostOllama": false
+    "useHostOllama": false,
+    "parallel": 4
   },
   "timeouts": {
     "dailySec": 1800,

@@ -26,8 +26,9 @@ export interface AppRuntimeConfig {
     features?: Record<string, boolean>
   }
   reports?: { defaultWindowDays?: number; presetWindowDays?: number[] }
-  archive?: { defaultWindowDays?: number; presetWindowDays?: number[] }
+  archive?: { defaultWindowDays?: number; presetWindowDays?: number[]; workers?: number }
   ai?: {
+    parallel?: number
     level?: 'none' | 'low' | 'moderate' | 'full'
     backend?: 'local' | 'cloud'
     localModel?: string

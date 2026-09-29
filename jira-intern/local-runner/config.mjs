@@ -228,11 +228,11 @@ function shellenv() {
   out.push(`REPORTS_AUTO=${shq(cfg.reports?.autoGenerate === false ? 0 : 1)}`)
   out.push(`REPORTS_YEAR=${shq(cfg.reports?.year ?? 2026)}`)
   out.push(`REPORTS_MAX_PER_RUN=${shq(cfg.reports?.maxPerRun ?? 5)}`)
-  out.push(`COMPLETED_MAX_FETCH=${shq(cfg.archive?.maxFetch ?? 999)}`)
-  out.push(`COMPLETED_WORKERS=${shq(cfg.archive?.workers ?? 8)}`)
   // The board's Settings panel writes jira-intern/.settings.json; it overrides config.json so a
   // UI change takes effect without editing (or exposing) the user's personal config file.
   const runtime = boardSettings()
+  out.push(`COMPLETED_MAX_FETCH=${shq(cfg.archive?.maxFetch ?? 999)}`)
+  out.push(`COMPLETED_WORKERS=${shq(runtime.archiveParallel ?? cfg.archive?.workers ?? 8)}`)
   out.push(`REPORTS_AI_LEVEL=${shq(runtime.aiLevel ?? cfg.ai?.level ?? 'moderate')}`)
   out.push(`AI_BACKEND=${shq(runtime.aiBackend ?? cfg.ai?.backend ?? 'local')}`)
   out.push(`AI_LOCAL_MODEL=${shq(runtime.aiLocalModel ?? cfg.ai?.localModel ?? '')}`)

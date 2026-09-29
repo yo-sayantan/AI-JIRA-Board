@@ -154,8 +154,8 @@ a {
   line-height: 1.6;
   color: var(--ink-soft);
   max-width: 100%;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .prose-mini p {
   margin: 0 0 0.6em;
@@ -164,18 +164,18 @@ a {
   list-style: disc outside; /* re-enable markers (Tailwind preflight removes them) */
   margin: 0.4em 0 0.7em;
   padding-left: 1.5em; /* room for the marker so wrapped lines hang under the text */
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .prose-mini ol {
   list-style: decimal outside;
   margin: 0.4em 0 0.7em;
   padding-left: 1.6em;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .prose-mini li {
   margin: 0.3em 0;
   padding-left: 0.2em;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .prose-mini li::marker {
   color: var(--muted);
@@ -257,13 +257,13 @@ a {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 1px 5px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   word-break: break-word;
 }
 .prose-mini a {
   color: var(--link);
   text-decoration: none;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .prose-mini a:hover {
   text-decoration: underline;
@@ -290,6 +290,14 @@ a {
 }
 .ai-pull-indet {
   animation: ai-pull-indet 1.2s ease-in-out infinite;
+}
+
+/* Empty board glyphs are positioned from the section center in FunEmptyBoard. */
+.jb-orbit-emoji {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  line-height: 1;
 }
 
 /* ── Completed pill: metallic gold sheen (always-on "active" animation) ──
@@ -406,21 +414,17 @@ a {
   transition-duration: 0.001ms !important;
 }
 
-/* ── PR Readiness Report → PDF ────────────────────────────────────────────────
-   Styles the purpose-built print document (PrReportPrint.tsx), not the screen
-   overlay. Because the markup is written for paper, almost nothing here needs
-   !important — it is describing a layout rather than overriding one.
-
-   The cover is sized to the @page content box exactly (A4 landscape less the
-   margins) so it fills its page and the body starts on page two. */
+/* ── PR Readiness Report → PDF slide deck ─────────────────────────────────────
+   Styles PrReportPrint.tsx. Each .jb-slide is one 13.33 × 7.5 in page — the
+   PowerPoint widescreen size — so the export can be cast or imported as slides. */
 .jb-pdf {
   display: none;
 }
 
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 14mm 15mm;
+    size: 13.333in 7.5in;
+    margin: 0;
   }
 
   html,
@@ -430,9 +434,9 @@ a {
     overflow: visible !important;
   }
 
-  /* Print the document and nothing else. It is portalled to <body>, so its siblings can be
-     removed from the layout outright; hiding them by visibility would keep the board's height
-     and paginate around pages with no ink on them. */
+  /* Print the deck and nothing else. It is portalled to <body>, so its siblings can be removed
+     from the layout outright; hiding them by visibility would keep the board's height and
+     paginate around pages with no ink on them. */
   body > *:not(.jb-report-overlay) {
     display: none !important;
   }
@@ -449,20 +453,16 @@ a {
     display: none !important;
   }
 
-  /* Specific enough that nothing can out-rank it and leave the export blank. */
   .jb-report-overlay .jb-pdf {
     display: block !important;
     color: #10151f;
-    font-size: 10px;
-    line-height: 1.5;
-
-    /* Rebind the theme inside the document. Ticket prose is rendered by .prose-mini, which reaches
-       for these variables — and in dark mode --ink is near-white, so every bold run inside a
-       callout or table came out white-on-white on paper. Scoping them here fixes the whole subtree
-       at once instead of chasing each rule. */
+    font-size: 13px;
+    line-height: 1.45;
+    /* Ticket prose renders through .prose-mini, which reads these. In dark mode --ink is near
+       white, so they are rebound here or bold runs print white on white. */
     --ink: #10151f;
     --ink-soft: #37415a;
-    --muted: #6b7690;
+    --muted: #66718a;
     --line: #dfe3ea;
     --line-strong: #c9cfda;
     --surface-solid: #ffffff;
@@ -477,476 +477,654 @@ a {
     print-color-adjust: exact;
     box-shadow: none;
   }
+  .jb-pdf a {
+    color: #1a4fd0;
+    text-decoration: none;
+  }
 
-  /* ── Cover ───────────────────────────────────────────────────────────────── */
-  .jb-pdf-cover {
-    height: 182mm; /* 210mm page − 28mm of vertical margin */
+  /* ── Slide frame ─────────────────────────────────────────────────────────── */
+  .jb-slide {
+    box-sizing: border-box;
+    width: 13.333in;
+    min-height: 7.5in;
+    padding: 0.42in 0.6in 0.36in;
     display: flex;
     flex-direction: column;
     break-after: page;
     page-break-after: always;
+    background: #fff;
   }
-  .jb-pdf-mast {
+  .jb-slide:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .jb-slide-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.3in;
+    padding-bottom: 0.14in;
+    margin-bottom: 0.2in;
     border-bottom: 2px solid #10151f;
-    padding-bottom: 9mm;
   }
-  .jb-pdf-eyebrow {
+  .jb-slide-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #66718a;
+  }
+  .jb-slide-title {
+    margin: 4px 0 0;
+    font-size: 27px;
+    line-height: 1.15;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+  }
+  .jb-slide-aud {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .jb-slide-body {
+    flex: 1;
+    min-height: 0;
+  }
+  .jb-slide-foot {
+    display: flex;
+    gap: 0.25in;
+    align-items: baseline;
+    margin-top: 0.18in;
+    padding-top: 0.09in;
+    border-top: 1px solid #e3e7ee;
+    font-size: 10px;
+    color: #7a849b;
+  }
+  .jb-slide-foot-key {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: #37415a;
+  }
+  .jb-slide-foot-title {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .jb-slide-num {
+    font-weight: 700;
+    color: #37415a;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Cover ───────────────────────────────────────────────────────────────── */
+  .jb-slide-cover {
+    padding: 0;
+    background: #0f172a;
+    color: #fff;
+  }
+  .jb-cover {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0.55in 0.7in 0.45in;
+    min-height: 7.5in;
+    box-sizing: border-box;
+  }
+  .jb-cover-band {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0.16in;
+  }
+  .jb-cover-top {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: #6b7690;
+    color: #94a3b8;
   }
-  .jb-pdf-eyebrow-right {
-    letter-spacing: 0.08em;
+  .jb-cover-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.6in;
   }
-  .jb-pdf-key {
-    margin-top: 7mm;
+  .jb-cover-left {
+    flex: 1;
+    min-width: 0;
+  }
+  .jb-cover-key {
+    display: inline-block;
     font-family: var(--font-mono);
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 700;
-    letter-spacing: 0.1em;
-    color: #37415a;
+    letter-spacing: 0.08em;
+    color: #93c5fd !important;
   }
-  .jb-pdf-title {
-    margin: 2mm 0 0;
-    font-size: 33px;
+  .jb-cover-title {
+    margin: 8px 0 0;
+    font-size: 40px;
     line-height: 1.12;
     font-weight: 800;
     letter-spacing: -0.02em;
-    max-width: 24em;
+    max-width: 22em;
   }
-
-  /* Verdict owns the middle of the cover — it is the answer the reader came for. The score sits
-     in its own cell rather than beside the label, so the two stop competing for the same rank. */
-  .jb-pdf-verdict {
-    flex: 0 0 auto;
+  .jb-cover-verdict {
     display: flex;
-    align-items: stretch;
-    gap: 10mm;
-    margin: 9mm 0;
-    min-height: 34mm;
+    align-items: center;
+    gap: 12px;
+    margin-top: 0.3in;
   }
-  .jb-pdf-verdict-main {
+  .jb-cover-label {
+    font-size: 26px;
+    font-weight: 800;
+  }
+  .jb-cover-lead {
+    margin: 0.14in 0 0;
+    font-size: 17px;
+    line-height: 1.5;
+    color: #cbd5e1;
+    max-width: 44em;
+  }
+  .jb-cover-lead *,
+  .jb-cover .prose-mini,
+  .jb-cover b {
+    color: inherit !important;
+  }
+  .jb-cover-score {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+  .jb-cover-foot {
+    display: flex;
+    gap: 0.6in;
+    padding-top: 0.2in;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+  }
+  .jb-cover-foot > div:first-child {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    border-left: 4px solid;
-    padding-left: 7mm;
-    padding-top: 2mm;
-    padding-bottom: 2mm;
-    min-width: 0;
   }
-  .jb-pdf-verdict-label {
-    font-size: 29px;
-    font-weight: 800;
-    letter-spacing: -0.015em;
-    line-height: 1.1;
-  }
-  .jb-pdf-lead {
-    margin: 4mm 0 0;
-    font-size: 14.5px;
-    line-height: 1.55;
-    color: #2b3547;
-    max-width: 46em;
-  }
-  /* The one line a reader has to act on, so it is set apart rather than buried in the prose. */
-  .jb-pdf-next {
-    margin: 5mm 0 0;
-    padding-top: 3mm;
-    border-top: 1px solid #dfe3ea;
-    font-size: 13px;
+  .jb-cover-foot-label {
+    margin-bottom: 6px;
+    font-size: 10px;
     font-weight: 700;
-    line-height: 1.45;
-    color: #10151f;
-    max-width: 50em;
-  }
-  .jb-pdf-next-label {
-    display: inline-block;
-    margin-right: 3mm;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: #6b7690;
-    vertical-align: 1.5px;
+    color: #94a3b8;
   }
-  .jb-pdf-scorebox {
-    flex: 0 0 32mm;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: flex-end;
-    text-align: right;
-    border-left: 1px solid #dfe3ea;
-    padding-left: 7mm;
-  }
-  .jb-pdf-score {
-    font-size: 44px;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: -0.03em;
-    font-variant-numeric: tabular-nums;
-  }
-  .jb-pdf-score-of {
-    margin-top: 1.5mm;
-    font-size: 8.5px;
-    color: #6b7690;
-  }
-
-  /* ── Figures ── label leads, value beneath. With the label below, a value long enough to wrap
-     (a pull-request tally, say) pushed its own label down a line and knocked it out of alignment
-     with every other label in the row. Leading with the label puts them all on one baseline. */
-  .jb-pdf-figures {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: flex-start;
-    border-top: 1px solid #dfe3ea;
-    border-bottom: 1px solid #dfe3ea;
-    padding: 5mm 0;
-    gap: 6mm;
-  }
-  .jb-pdf-fig {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-  .jb-pdf-fig-label {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #5d6880;
-    line-height: 1.2;
-  }
-  .jb-pdf-fig-value {
-    margin-top: 2mm;
-    font-size: 18px;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-    font-variant-numeric: tabular-nums;
-    line-height: 1.3;
-  }
-  /* One fact of a composite value, kept whole; the separator rides with the fact before it. */
-  .jb-pdf-seg {
-    white-space: nowrap;
-  }
-  .jb-pdf-fig-hint {
-    margin-top: 1mm;
-    font-size: 8.5px;
-    color: #6b7690;
-  }
-  /* Inside a block the same figures are supporting detail, not a headline. */
-  .jb-pdf-figures-inline {
-    border: 0;
-    padding: 1mm 0 0;
-    flex-wrap: wrap;
-  }
-  .jb-pdf-figures-inline .jb-pdf-fig-value {
-    font-size: 12px;
-    margin-top: 1mm;
-  }
-
-  .jb-pdf-cover-foot {
-    display: flex;
-    gap: 12mm;
-    padding-top: 5mm;
-    margin-top: auto;
-  }
-  .jb-pdf-foot-label {
-    display: block;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-    color: #6b7690;
-    margin-bottom: 2mm;
-  }
-  .jb-pdf-contents {
-    flex: 0 0 62mm;
-  }
-  .jb-pdf-contents ol {
+  .jb-cover-agenda {
     margin: 0;
     padding: 0;
     list-style: none;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 0.3in;
+    font-size: 12.5px;
+    color: #e2e8f0;
   }
-  .jb-pdf-contents li {
+  .jb-cover-agenda li {
     display: flex;
-    align-items: center;
-    gap: 2mm;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1mm 0;
-    border-bottom: 1px solid #f0f2f6;
+    gap: 8px;
+    align-items: baseline;
   }
-  .jb-pdf-contents-count {
-    margin-left: auto;
-    font-weight: 500;
-    font-size: 8.5px;
-    color: #6b7690;
+  .jb-cover-agenda-n {
+    min-width: 18px;
+    font-weight: 800;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
   }
-  .jb-pdf-colophon {
-    flex: 1;
-  }
-  .jb-pdf-colophon p {
-    margin: 0 0 1.5mm;
-    font-size: 9.5px;
-    line-height: 1.5;
-    color: #37415a;
-    max-width: 44em;
-  }
-  .jb-pdf-colophon-meta {
-    font-size: 8.5px !important;
-    color: #6b7690 !important;
-  }
-  .jb-pdf-warn {
-    margin-top: 2.5mm !important;
-    padding-top: 2mm;
-    border-top: 1px solid #f0e3cf;
-    color: #7c4a06 !important;
-    font-size: 8.5px !important;
-  }
-  .jb-pdf-warn-label {
-    display: inline-block;
-    margin-right: 2.5mm;
-    font-size: 7.5px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: #b45309;
+  .jb-cover-meta {
+    flex: 0 0 3.2in;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #cbd5e1;
   }
 
-  .jb-pdf-dot {
+  /* ── Shared pieces ───────────────────────────────────────────────────────── */
+  .jb-rag {
     display: inline-block;
-    width: 7px;
-    height: 7px;
+    padding: 4px 14px;
     border-radius: 999px;
-    flex: none;
-  }
-  .jb-pdf-dot-sm {
-    width: 5px;
-    height: 5px;
-    margin-right: 2mm;
-  }
-
-  /* ── Body pages ──────────────────────────────────────────────────────────── */
-  .jb-pdf-part {
-    margin-bottom: 9mm;
-  }
-  .jb-pdf-part-title {
-    display: flex;
-    align-items: center;
-    gap: 2.5mm;
     font-size: 13px;
     font-weight: 800;
-    letter-spacing: -0.01em;
-    margin: 0 0 1.5mm;
-    padding-bottom: 2mm;
-    border-bottom: 1.5px solid #10151f;
-    break-after: avoid;
-    page-break-after: avoid;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fff;
   }
-  .jb-pdf-part-summary {
-    margin: 0 0 3mm;
-    font-size: 10px;
-    color: #37415a;
-  }
-
-  .jb-pdf-blocks {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 5mm 8mm;
-    align-items: start;
-  }
-  .jb-pdf-wide {
-    grid-column: 1 / -1;
-  }
-
-  /* A section is never split. If it does not fit with what is already on the page it moves to
-     the next one whole — a table continued overleaf is worse than a shorter page. */
-  .jb-pdf-block {
-    border-left: 2.5px solid;
-    padding-left: 4mm;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .jb-pdf-block-title {
+  .jb-chip {
+    display: inline-block;
+    padding: 2px 9px;
+    border: 1px solid;
+    border-radius: 999px;
     font-size: 10.5px;
-    font-weight: 800;
-    letter-spacing: 0.01em;
-    margin: 0 0 2mm;
+    font-weight: 700;
+    white-space: nowrap;
   }
-  .jb-pdf-prose {
-    font-size: 10px !important;
+  .jb-chip-quiet {
+    border-color: #d5dbe5;
+    color: #56627a;
+    background: #f4f6f9;
+  }
+  .jb-tag {
+    display: inline-block;
+    margin-right: 8px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #66718a;
+  }
+  .jb-h3 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #56627a;
+  }
+  .jb-prose {
+    font-size: 13px !important;
     line-height: 1.55 !important;
     color: #37415a !important;
   }
-
-  /* ── Tables ── hairlines; the failing row keeps its colour as a left edge. */
-  .jb-pdf-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 9.5px;
+  .jb-prose-sm {
+    font-size: 11.5px !important;
   }
-  .jb-pdf-table th {
-    text-align: left;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-    color: #6b7690;
-    border-bottom: 1px solid #37415a;
-    padding: 0 6px 2mm 0;
+  .jb-muted {
+    color: #7a849b !important;
   }
-  .jb-pdf-table td {
-    vertical-align: top;
-    padding: 1.6mm 6px 1.6mm 0;
-    border-bottom: 1px solid #eceff4;
-    color: #37415a;
+  .jb-small {
+    font-size: 10.5px;
   }
-  .jb-pdf-table tr {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .jb-pdf-table thead {
-    display: table-header-group;
-  }
-  /* Qualified by the table: a bare .jb-pdf-td-lead loses to .jb-pdf-table td and the lead column
-     ends up the same grey as the rest of the row. */
-  .jb-pdf-table td.jb-pdf-td-lead {
+  .jb-strong {
     font-weight: 700;
     color: #10151f;
-    padding-left: 2mm;
   }
-
-  /* ── Cards / lists / kv / timeline / links ───────────────────────────────── */
-  .jb-pdf-cards {
+  .jb-nowrap {
+    white-space: nowrap;
+  }
+  .jb-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18in;
+  }
+  .jb-grid-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 4mm;
+    gap: 0.22in 0.35in;
+    align-items: start;
   }
-  .jb-pdf-card {
-    border-left: 2px solid;
-    padding-left: 3mm;
-    break-inside: avoid;
-    page-break-inside: avoid;
+  .jb-col-span {
+    grid-column: 1 / -1;
   }
-  .jb-pdf-card-head {
-    display: flex;
-    align-items: baseline;
-    gap: 3mm;
-  }
-  .jb-pdf-card-title {
-    font-size: 10px;
-    font-weight: 700;
-    flex: 1;
-  }
-  .jb-pdf-card-badge {
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .jb-pdf-card-detail {
-    margin: 1mm 0 0;
-    font-size: 8.5px;
-    color: #6b7690;
+  .jb-split {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 0.4in;
+    align-items: start;
   }
 
-  .jb-pdf-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  /* ── Executive summary ───────────────────────────────────────────────────── */
+  .jb-summary {
+    display: grid;
+    grid-template-columns: 1.45fr 1fr;
+    grid-template-rows: 1fr auto;
+    gap: 0.25in 0.4in;
+    height: 100%;
   }
-  .jb-pdf-list li {
+  .jb-summary-status {
+    border-left: 5px solid;
+    padding: 4px 0 4px 0.25in;
+  }
+  .jb-summary-row {
     display: flex;
-    align-items: baseline;
-    font-size: 10px;
+    align-items: center;
+    gap: 12px;
+  }
+  .jb-summary-label {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+  }
+  .jb-summary-lead {
+    margin: 0.16in 0 0;
+    font-size: 17px;
     line-height: 1.5;
-    padding: 0.8mm 0;
+    font-weight: 600;
+    color: #1e293b;
+  }
+  .jb-summary-why {
+    margin: 0.12in 0 0;
+    font-size: 13.5px;
+    line-height: 1.55;
     color: #37415a;
   }
-
-  .jb-pdf-timeline {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .jb-pdf-timeline li {
+  .jb-summary-side {
     display: flex;
-    gap: 4mm;
-    font-size: 9.5px;
-    padding: 1mm 0;
-    border-bottom: 1px solid #f0f2f6;
+    flex-direction: column;
+    gap: 0.2in;
+  }
+  .jb-next {
+    border: 2px solid;
+    border-radius: 12px;
+    padding: 0.16in 0.2in;
+    background: #f8fafc;
+  }
+  .jb-next-label {
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #66718a;
+  }
+  .jb-next-action {
+    margin-top: 6px;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.4;
+    color: #10151f;
+  }
+  .jb-next-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 10px;
+    font-size: 12.5px;
     color: #37415a;
   }
-  .jb-pdf-when {
-    flex: 0 0 26mm;
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    color: #6b7690;
+  .jb-next-meta b {
+    margin-right: 5px;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #66718a;
+  }
+  .jb-summary-kpis {
+    grid-column: 1 / -1;
   }
 
-  .jb-pdf-links {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .jb-pdf-links li {
-    font-size: 9.5px;
-    padding: 1mm 0;
-    border-bottom: 1px solid #f0f2f6;
-  }
-  .jb-pdf-links a {
-    display: block;
-    text-decoration: none;
-    color: inherit;
-  }
-  .jb-pdf-url {
-    display: block;
-    font-family: var(--font-mono);
-    font-size: 8px;
-    color: #1a4fd0;
-    text-decoration: underline;
-    word-break: break-all;
-  }
-  .jb-pdf a {
-    color: #1a4fd0;
-    text-decoration: underline;
-  }
-  a.jb-pdf-key,
-  a.jb-pdf-card {
-    display: block;
-    text-decoration: none;
-    color: inherit;
-  }
-  a.jb-pdf-key {
-    color: #1a4fd0;
-  }
-  .jb-pdf-cover-links a {
-    color: #1a4fd0;
-    text-decoration: underline;
-  }
-
-  .jb-pdf-kv {
+  .jb-facts {
     margin: 0;
     display: grid;
     grid-template-columns: max-content 1fr;
-    gap: 1mm 5mm;
-    font-size: 9.5px;
+    gap: 6px 16px;
+    font-size: 12.5px;
   }
-  .jb-pdf-kv > div {
+  .jb-facts > div {
     display: contents;
   }
-  .jb-pdf-kv dt {
-    color: #6b7690;
+  .jb-facts dt {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #7a849b;
+    padding-top: 2px;
   }
-  .jb-pdf-kv dd {
+  .jb-facts dd {
     margin: 0;
     font-weight: 600;
+    color: #1e293b;
+  }
+
+  /* ── KPI tiles ───────────────────────────────────────────────────────────── */
+  .jb-kpis {
+    display: grid;
+    gap: 12px;
+  }
+  .jb-kpi {
+    border-top: 4px solid;
+    border-radius: 0 0 10px 10px;
+    background: #f5f7fa;
+    padding: 10px 12px 12px;
+    min-width: 0;
+  }
+  .jb-kpi-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #66718a;
+  }
+  .jb-kpi-value {
+    margin-top: 5px;
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.2;
+    color: #10151f;
+    font-variant-numeric: tabular-nums;
+  }
+  .jb-kpi-hint {
+    margin-top: 3px;
+    font-size: 10px;
+    color: #7a849b;
+  }
+
+  /* ── Gate bar ────────────────────────────────────────────────────────────── */
+  .jb-gatebar {
+    margin-bottom: 0.16in;
+  }
+  .jb-gatebar-track {
+    display: flex;
+    height: 12px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: #eef1f5;
+  }
+  .jb-gatebar-track span {
+    display: block;
+    height: 100%;
+  }
+  .jb-gatebar-legend {
+    display: flex;
+    gap: 22px;
+    margin-top: 7px;
+    font-size: 12px;
+    font-weight: 600;
     color: #37415a;
+  }
+  .jb-gatebar-legend i {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 5px;
+    border-radius: 999px;
+    vertical-align: 0;
+  }
+
+  /* ── Tables ──────────────────────────────────────────────────────────────── */
+  .jb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .jb-table th {
+    text-align: left;
+    padding: 0 10px 7px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #66718a;
+    border-bottom: 1.5px solid #37415a;
+  }
+  .jb-table td {
+    vertical-align: top;
+    padding: 7px 10px 7px 12px;
+    border-bottom: 1px solid #e8ebf1;
+    color: #37415a;
+  }
+  .jb-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .jb-table tbody tr:nth-child(even) td {
+    background: #fafbfc;
+  }
+  .jb-table td.jb-td-lead {
+    font-weight: 700;
+    color: #10151f;
+  }
+
+  /* ── Callouts, lists, cards, timeline, links ─────────────────────────────── */
+  .jb-callout {
+    border-left: 4px solid;
+    border-radius: 0 10px 10px 0;
+    padding: 10px 14px;
+    break-inside: avoid;
+    margin-top: 0.16in;
+  }
+  .jb-stack > .jb-callout,
+  .jb-grid-2 > .jb-callout {
+    margin-top: 0;
+  }
+  .jb-callout-title {
+    margin-bottom: 3px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .jb-actions {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .jb-actions li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #1e293b;
+  }
+  .jb-action-n {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 800;
+    display: grid;
+    place-items: center;
+  }
+
+  .jb-cards {
+    display: grid;
+    gap: 12px;
+  }
+  .jb-cards-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .jb-cards-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .jb-card {
+    display: block;
+    border: 1px solid #e3e7ee;
+    border-top: 4px solid;
+    border-radius: 0 0 10px 10px;
+    padding: 10px 12px;
+    background: #fff;
+    color: inherit !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .jb-card-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .jb-card-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    font-weight: 800;
+    color: #10151f;
+    overflow-wrap: break-word;
+  }
+  .jb-card-detail {
+    margin: 5px 0 0;
+    font-size: 11px;
+    color: #66718a;
+  }
+
+  .jb-timeline {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-left: 2px solid #e3e7ee;
+  }
+  .jb-timeline li {
+    position: relative;
+    display: flex;
+    gap: 10px;
+    padding: 4px 0 4px 14px;
+    font-size: 12px;
+    color: #37415a;
+  }
+  .jb-tl-dot {
+    position: absolute;
+    left: -6px;
+    top: 9px;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    border: 2px solid #fff;
+  }
+  .jb-tl-when {
+    flex: 0 0 0.95in;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #66718a;
+  }
+  .jb-tl-what {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .jb-links {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .jb-links li {
+    padding: 6px 0;
+    border-bottom: 1px solid #eef1f5;
+  }
+  .jb-links a {
+    display: block;
+    color: inherit !important;
+  }
+  .jb-links b {
+    display: block;
+    font-size: 12.5px;
+    color: #10151f;
+  }
+  .jb-links span {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: #1a4fd0;
+    word-break: break-all;
   }
 }

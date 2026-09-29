@@ -51,6 +51,26 @@ BADGE_TONE = {
     "Risky": "danger",
     "Unrelated": "warning",
 }
+_FILE_BADGE_SCORE = {
+    "Risky": 400,
+    "Required": 300,
+    "Neutral cleanup": 100,
+    "Unrelated": 0,
+}
+_FILE_PRIORITY_RES = tuple(
+    (re.compile(pattern), weight)
+    for pattern, weight in (
+        (r"\b(critical|urgent|blocker|hotfix|production|security|vulnerab)", 140),
+        (r"(^|[/_.-])(auth|permission|crypto|secret|security)([/_.-]|$)", 120),
+        (r"(^|[/_.-])(migration|schema|database|db|sql)([/_.-]|$)", 110),
+        (r"(^|[/_.-])(config|deploy|k8s|kubernetes|docker|terraform|helm|env)([/_.-]|$)", 90),
+        (r"(^|[/_.-])(api|controller|route|contract|public)([/_.-]|$)", 80),
+        (r"(^|[/_.-])(core|domain|service|worker|processor)([/_.-]|$)", 70),
+        (r"(^|[/_.-])(test|tests|spec|specs)([/_.-]|$)", 60),
+        (r"(^|/)(dist|build|generated|vendor|snapshots?)(/|$)", -160),
+        (r"(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|.*\.min\.(js|css))$", -160),
+    )
+)
 
 
 def now_iso():
@@ -79,11 +99,24 @@ for _k, _v in SECRETS_ENV.items():
     os.environ.setdefault(_k, _v)
 
 EFFORTS = ("low", "medium")
-# Claude stays on Haiku. Cursor is a separate allow-list (see _cursor_bucket).
+# Claude stays on Haiku. Cursor is the explicit value allow-list _CURSOR_KEEP.
 _CHEAP_RANK = (("haiku", 0),)
 _FLAGSHIP = re.compile(r"opus|sonnet|grok|codex|thinking|composer|\bpro\b|gpt-|gemini", re.I)
 _CURSOR_DROP = re.compile(r"xhigh|(^|[-_.])fast($|[-_.])", re.I)
 _CN_MODELS = ("qwen", "deepseek", "kimi", "glm", "chatglm", "baichuan", "internlm", "minimax", "hunyuan", "moonshot", "yi-")
+# Value picks: capable models whose standard (medium, non-fast) output rate is
+# at most $10 / 1M tokens. Same-price older siblings are left out.
+_CURSOR_KEEP = (
+    "gpt-5.6-luna",
+    "composer-2.5",
+    "gemini-3-flash",
+    "kimi-k2.7-code",
+    "glm-5.2",
+    "grok-4.7",
+    "grok-4.6",
+    "gemini-3.6-flash",
+    "claude-sonnet-5",
+)
 _CLOUD_CACHE = {"at": 0.0, "val": None}
 
 MCP_SSL = ssl.create_default_context()
@@ -274,38 +307,18 @@ def _cheap_rank(text):
     return best
 
 
-def _cursor_bucket(text):
-    """0 gemini flash (capped) · 1 gpt-4o · 2 grok · 3 Chinese models. None = hide."""
-    low = (text or "").lower()
-    if _CURSOR_DROP.search(low):
-        return None
-    if "gemini" in low and "flash" in low and not re.search(r"(^|[^a-z])pro([^a-z]|$)", low):
-        return 0
-    if "gpt-4o" in low:
-        return 1
-    if "grok" in low:
-        return 2
-    if any(tok in low for tok in _CN_MODELS):
-        return 3
-    return None
-
-
 def _publish_cursor(models):
-    buckets = {0: [], 1: [], 2: [], 3: []}
+    kept = {}
     for m in models:
-        bucket = _cursor_bucket(f"{m.get('id') or ''} {m.get('label') or ''}")
-        if bucket is None:
+        mid = m.get("id")
+        if mid not in _CURSOR_KEEP:
             continue
         efforts = [e for e in EFFORTS if e in (m.get("efforts") or [])]
         row = {**m, "efforts": efforts}
         if row.get("effortParam") and not efforts:
             row["effortParam"] = None
-        buckets[bucket].append(row)
-    gemini = sorted(buckets[0], key=lambda m: m["id"], reverse=True)[:3]
-    rest = []
-    for bucket in (1, 2, 3):
-        rest.extend(sorted(buckets[bucket], key=lambda m: m["id"]))
-    return gemini + rest
+        kept[mid] = row
+    return [kept[mid] for mid in _CURSOR_KEEP if mid in kept]
 
 
 def _gemini_keep(model_id, label=""):
@@ -395,6 +408,7 @@ def list_cursor_models(key):
             "label": item.get("displayName") or item["id"],
             "efforts": efforts,
             "effortParam": param_id,
+            "variants": item.get("variants") or [],
         })
     return _publish_cursor(models)
 
@@ -474,16 +488,49 @@ def cloud_models(force=False):
     return out
 
 
+def _variant_params(model, effort):
+    """Cursor rejects a model id unless params match one published variant exactly."""
+    variants = (model or {}).get("variants") or []
+    if not variants:
+        return [], effort if effort in EFFORTS else "low"
+
+    def value(variant, param_id):
+        for param in variant.get("params") or []:
+            if param.get("id") == param_id:
+                return str(param.get("value") or "")
+        return ""
+
+    wanted = effort if effort in EFFORTS else "low"
+    normal = [v for v in variants if value(v, "fast") != "true"]
+    pool = normal or variants
+    effort_ids = ("effort", "reasoning_effort", "reasoning")
+
+    def effort_of(variant):
+        return next((value(variant, pid) for pid in effort_ids if value(variant, pid)), "")
+
+    chosen = next((v for v in pool if effort_of(v) == wanted), None)
+    if chosen is None:
+        chosen = next((v for v in pool if effort_of(v) in EFFORTS), None)
+    if chosen is None:
+        chosen = next((v for v in pool if v.get("isDefault")), pool[0])
+    params = [
+        {"id": p["id"], "value": str(p.get("value"))}
+        for p in chosen.get("params") or []
+        if p.get("id") and p.get("value") is not None
+    ]
+    used = effort_of(chosen) or wanted
+    return params, used
+
+
 def chat_cursor(model, effort, system, user, timeout, key):
     """One no-repo Cloud Agent run. Archived when the reply is in, so nothing is left running."""
-    catalog = cloud_models().get("cursor") or {}
+    catalog = cloud_models(force=True).get("cursor") or {}
     hit = next((m for m in catalog.get("models") or [] if m.get("id") == model), None)
-    params = []
-    used = effort if effort in EFFORTS else "low"
-    if hit and hit.get("effortParam") and hit.get("efforts"):
+    params, used = _variant_params(hit, effort)
+    if not params and hit and hit.get("effortParam") and hit.get("efforts"):
         if used not in hit["efforts"]:
             used = hit["efforts"][0]
-        params.append({"id": hit["effortParam"], "value": used})
+        params = [{"id": hit["effortParam"], "value": used}]
     prompt = (
         "Return only the JSON object requested below. "
         "Do not edit files, do not run commands, and do not open a pull request.\n\n"
@@ -498,11 +545,17 @@ def chat_cursor(model, effort, system, user, timeout, key):
 
 
 CANCEL = INTERN / ".ai-cancel-report"
-ACTIVE_JOB_TYPE = None
+# Each queue worker thread records the job type it is running.
+_JOB = threading.local()
+_ACTIVE_LOCK = threading.Lock()
+_ACTIVE = {}  # thread name → {"type", "key", "model", "effort"}
+# pull-model and summarize-active touch shared state (Ollama, data.json); only one at a time.
+_EXCLUSIVE = threading.Lock()
+MAX_PARALLEL = 6
 
 
 def stop_requested():
-    return ACTIVE_JOB_TYPE == "enrich-report" and CANCEL.is_file()
+    return getattr(_JOB, "type", None) == "enrich-report" and CANCEL.is_file()
 
 
 class Stopped(Exception):
@@ -510,10 +563,26 @@ class Stopped(Exception):
 
 
 def _release_stop_if_idle():
+    with _ACTIVE_LOCK:
+        if any(j.get("type") == "enrich-report" for j in _ACTIVE.values()):
+            return
     try:
         CANCEL.unlink()
     except OSError:
         pass
+
+
+def parallel_workers():
+    """Report jobs run this many at a time: AI_PARALLEL, else Settings, else config ai.parallel."""
+    raw = os.environ.get("AI_PARALLEL")
+    if raw is None:
+        raw = ai_queue.load_settings().get("reportParallel")
+    if raw is None:
+        raw = (load_config(str(INTERN)).get("ai") or {}).get("parallel", 4)
+    try:
+        return max(1, min(MAX_PARALLEL, int(raw)))
+    except (TypeError, ValueError):
+        return 4
 
 
 def _cursor_run(model, params, used, prompt, headers, timeout):
@@ -592,7 +661,7 @@ def _cloud_allowed(provider, model):
     if not model:
         return False
     if provider == "cursor":
-        return _cursor_bucket(model) is not None
+        return model in _CURSOR_KEEP
     if provider == "gemini":
         return _gemini_keep(model, model)
     return _cheap_rank(model) is not None
@@ -724,6 +793,7 @@ def live_mcp_pack(key, ticket):
     jira_tok = os.environ.get("JIRA_PERSONAL_TOKEN") or SECRETS_ENV.get("JIRA_PERSONAL_TOKEN")
     bb_tok = os.environ.get("BITBUCKET_PAT") or os.environ.get("ATLASSIAN_TOKEN") or SECRETS_ENV.get("BITBUCKET_PAT") or SECRETS_ENV.get("ATLASSIAN_TOKEN")
     used, errors, files, live = [], [], [], {}
+    files_complete = True
 
     if mcp_policy("jira") and jira_base and jira_tok:
         try:
@@ -746,20 +816,27 @@ def live_mcp_pack(key, ticket):
         prs = list(ticket.get("prs") or [])
         if ticket.get("pr"):
             prs = [ticket["pr"], *[p for p in prs if p is not ticket.get("pr")]]
-        seen_ids = set()
-        for pr in prs[:4]:
+        seen_ids, pr_candidates = set(), []
+        for pr in prs:
             if not isinstance(pr, dict):
                 continue
             parsed = parse_pr_url(pr.get("url"))
-            if not parsed or parsed["id"] in seen_ids:
+            identity = (parsed["project"], parsed["slug"], parsed["id"]) if parsed else None
+            if not parsed or identity in seen_ids:
                 continue
-            seen_ids.add(parsed["id"])
+            seen_ids.add(identity)
+            pr_candidates.append(parsed)
+        if len(pr_candidates) > 4:
+            files_complete = False
+        for parsed in pr_candidates[:4]:
             try:
                 data = mcp_get(
                     f"{bb_base}/rest/api/1.0/projects/{parsed['project']}/repos/{parsed['slug']}/pull-requests/{parsed['id']}/changes?limit=100",
                     bb_tok,
                     timeout=30,
                 )
+                if data.get("isLastPage") is False:
+                    files_complete = False
                 for row in data.get("values") or []:
                     path = row.get("path") or {}
                     name = path.get("toString") or path.get("name")
@@ -778,11 +855,15 @@ def live_mcp_pack(key, ticket):
         live["confluenceOnTicket"] = pages if pages else "none in local dump — no extra Confluence fetch"
         used.append("confluence-local")
 
+    unique_files = list(dict.fromkeys(files))
+    ranked_files = sorted(unique_files, key=lambda path: (-_path_priority(path), path.lower()))
     return {
         "source": "live REST with MCP tokens (read-only)",
         "used": used,
         "errors": errors,
-        "changedFiles": files[:80],
+        "changedFileCount": len(unique_files),
+        "changedFiles": ranked_files[:80],
+        "changedFilesComplete": files_complete and len(unique_files) <= 80,
         "live": live,
     }
 
@@ -1208,16 +1289,26 @@ def apply_class_proof(report, proof):
 def build_enrich_user(key, ticket, data, base):
     local = local_disk_pack(key, ticket, data)
     live = live_mcp_pack(key, ticket)
-    return (
+    user = (
         f"Ticket key: {key}\n\n"
         f"LOCAL DATA (on disk):\n{json.dumps(local, indent=2)[:14000]}\n\n"
         f"LIVE MCP READS:\n{json.dumps(live, indent=2)[:8000]}\n\n"
         f"BASE REPORT verdict: {json.dumps(base.get('verdict'), indent=2)}\n"
         f"BASE warnings: {json.dumps(base.get('warnings'))}\n"
     )
+    return user, live
 
 
-def merge_enrichment(base, extra, generator):
+def _path_priority(path):
+    text = str(path or "").strip().lower()
+    return sum(weight for pattern, weight in _FILE_PRIORITY_RES if pattern.search(text))
+
+
+def _file_priority(file_row):
+    return _FILE_BADGE_SCORE.get(file_row.get("badge"), 0) + _path_priority(file_row.get("path"))
+
+
+def merge_enrichment(base, extra, generator, live_files=None):
     report = deepcopy(base)
     extra = extra if isinstance(extra, dict) else {}
     summary = (extra.get("verdictSummary") or "").strip()
@@ -1253,15 +1344,29 @@ def merge_enrichment(base, extra, generator):
                         continue
                     rows.append({"cells": [str(c) for c in cells[:3]], "tone": row.get("tone") or "info"})
                 block["rows"] = rows
-    files = extra.get("files") if isinstance(extra.get("files"), list) else []
+    has_live_file_pack = isinstance(live_files, dict)
+    live_files = live_files if has_live_file_pack else {}
+    changed_paths = [str(path).strip() for path in live_files.get("changedFiles") or [] if str(path).strip()]
+    changed_path_lookup = {path.lower(): path for path in changed_paths}
+    unique_files = {}
+    for file_row in extra.get("files") if isinstance(extra.get("files"), list) else []:
+        if not isinstance(file_row, dict):
+            continue
+        path = str(file_row.get("path") or "").strip()
+        if not path or (has_live_file_pack and path.lower() not in changed_path_lookup):
+            continue
+        canonical_path = changed_path_lookup.get(path.lower(), path)
+        normalized = {**file_row, "path": canonical_path}
+        prior = unique_files.get(canonical_path.lower())
+        if prior is None or _file_priority(normalized) > _file_priority(prior):
+            unique_files[canonical_path.lower()] = normalized
+    files = sorted(unique_files.values(), key=lambda row: (-_file_priority(row), str(row.get("path") or "").lower()))
     review = extra.get("reviewFocus") if isinstance(extra.get("reviewFocus"), list) else []
     risks = extra.get("risks") if isinstance(extra.get("risks"), list) else []
     proof = extra.get("productionProof") or "No production evidence: intern has on-disk + Jira/Bitbucket reads, not Dynatrace."
     gate = extra.get("releaseGate") or "unknown"
     file_cards = []
     for f in files[:12]:
-        if not isinstance(f, dict):
-            continue
         badge = f.get("badge") or "Unrelated"
         file_cards.append({
             "title": f.get("path") or "unknown",
@@ -1281,6 +1386,17 @@ def merge_enrichment(base, extra, generator):
     req = sum(1 for c in file_cards if c.get("badge") == "Required")
     neu = sum(1 for c in file_cards if c.get("badge") == "Neutral cleanup")
     rsk = sum(1 for c in file_cards if c.get("badge") == "Risky")
+    has_file_evidence = bool(files)
+    reviewed = len(file_cards) if has_file_evidence else 0
+    fetched_total = live_files.get("changedFileCount")
+    total = max(fetched_total if isinstance(fetched_total, int) else 0, len(files))
+    omitted = max(total - reviewed, 0)
+    complete = live_files.get("changedFilesComplete", True)
+    file_note = (
+        f"Showing the {reviewed} highest-impact files from {'at least ' if not complete else ''}{total} unique changed files."
+        + (f" {omitted} files are not itemized." if omitted else "")
+        + (" The changed-file fetch was capped; totals may be higher." if not complete else "")
+    ) if has_file_evidence else "No changed-file evidence was available."
     ai_tab = {
         "id": "ai",
         "title": "AI assessment",
@@ -1292,12 +1408,15 @@ def merge_enrichment(base, extra, generator):
                 "tone": "violet",
                 "provenance": "ai",
                 "items": [
-                    {"label": "Required", "value": str(req), "tone": "info"},
-                    {"label": "Neutral cleanup", "value": str(neu), "tone": "neutral"},
-                    {"label": "Risky", "value": str(rsk), "tone": "danger" if rsk else "neutral"},
+                    {"label": "Total changed", "value": str(total), "tone": "neutral"},
+                    {"label": "Prioritized", "value": str(reviewed), "tone": "info"},
+                    {"label": "Not itemized", "value": str(omitted), "tone": "neutral"},
+                    {"label": "Required (priority set)", "value": str(req), "tone": "info"},
+                    {"label": "Neutral (priority set)", "value": str(neu), "tone": "neutral"},
+                    {"label": "Risky (priority set)", "value": str(rsk), "tone": "danger" if rsk else "neutral"},
                 ],
             },
-            {"kind": "cards", "title": "Per-file", "tone": "violet", "provenance": "ai", "items": file_cards},
+            {"kind": "cards", "title": "Priority files", "tone": "violet", "provenance": "ai", "note": file_note, "items": file_cards},
             {
                 "kind": "list",
                 "title": "Review focus",
@@ -1409,18 +1528,12 @@ def enrich_report(job):
         proof = collect_class_proof(ticket)
         if stop_requested():
             raise Stopped()
-        extra, generator = {}, None
-        try:
-            user = build_enrich_user(key, ticket, data, base)
-            raw, generator = infer(job, ENRICH_PROMPT, user)
-            extra = extract_json(raw) or {}
-            if not extra:
-                log(f"{key} model returned no JSON — keeping measured proof")
-        except Stopped:
-            raise
-        except Exception as e:
-            log(f"{key} model skipped: {e}")
-        merged = merge_enrichment(base, extra, generator or "measured") if extra else deepcopy(base)
+        user, live = build_enrich_user(key, ticket, data, base)
+        raw, generator = infer(job, ENRICH_PROMPT, user)
+        extra = extract_json(raw) or {}
+        if not extra:
+            raise RuntimeError(f"{key} model returned no enrichment JSON")
+        merged = merge_enrichment(base, extra, generator or "measured", live)
         apply_class_proof(merged, proof)
         validate_and_write(key, merged, str(base_copy))
         gen = f"jira-ai-intern · {generator}" if generator else "jira-ai-intern · measured"
@@ -1656,7 +1769,16 @@ def ollama_tags_cached(base):
     return val
 
 
+_STATUS_LOCK = threading.RLock()
+
+
 def snapshot_status(extra=None):
+    # Status is a read-modify-write of one file, shared by every worker thread and the HTTP handler.
+    with _STATUS_LOCK:
+        return _snapshot_status(extra)
+
+
+def _snapshot_status(extra=None):
     prev = ai_queue.read_status() or {}
     settings = ai_queue.load_settings()
     use_host = bool(settings.get("aiUseHostOllama"))
@@ -1685,6 +1807,7 @@ def snapshot_status(extra=None):
         "memGb": mem_gb(),
         "pulling": prev.get("pulling"),
         "pullProgress": prev.get("pullProgress"),
+        "parallel": parallel_workers(),
     }
     if extra:
         patch.update(extra)
@@ -1694,22 +1817,66 @@ def snapshot_status(extra=None):
     return ai_queue.write_status(patch)
 
 
-def loop():
-    global ACTIVE_JOB_TYPE
-    snapshot_status({"state": "idle"})
-    log(f"watching {ai_queue.QUEUE_DIR}")
+def _publish_active(extra=None):
+    """Status for the board: `active` lists every running job; `current` stays the first for older readers."""
+    with _ACTIVE_LOCK:
+        active = list(_ACTIVE.values())
+    pulling = any(j.get("type") == "pull-model" for j in active)
+    patch = {
+        "state": "pulling" if pulling else "working" if active else "idle",
+        "current": active[0] if active else None,
+        "active": active,
+        "parallel": parallel_workers(),
+    }
+    if extra:
+        patch.update(extra)
+    if pulling:
+        # A report finishing mid-download must not wipe the download's progress bar.
+        patch.pop("pulling", None)
+        patch.pop("pullProgress", None)
+        patch["state"] = "pulling"
+    snapshot_status(patch)
+
+
+def requeue_orphans():
+    """Jobs left .running by a restart would never finish; put them back in the queue."""
+    try:
+        names = os.listdir(ai_queue.QUEUE_DIR)
+    except OSError:
+        return
+    for name in names:
+        if name.endswith(".json.running"):
+            src = os.path.join(ai_queue.QUEUE_DIR, name)
+            try:
+                os.replace(src, src[: -len(".running")])
+                log(f"requeued {name[: -len('.running')]}")
+            except OSError:
+                pass
+
+
+def worker_loop(slot):
+    name = threading.current_thread().name
     while not STOP.is_set():
+        # Slots above the configured width idle, so a lower setting takes effect without a restart.
+        if slot >= parallel_workers():
+            time.sleep(3)
+            continue
         job, path = ai_queue.claim_next()
         if not job:
             time.sleep(2)
             continue
         job = apply_saved_model(job)
-        ACTIVE_JOB_TYPE = job.get("type")
-        cur = {"type": job.get("type"), "key": job.get("key"), "model": job.get("model"), "effort": job.get("cloudEffort")}
-        if job.get("type") == "pull-model":
-            snapshot_status({
+        typ = job.get("type")
+        _JOB.type = typ
+        cur = {"type": typ, "key": job.get("key"), "model": job.get("model"), "effort": job.get("cloudEffort")}
+        exclusive = _EXCLUSIVE if typ != "enrich-report" else None
+        if exclusive:
+            exclusive.acquire()
+        with _ACTIVE_LOCK:
+            _ACTIVE[name] = cur
+        if typ == "pull-model":
+            _publish_active({
                 "state": "pulling",
-                "current": cur,
                 "lastError": None,
                 "pulling": job.get("model"),
                 "pullProgress": {
@@ -1722,20 +1889,38 @@ def loop():
                 },
             })
         else:
-            snapshot_status({"state": "working", "current": cur, "lastError": None, "pulling": None, "pullProgress": None})
+            _publish_active({"lastError": None, "pulling": None, "pullProgress": None})
+        error = None
         try:
             process_job(job)
-            snapshot_status({"state": "idle", "current": None, "lastError": None, "pulling": None, "pullProgress": None})
         except Stopped:
-            log(f"stopped {job.get('type')} {job.get('key') or ''}".strip())
-            snapshot_status({"state": "idle", "current": None, "lastError": None, "pulling": None, "pullProgress": None})
-            _release_stop_if_idle()
+            log(f"stopped {typ} {job.get('key') or ''}".strip())
         except Exception as e:
+            error = str(e)
             log(f"job failed: {e}\n{traceback.format_exc()}")
-            snapshot_status({"state": "idle", "current": None, "lastError": str(e), "pulling": None, "pullProgress": None})
         finally:
             ai_queue.finish(path)
-            ACTIVE_JOB_TYPE = None
+            with _ACTIVE_LOCK:
+                _ACTIVE.pop(name, None)
+            _JOB.type = None
+            if exclusive:
+                exclusive.release()
+            _release_stop_if_idle()
+            _publish_active({"lastError": error, "pulling": None, "pullProgress": None})
+
+
+def loop():
+    requeue_orphans()
+    _publish_active({"lastError": None})
+    log(f"watching {ai_queue.QUEUE_DIR} with up to {parallel_workers()} parallel jobs")
+    threads = [
+        threading.Thread(target=worker_loop, args=(i,), name=f"ai-worker-{i}", daemon=True)
+        for i in range(MAX_PARALLEL)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
 
 class Handler(BaseHTTPRequestHandler):
