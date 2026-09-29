@@ -9,10 +9,11 @@
 #   2. AI ENRICHMENT       — the connector agent (cursor-agent by default: the same MCP servers and
 #      skills you use in Cursor — Jira, Bitbucket diff, Confluence, Dynatrace, all read-only) rewrites
 #      the report in place with evidence chains, per-file change assessment, risks and a release gate.
-#      Skipped with --no-ai, AI usage = None, or no agent CLI. Where the env forbids the agent
-#      (SKIP_SUMMARY=1 / SKIP_REPORT_AI=1 — the Docker container) the ticket is HANDED OFF through
-#      reports/.enrich/<KEY> to the host-side enricher (enrich-worker.sh) instead of dropped. If the
-#      agent output is not a valid report, the deterministic base is restored — never a torn file.
+#      Skipped with --no-ai, AI usage = Off, or no agent CLI. Where the env forbids an agent
+#      (SKIP_SUMMARY=1 / SKIP_REPORT_AI=1 — the board's Docker container) the ticket is HANDED OFF
+#      through reports/.enrich/<KEY> to the JIRA-AI-Intern container (ai_intern.py: a local model
+#      or a cloud API, per Settings) instead of dropped. If the enriched output is not a valid
+#      report, the deterministic base is restored — never a torn file.
 #
 # Output: jira-intern/reports/<KEY>.json  (+ reports/index.js for file:// via sync-reports.mjs).
 # Exit codes: 0 ok · 2 ticket has no PR / not found.
@@ -77,21 +78,26 @@ node "$HERE/sync-reports.mjs" "$INTERN_DIR" >>"$LOG" 2>&1 || true   # base is vi
 if [ "$NO_AI" = "1" ]; then
   echo "$(date): AI enrichment skipped (--no-ai) — deterministic report kept" | tee -a "$LOG"; exit 0
 fi
-# AI usage level from the board's Settings panel (none | low | moderate | full). "none" is the
-# same contract as --no-ai; the others only scale how long the agent is allowed to think.
+# AI usage MODE from the board's Settings panel (off | local | cloud). Off is the same contract as
+# --no-ai. Local/cloud decide which runtime the AI Intern container uses when this is handed off.
+if [ "${REPORTS_AI_MODE:-off}" = "off" ]; then
+  echo "$(date): AI usage is Off — deterministic report kept" | tee -a "$LOG"; exit 0
+fi
+# AI usage level (none | low | moderate | full). "none" is the same contract as --no-ai; the
+# others only scale how long the agent is allowed to think.
 case "${REPORTS_AI_LEVEL:-moderate}" in
   none)     echo "$(date): AI usage is set to None — deterministic report kept" | tee -a "$LOG"; exit 0 ;;
   low)      TIMEOUT_REPORT=$(( TIMEOUT_REPORT / 2 )) ;;
   full)     TIMEOUT_REPORT=$(( TIMEOUT_REPORT * 2 )) ;;
 esac
-# Where THIS process may not run the agent (SKIP_SUMMARY / SKIP_REPORT_AI — the Docker container),
-# hand the ticket off rather than drop it: a marker in reports/.enrich/ asks the host-side enricher
-# (local-runner/enrich-worker.sh, kept alive by start-jira-board.sh on the Mac where cursor-agent is
-# signed in) to run this same script there. The board keeps showing "generating" until it lands.
+# Where THIS process may not run an agent (SKIP_SUMMARY / SKIP_REPORT_AI — the board's container),
+# hand the ticket off rather than drop it: a marker in reports/.enrich/ asks the JIRA-AI-Intern
+# container (jira-intern/ai_intern.py) to enrich the report with the Local or Cloud model chosen in
+# Settings. The board keeps showing "generating" until the enriched file lands.
 if [ -n "${SKIP_REPORT_AI:-}" ] || [ -n "${SKIP_SUMMARY:-}" ]; then
   mkdir -p "$REPORTS_DIR/.enrich"
   date -u +%Y-%m-%dT%H:%M:%SZ > "$REPORTS_DIR/.enrich/$KEY"
-  echo "$(date): agent not allowed here (env) — handed off to the host enricher via reports/.enrich/$KEY" | tee -a "$LOG"; exit 0
+  echo "$(date): no agent in this container — handed off to the AI Intern via reports/.enrich/$KEY" | tee -a "$LOG"; exit 0
 fi
 AGENT="$(command -v "$AGENT_BIN")"
 if [ -z "$AGENT" ]; then

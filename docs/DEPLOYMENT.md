@@ -114,15 +114,31 @@ bash jira-intern/local-runner/pr-reports-backfill.sh --force        # rebuild ev
 Output: `jira-intern/reports/<KEY>.json` (+ `reports/index.js` for `file://`). **Git-ignored** — real
 PR/Jira content never leaves the machine.
 
-**AI enrichment from Docker.** The container cannot run `cursor-agent` (`SKIP_SUMMARY=1`, no login), so
-`pr-report.sh` inside it writes the deterministic base and leaves a hand-off marker in
-`jira-intern/reports/.enrich/`. `start-jira-board.sh` installs a small **host-side enricher**
-(`jira-intern/local-runner/enrich-worker.sh`) as a launchd login agent (`com.jira-board.enricher`) on
-your Mac, where the agent is signed in; it picks the markers up and runs the same script at the AI level
-set in the board's Settings, so Regenerate and the bulk runs come out enriched with no terminal step. The
-board shows a report as *generating* until the enriched file lands, and Settings → AI usage shows whether
-the enricher is alive. Opt out with `INSTALL_ENRICHER=0 bash start-jira-board.sh`; remove it with
-`launchctl bootout gui/$(id -u)/com.jira-board.enricher && rm ~/Library/LaunchAgents/com.jira-board.enricher.plist`.
+### The AI Intern container
+
+The board's container runs no AI (`SKIP_SUMMARY=1`). When a report is generated there, `pr-report.sh` writes
+the deterministic base and leaves a hand-off marker in `jira-intern/reports/.enrich/`. A second container from
+the **same image**, `JIRA-AI-Intern` (`jira-intern/ai_intern.py`), watches that folder and enriches each
+report the way **Settings → AI usage** says — nothing runs on the host, no terminal step:
+
+| Mode | What runs | Speed / cost | Needs |
+| --- | --- | --- | --- |
+| **Off** | nothing — reports stay deterministic | — | — |
+| **Local model** | Ollama in the `JIRA-LLM` container (`--profile local-llm`), CPU-only | slow (a few tokens/s on an 8B model), free, private | a `.gguf` in `jira-intern/models/` |
+| **Cloud API** | Claude (Messages API) or any OpenAI-compatible endpoint | fast, uses tokens | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in the secrets file |
+
+`start-jira-board.sh` starts the AI Intern with the board and, when Local is selected, the `JIRA-LLM`
+runtime too (switch to Local in Settings, then run the script once more). Model files dropped into
+`jira-intern/models/` are registered with the runtime automatically and appear in Settings as *ready*.
+Settings also shows the Docker VM's memory and marks which catalogue models fit; the in-app guide (**?** →
+**AI**) lists the models, where to download them and how much memory each needs. The board shows a report as
+*generating* until the enriched file lands; if it stays deterministic, Settings → AI usage and the report
+footer say why (runtime unreachable, key missing, model not registered, model output rejected).
+
+Knobs: `AI_LOCAL_ENDPOINT` (default `http://jira-llm:11434`; set `http://host.docker.internal:11434` to use a
+natively installed Ollama — 5–6× faster on Apple Silicon because Docker has no GPU access), `LLM_IMAGE`
+(default `alpine/ollama`, the ~70 MB CPU build; `ollama/ollama` is the official multi-GB image),
+`OPENAI_BASE_URL`. Logs: `docker logs -f JIRA-AI-Intern` and `jira-intern/logs/ai-intern.log`.
 
 ---
 

@@ -9,6 +9,9 @@
 
 export type ThemeMode = 'auto' | 'fixed' | 'schedule'
 export type AiLevel = 'none' | 'low' | 'moderate' | 'full'
+/** off = deterministic reports · local = a model in the JIRA-LLM container (or a native Ollama) · cloud = an API. */
+export type AiMode = 'off' | 'local' | 'cloud'
+export type AiCloudProvider = 'anthropic' | 'openai'
 
 export interface Settings {
   /** auto = follow the OS · fixed = always `theme` · schedule = light between the day hours. */
@@ -17,7 +20,13 @@ export interface Settings {
   /** Local hours [start, end) during which the LIGHT theme applies in `schedule` mode. */
   dayStart: number
   dayEnd: number
+  /** Effort of the AI pass (how long a model may think). 'none' is legacy — the mode carries Off now. */
   aiLevel: AiLevel
+  aiMode: AiMode
+  /** Ollama model name for Local — a registered .gguf from jira-intern/models/ or a pulled tag. */
+  aiLocalModel: string
+  aiCloudProvider: AiCloudProvider
+  aiCloudModel: string
   features: Record<FeatureKey, boolean>
 }
 
@@ -88,12 +97,20 @@ export const AI_LEVELS: { key: AiLevel; label: string; hint: string }[] = [
 
 const DEFAULT_FEATURES = Object.fromEntries(FEATURES.map((f) => [f.key, f.default])) as Record<FeatureKey, boolean>
 
+export const DEFAULT_CLOUD_MODEL = 'claude-opus-5'
+
 export const DEFAULT_SETTINGS: Settings = {
   themeMode: 'auto',
   theme: 'dark',
   dayStart: 7,
   dayEnd: 19,
   aiLevel: 'moderate',
+  // Off until a runtime is chosen: Local needs a model file, Cloud needs a key — neither should
+  // start spending time or tokens by surprise.
+  aiMode: 'off',
+  aiLocalModel: '',
+  aiCloudProvider: 'anthropic',
+  aiCloudModel: DEFAULT_CLOUD_MODEL,
   features: DEFAULT_FEATURES,
 }
 
@@ -104,11 +121,17 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(KEY)
     if (!raw) return migrateLegacyTheme(DEFAULT_SETTINGS)
     const parsed = JSON.parse(raw) as Partial<Settings>
-    return {
+    const merged: Settings = {
       ...DEFAULT_SETTINGS,
       ...parsed,
       features: { ...DEFAULT_SETTINGS.features, ...(parsed.features ?? {}) },
     }
+    // Before modes existed, "None" was the off switch. Carry that choice over, then use a real effort.
+    if (merged.aiLevel === 'none') {
+      if (parsed.aiMode === undefined) merged.aiMode = 'off'
+      merged.aiLevel = 'moderate'
+    }
+    return merged
   } catch {
     return DEFAULT_SETTINGS
   }

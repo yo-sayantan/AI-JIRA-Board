@@ -36,15 +36,44 @@ export interface InternProgress {
  * Whether the server that generates PR Readiness Reports can run the AI enrichment pass at all.
  * Fixed for the life of the process: it is about environment flags and installed binaries.
  */
+export type AiMode = 'off' | 'local' | 'cloud'
+export type AiCloudProvider = 'anthropic' | 'openai'
+
+/** What the AI Intern container (jira-intern/ai_intern.py) last wrote about itself — reports/.ai-status.json. */
+export interface AiWorkerStatus {
+  updatedAt?: string
+  mode?: AiMode
+  effort?: string
+  provider?: string
+  model?: string | null
+  /** The Docker VM the worker (and a local model) runs in — the ceiling for local models. */
+  vm?: { memGB?: number; cpus?: number }
+  runtime?: {
+    ok: boolean
+    endpoint?: string
+    /** Model names the local runtime can serve right now. */
+    models?: string[]
+    /** .gguf file → registered model name, for files dropped into jira-intern/models/. */
+    registered?: Record<string, string>
+    /** Presence (never the value) of the cloud API keys the worker can see. */
+    keys?: Record<string, boolean>
+    error?: string | null
+  }
+  current?: string | null
+  queue?: string[]
+  last?: { key: string; ok: boolean; at: string; detail?: string | null } | null
+}
+
 export interface AiEnrichmentState {
   available: boolean
   /** disabled = SKIP_SUMMARY / SKIP_REPORT_AI is set (the Docker image) · no-agent = agent CLI not installed. */
   reason?: 'disabled' | 'no-agent'
   detail?: string
-  /** True when pr-report.sh hands enrichment off to the host-side enricher instead of dropping it. */
+  /** True when pr-report.sh hands enrichment off to the AI Intern container instead of dropping it. */
   handoff?: boolean
-  /** That enricher's heartbeat was seen within the last 30s — hand-offs will actually be picked up. */
+  /** The AI Intern's heartbeat was seen within the last 30s — hand-offs will actually be picked up. */
   workerAlive?: boolean
+  worker?: AiWorkerStatus | null
 }
 
 export interface InternStatus {
@@ -140,7 +169,15 @@ export async function startReportGeneration(key: string): Promise<ReportStart | 
  * Push the settings the shell runners care about to the server. Only the AI level matters to
  * them; everything else is presentation and stays in localStorage.
  */
-export async function saveServerSettings(patch: { aiLevel?: string }): Promise<boolean> {
+export interface ServerSettingsPatch {
+  aiLevel?: string
+  aiMode?: AiMode
+  aiCloudProvider?: AiCloudProvider
+  aiLocalModel?: string
+  aiCloudModel?: string
+}
+
+export async function saveServerSettings(patch: ServerSettingsPatch): Promise<boolean> {
   try {
     const r = await fetch('/api/settings', {
       method: 'POST',

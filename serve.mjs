@@ -315,7 +315,7 @@ function aiEnrichmentState() {
       available: false,
       reason: 'disabled',
       detail:
-        'This server cannot run the agent itself (SKIP_SUMMARY is set — the Docker image does that because the container carries no agent CLI or login).',
+        'This container runs no AI itself (SKIP_SUMMARY is set); the AI Intern container does the enrichment with the model chosen in Settings.',
     }
   }
   const bin = process.env.AGENT_BIN || 'cursor-agent'
@@ -328,18 +328,27 @@ function aiEnrichmentState() {
 }
 const AI_ENRICHMENT = aiEnrichmentState()
 
-// Where this server may not run the agent, pr-report.sh HANDS OFF instead of giving up: it leaves a
-// marker in reports/.enrich/<KEY> for the host-side enricher (local-runner/enrich-worker.sh, kept
-// alive by start-jira-board.sh on the Mac where cursor-agent is signed in). That worker rewrites a
-// heartbeat file every few seconds; a fresh heartbeat is how the board knows hand-offs will really
-// be honoured — and only then are handed-off keys shown as still generating.
+// Where this server may not run AI, pr-report.sh HANDS OFF instead of giving up: it leaves a marker
+// in reports/.enrich/<KEY> for the JIRA-AI-Intern container (jira-intern/ai_intern.py), which
+// enriches with the Local or Cloud model chosen in Settings. That worker rewrites a heartbeat file
+// every few seconds and a status file with what it can see (runtime, models, keys, current task);
+// a fresh heartbeat is how the board knows hand-offs will really be honoured — and only then are
+// handed-off keys shown as still generating.
 const ENRICH_QUEUE = join(REPORTS_DIR, '.enrich')
 const ENRICHER_ALIVE = join(REPORTS_DIR, '.enricher.alive')
+const AI_STATUS = join(REPORTS_DIR, '.ai-status.json')
 async function enricherAlive() {
   try {
     return Date.now() - (await stat(ENRICHER_ALIVE)).mtimeMs < 30_000
   } catch {
     return false
+  }
+}
+async function aiWorkerStatus() {
+  try {
+    return JSON.parse(await readFile(AI_STATUS, 'utf8'))
+  } catch {
+    return null
   }
 }
 /** Keys handed off and not yet picked up — counted as "generating" only while a live worker will take them. */
@@ -353,9 +362,11 @@ async function pendingHandoffs() {
 }
 async function aiEnrichmentStatus() {
   if (AI_ENRICHMENT.available) return AI_ENRICHMENT
-  // Env-disabled (the container) means pr-report.sh hands off; a missing agent on a host does not.
+  // Env-disabled (the board's container) means pr-report.sh hands off; a missing agent on a host does not.
   const handoff = AI_ENRICHMENT.reason === 'disabled'
-  return { ...AI_ENRICHMENT, handoff, workerAlive: handoff ? await enricherAlive() : false }
+  if (!handoff) return { ...AI_ENRICHMENT, handoff, workerAlive: false, worker: null }
+  const [workerAlive, worker] = await Promise.all([enricherAlive(), aiWorkerStatus()])
+  return { ...AI_ENRICHMENT, handoff, workerAlive, worker }
 }
 
 let running = false
@@ -510,16 +521,28 @@ const server = createServer(async (req, res) => {
     } catch {
       return json(res, 400, { ok: false, error: 'bad json' })
     }
+    // Every value is validated before it lands in a file the shell runners eval — model names are
+    // limited to the characters Ollama / the cloud APIs actually use.
     const LEVELS = ['none', 'low', 'moderate', 'full']
-    if (patch.aiLevel !== undefined && !LEVELS.includes(patch.aiLevel)) {
-      return json(res, 400, { ok: false, error: 'bad aiLevel' })
+    const MODES = ['off', 'local', 'cloud']
+    const PROVIDERS = ['anthropic', 'openai']
+    const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,79}$/
+    if (patch.aiLevel !== undefined && !LEVELS.includes(patch.aiLevel)) return json(res, 400, { ok: false, error: 'bad aiLevel' })
+    if (patch.aiMode !== undefined && !MODES.includes(patch.aiMode)) return json(res, 400, { ok: false, error: 'bad aiMode' })
+    if (patch.aiCloudProvider !== undefined && !PROVIDERS.includes(patch.aiCloudProvider)) return json(res, 400, { ok: false, error: 'bad aiCloudProvider' })
+    for (const k of ['aiLocalModel', 'aiCloudModel']) {
+      if (patch[k] !== undefined && patch[k] !== '' && !(typeof patch[k] === 'string' && MODEL_RE.test(patch[k]))) {
+        return json(res, 400, { ok: false, error: `bad ${k}` })
+      }
     }
     let current = {}
     try {
       current = JSON.parse(await readFile(SETTINGS_FILE, 'utf8'))
     } catch {}
     const next = { ...current }
-    if (patch.aiLevel !== undefined) next.aiLevel = patch.aiLevel
+    for (const k of ['aiLevel', 'aiMode', 'aiCloudProvider', 'aiLocalModel', 'aiCloudModel']) {
+      if (patch[k] !== undefined) next[k] = patch[k]
+    }
     try {
       await writeFile(SETTINGS_FILE, JSON.stringify(next, null, 2) + '\n')
     } catch (e) {

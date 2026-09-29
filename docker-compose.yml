@@ -9,6 +9,13 @@
 # Published host port is fixed via PORT (default 4321). The desktop launcher and
 # start-jira-board.sh always set the same PORT so every redeploy lands on one
 # dedicated port — never auto-incremented.
+#
+# Three containers, one image:
+#   JIRA-Board      the board server + the deterministic Jira/Bitbucket fetch (always)
+#   JIRA-AI-Intern  the AI passes — PR report enrichment — in their own container (always;
+#                   idles when Settings → AI usage is Off)
+#   JIRA-LLM        the local model runtime (Ollama), only with `--profile local-llm`
+#                   (start-jira-board.sh enables it when Settings → AI usage is Local)
 services:
   jira-board:
     build:
@@ -27,7 +34,7 @@ services:
       PORT: "4321"
       REFRESH_ON_START: "1"     # fetch once the moment the container starts
       REFRESH_INTERVAL: "900"   # ...then re-fetch every 15 min (0 = off)
-      SKIP_SUMMARY: "1"         # no LLM agent in the container; deterministic fetch only
+      SKIP_SUMMARY: "1"         # no agent in THIS container — AI passes are handed to JIRA-AI-Intern
     volumes:
       # Tokens: reuse your existing connector secrets file, read-only. It just needs
       # JIRA_PERSONAL_TOKEN (and optionally BITBUCKET_PAT / ATLASSIAN_TOKEN).
@@ -53,3 +60,54 @@ services:
     # Alternative to the secrets mount above — pass tokens directly instead:
     # env_file:
     #   - .env
+
+  # ── AI Intern: the AI passes in their own container ─────────────────────────
+  # Same image as the board (python3 + node + the intern scripts), a different command. It watches
+  # the hand-off queue the board writes (jira-intern/reports/.enrich/) and enriches each report the
+  # way Settings → AI usage says: Local (the JIRA-LLM container, or a native Ollama) or Cloud
+  # (Claude, or any OpenAI-compatible API — keys from the secrets file). No agent CLI, no process on
+  # the host. It shares jira-intern/ with the board, so results appear there on the next poll.
+  jira-ai:
+    image: jira-board:latest
+    container_name: JIRA-AI-Intern
+    depends_on:
+      - jira-board
+    command: ["/bin/bash", "/app/jira-intern/local-runner/ai-intern.sh"]
+    environment:
+      # Where the local model runtime answers. The bundled JIRA-LLM container by default. A natively
+      # installed Ollama is 5–6× faster on Apple Silicon (it can use the GPU; Docker cannot):
+      #     AI_LOCAL_ENDPOINT=http://host.docker.internal:11434 bash start-jira-board.sh
+      AI_LOCAL_ENDPOINT: ${AI_LOCAL_ENDPOINT:-http://jira-llm:11434}
+      # Cloud endpoints. ANTHROPIC_API_KEY / OPENAI_API_KEY come from the mounted secrets file.
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+    volumes:
+      - ${HOME}/.cursor/mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro
+      - ${HOME}/.ai/config.json:/root/.ai/config.json:ro
+      - ./jira-intern:/app/jira-intern
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # ── JIRA-LLM: the local model runtime (Ollama) ─────────────────────────────
+  # Started only with `--profile local-llm` (start-jira-board.sh does that when AI usage is Local).
+  # Model files (.gguf) you drop into jira-intern/models/ are registered by the AI Intern on its
+  # own; the guide (docs → AI) lists which models fit your Docker VM and where to download them.
+  # CPU-only: Docker Desktop on macOS has no GPU passthrough, so this is the slow-but-contained
+  # option — expect a few tokens per second on an 8B model. alpine/ollama is the ~70 MB CPU build;
+  # the official image (LLM_IMAGE=ollama/ollama) is over 2 GB on arm64 and brings nothing extra here.
+  jira-llm:
+    image: ${LLM_IMAGE:-alpine/ollama}
+    container_name: JIRA-LLM
+    profiles: ["local-llm"]
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_MODELS: /ollama-store
+      OLLAMA_KEEP_ALIVE: 15m
+    volumes:
+      - ./jira-intern/models:/models:ro
+      - jira-llm-store:/ollama-store
+    restart: unless-stopped
+
+volumes:
+  # Ollama's own copy of each registered model (the .gguf you dropped in stays where it is).
+  jira-llm-store:

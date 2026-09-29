@@ -154,6 +154,7 @@
         <a href="#git">Git</a>
         <a href="#configure">Configure</a>
         <a href="#docker">Docker</a>
+        <a href="#ai">AI</a>
         <a href="#run">Run</a>
         <a href="#trouble">Troubleshooting</a>
       </div>
@@ -427,7 +428,9 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
           <tr><td><code class="inl">PORT</code></td><td>4321</td><td>Host port the board is published on.</td></tr>
           <tr><td><code class="inl">REFRESH_ON_START</code></td><td>1</td><td>Fetch once when the container boots.</td></tr>
           <tr><td><code class="inl">REFRESH_INTERVAL</code></td><td>900</td><td>Seconds between auto-refreshes. <code class="inl">0</code> disables.</td></tr>
-          <tr><td><code class="inl">SKIP_SUMMARY</code></td><td>1</td><td>Deterministic fetch, no LLM — so no AI API key is needed.</td></tr>
+          <tr><td><code class="inl">SKIP_SUMMARY</code></td><td>1</td><td>The board container runs no AI itself; AI passes are handed to the JIRA-AI-Intern container (see <a href="#ai">AI</a>).</td></tr>
+          <tr><td><code class="inl">AI_LOCAL_ENDPOINT</code></td><td>http://jira-llm:11434</td><td>Where the local model runtime answers. <code class="inl">http://host.docker.internal:11434</code> uses a natively installed Ollama (much faster on Apple Silicon).</td></tr>
+          <tr><td><code class="inl">LLM_IMAGE</code></td><td>alpine/ollama</td><td>Image for the JIRA-LLM runtime container (~70 MB, CPU). <code class="inl">ollama/ollama</code> is the official multi-GB image.</td></tr>
         </table>
         <pre><button class="copy">Copy</button>PORT=8080 docker compose up -d --build   <span class="cmt"># run on a different port</span></pre>
       </div>
@@ -440,6 +443,82 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
         <p class="small">For a Desktop shortcut, copy
           <code class="inl">setup/Start Jira Board.command.template</code> to your Desktop, set
           <code class="inl">REPO_DIR</code> inside it, then <code class="inl">chmod +x</code> it and double-click.</p>
+      </div>
+
+      <!-- ── AI INTERN ────────────────────────────────────────────── -->
+      <h2 id="ai">AI — the AI Intern container, local models and cloud APIs</h2>
+      <div class="card">
+        <h3>How it works</h3>
+        <p class="small">The board container runs no AI. When a PR Readiness Report is generated it writes the deterministic base and
+          hands the ticket to a second container from the same image, <code class="inl">JIRA-AI-Intern</code>, which enriches the
+          report the way <b>Settings → AI usage</b> says. Nothing runs on your Mac outside Docker, and there is no terminal step:
+          <b>Regenerate</b> and the bulk runs follow the mode you chose. <b>Off</b> keeps reports deterministic.</p>
+        <table>
+          <tr><th>Mode</th><th>What runs</th><th>Speed / cost</th><th>Needs</th></tr>
+          <tr><td><b>Local model</b></td><td>Ollama in the <code class="inl">JIRA-LLM</code> container, CPU-only</td><td>Slow — a few tokens per second on an 8B model — free, nothing leaves your machine</td><td>a <code class="inl">.gguf</code> file in <code class="inl">jira-intern/models/</code></td></tr>
+          <tr><td><b>Cloud API</b></td><td>Claude (Messages API) or any OpenAI-compatible endpoint</td><td>Fast; uses tokens on your key</td><td><code class="inl">ANTHROPIC_API_KEY</code> or <code class="inl">OPENAI_API_KEY</code> in the secrets file</td></tr>
+        </table>
+        <div class="note"><b>Why slow?</b> Docker Desktop on macOS gives containers no GPU, so a local model runs on the CPU cores
+          you gave the Docker VM. A natively installed <a href="https://ollama.com">Ollama</a> uses the Apple GPU and is 5–6×
+          faster; point the AI Intern at it with <code class="inl">AI_LOCAL_ENDPOINT=http://host.docker.internal:11434 bash start-jira-board.sh</code>
+          and skip the JIRA-LLM container entirely.</div>
+      </div>
+
+      <div class="card">
+        <h3>Which model fits your Mac — memory is the only question</h3>
+        <p class="small">A model needs its weights plus a working context in memory. Inside Docker the ceiling is the <b>Docker VM's
+          memory</b>, not the Mac's: Docker Desktop → Settings → Resources → Memory (8 GB by default on many installs; give it
+          12–16 GB for the 8–9B class). Settings → AI usage shows the VM's memory and marks each model <i>fits</i>, <i>tight</i>
+          or <i>too big</i>. Download the single-file <b>Q4_K_M</b> build (the sweet spot of size and quality).</p>
+        <table>
+          <tr><th>Model</th><th>Size</th><th>Download</th><th>RAM needed</th><th>Notes</th><th>Ollama tag</th></tr>
+          <tr><td>Qwen3 4B</td><td>4B · Q4_K_M</td><td>≈2.6 GB</td><td>≈4.5 GB</td><td>Fits an 8 GB VM; the safe default</td><td><code class="inl">qwen3:4b</code></td></tr>
+          <tr><td>Gemma 4 E4B</td><td>4B eff. · Q4_K_M</td><td>≈3 GB</td><td>≈5 GB</td><td>Built for 8 GB machines; native JSON output</td><td><code class="inl">gemma4:e4b</code></td></tr>
+          <tr><td>Llama 3.2 3B</td><td>3B · Q4_K_M</td><td>≈2 GB</td><td>≈4 GB</td><td>Smallest sensible option</td><td><code class="inl">llama3.2:3b</code></td></tr>
+          <tr><td>Qwen 3.5 9B</td><td>9B · Q4_K_M</td><td>≈5.8 GB</td><td>≈8.5 GB</td><td>The 2026 all-rounder at 16 GB; needs a 12 GB+ VM</td><td><code class="inl">qwen3.5:9b</code></td></tr>
+          <tr><td>Qwen3 8B</td><td>8B · Q4_K_M</td><td>≈5.2 GB</td><td>≈7.5 GB</td><td>Proven, supported everywhere</td><td><code class="inl">qwen3:8b</code></td></tr>
+          <tr><td>Qwen2.5-Coder 7B</td><td>7B · Q4_K_M</td><td>≈4.7 GB</td><td>≈7 GB</td><td>Code-tuned — best at reading diffs</td><td><code class="inl">qwen2.5-coder:7b</code></td></tr>
+          <tr><td>Llama 3.1 8B</td><td>8B · Q4_K_M</td><td>≈4.9 GB</td><td>≈7 GB</td><td>Dependable; good JSON discipline</td><td><code class="inl">llama3.1:8b</code></td></tr>
+          <tr><td>Gemma 4 12B / Gemma 3 12B</td><td>12B · Q4_K_M</td><td>≈7.5 GB</td><td>≈10.5 GB</td><td>Largest comfortable fit at 16 GB with a 12 GB+ VM</td><td><code class="inl">gemma4:12b</code> · <code class="inl">gemma3:12b</code></td></tr>
+          <tr><td>Phi-4 14B</td><td>14B · Q4_K_M</td><td>≈9 GB</td><td>≈12 GB</td><td>Reasoning-heavy; wants a 16 GB VM</td><td><code class="inl">phi4:14b</code></td></tr>
+          <tr><td>gpt-oss 20B</td><td>21B MoE · MXFP4</td><td>≈13 GB</td><td>≈16 GB</td><td>Fast for its size, but every expert stays in memory: 24 GB comfortable</td><td><code class="inl">gpt-oss:20b</code></td></tr>
+        </table>
+        <p class="small">Sources: Hugging Face model cards (Qwen, Google, Meta, Microsoft, Unsloth and bartowski GGUF repositories) and
+          the 2026 local-LLM guides for 16 GB Macs. Sizes are approximate; the RAM column already includes a 16k-token context.</p>
+      </div>
+
+      <div class="card">
+        <h3>Where to download, where to place</h3>
+        <ol class="small">
+          <li>Open the model's GGUF page on <a href="https://huggingface.co/models?search=gguf">Hugging Face</a> — search the model
+            name plus <i>GGUF</i>; prefer the official repository, then <i>unsloth</i> or <i>bartowski</i>.</li>
+          <li>In <b>Files</b>, download the single file ending in <code class="inl">Q4_K_M.gguf</code> (not a sharded
+            <code class="inl">-00001-of-0000N</code> set).</li>
+          <li>Move it into <code class="inl">jira-intern/models/</code> in this repository. Keep the file name simple (letters,
+            digits, dots, dashes).</li>
+          <li>In the board: Settings → AI usage → <b>Local model</b>, then <code class="inl">bash start-jira-board.sh</code> once so
+            the JIRA-LLM runtime starts. Within a minute the file shows under <i>Ready in the runtime</i> — click it.</li>
+        </ol>
+        <pre><button class="copy">Copy</button><span class="cmt"># alternative when the network is fast: let Ollama fetch a model by tag</span>
+docker exec JIRA-LLM ollama pull qwen3:8b
+<span class="cmt"># see what the runtime has / is doing</span>
+docker exec JIRA-LLM ollama list
+docker logs -f JIRA-AI-Intern</pre>
+        <div class="note warn"><b>Disk:</b> the runtime keeps its own copy of each registered model, so a 5 GB file uses about
+          10 GB in total. Delete the <code class="inl">.gguf</code> from <code class="inl">jira-intern/models/</code> once it shows
+          as ready if space is tight.</div>
+      </div>
+
+      <div class="card">
+        <h3>Cloud API instead</h3>
+        <p class="small">Add the key to your secrets file (<code class="inl">~/.cursor/mcp-secrets.env</code>), redeploy, then pick
+          <b>Cloud API</b> in Settings and a model — <code class="inl">claude-opus-5</code> is the default, <code class="inl">claude-sonnet-5</code>
+          is cheaper and faster. For an OpenAI-compatible endpoint set <code class="inl">OPENAI_BASE_URL</code> as well.</p>
+        <pre><button class="copy">Copy</button>ANTHROPIC_API_KEY=sk-ant-…          <span class="cmt"># Claude</span>
+OPENAI_API_KEY=…                    <span class="cmt"># OpenAI-compatible</span>
+OPENAI_BASE_URL=https://api.openai.com/v1</pre>
+        <p class="small">A report costs roughly one large prompt (ticket + base report + diffs) and a few thousand output tokens.
+          <b>Effort</b> in Settings scales how long the model may think and how much of the diff it is shown.</p>
       </div>
 
       <!-- ── RUN WITHOUT DOCKER ───────────────────────────────────── -->
