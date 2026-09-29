@@ -60,6 +60,23 @@ free_port() {
     ok "Removed existing container '${CONTAINER_NAME}'"
   fi
 
+  # The sibling containers have fixed names too. One left by an earlier run of this stack (another
+  # compose project name, a manual `docker run`) would make `compose up` fail on the name. Remove it
+  # only when it is clearly ours — built from our image or the Ollama runtime — and stop otherwise:
+  # a stranger's container is never deleted by a deploy script.
+  local sib img
+  for sib in JIRA-AI-Intern JIRA-LLM; do
+    docker ps -a --format '{{.Names}}' | grep -qx "$sib" || continue
+    img="$(docker inspect --format '{{.Config.Image}}' "$sib" 2>/dev/null || true)"
+    case "$img" in
+      jira-board:latest|jira-board|alpine/ollama*|ollama/ollama*|"${LLM_IMAGE:-__unset__}"*)
+        docker rm -f "$sib" >/dev/null 2>&1 || true
+        ok "Removed stale container '${sib}' (${img}) from an earlier run" ;;
+      *)
+        die "A container named '${sib}' already exists (image: ${img:-unknown}) and was not created by this stack. Rename or remove it, then run this script again." ;;
+    esac
+  done
+
   # Also stop anything else still bound to PORT (stale compose project, old test run, …).
   local ids
   ids="$(docker ps -q --filter "publish=${PORT}" 2>/dev/null || true)"
