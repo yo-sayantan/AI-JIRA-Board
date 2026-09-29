@@ -60,23 +60,6 @@ free_port() {
     ok "Removed existing container '${CONTAINER_NAME}'"
   fi
 
-  # The sibling containers have fixed names too. One left by an earlier run of this stack (another
-  # compose project name, a manual `docker run`) would make `compose up` fail on the name. Remove it
-  # only when it is clearly ours — built from our image or the Ollama runtime — and stop otherwise:
-  # a stranger's container is never deleted by a deploy script.
-  local sib img
-  for sib in JIRA-AI-Intern JIRA-LLM; do
-    docker ps -a --format '{{.Names}}' | grep -qx "$sib" || continue
-    img="$(docker inspect --format '{{.Config.Image}}' "$sib" 2>/dev/null || true)"
-    case "$img" in
-      jira-board:latest|jira-board|alpine/ollama*|ollama/ollama*|"${LLM_IMAGE:-__unset__}"*)
-        docker rm -f "$sib" >/dev/null 2>&1 || true
-        ok "Removed stale container '${sib}' (${img}) from an earlier run" ;;
-      *)
-        die "A container named '${sib}' already exists (image: ${img:-unknown}) and was not created by this stack. Rename or remove it, then run this script again." ;;
-    esac
-  done
-
   # Also stop anything else still bound to PORT (stale compose project, old test run, …).
   local ids
   ids="$(docker ps -q --filter "publish=${PORT}" 2>/dev/null || true)"
@@ -120,13 +103,6 @@ deploy() {
     export DIST_SOURCE=source
   fi
 
-  # Local model mode needs the JIRA-LLM runtime container too — a compose profile, so cloud/off
-  # users never pull that image. Switched Local on in Settings later? Run this script once more.
-  if [ "$(ai_mode)" = "local" ]; then
-    export COMPOSE_PROFILES="${COMPOSE_PROFILES:-local-llm}"
-    log "AI usage is Local — the JIRA-LLM runtime container starts as well (first time: pulls ${LLM_IMAGE:-alpine/ollama})"
-  fi
-
   log "Building image ${IMAGE_NAME} (the node base image is downloaded only the first time)…"
   # Compose reads PORT from the environment for the published port mapping.
   export PORT
@@ -162,23 +138,52 @@ wait_ready() {
   die "Board did not respond on port ${PORT} in time. Try: docker logs ${CONTAINER_NAME}"
 }
 
-# ── 5. AI passes live in their own container ──────────────────────────────────
-# The board's container hands AI enrichment off through jira-intern/reports/.enrich/; the
-# JIRA-AI-Intern container (same image, see docker-compose.yml) picks it up with the Local or Cloud
-# model chosen in Settings → AI usage. Nothing runs on the host any more — an earlier version
-# installed a launchd login agent for this; it is retired here so two workers never race.
-LEGACY_ENRICHER_LABEL="com.jira-board.enricher"
-retire_legacy_enricher() {
-  local plist="$HOME/Library/LaunchAgents/${LEGACY_ENRICHER_LABEL}.plist"
-  [ -f "$plist" ] || return 0
-  launchctl bootout "gui/$(id -u)/$LEGACY_ENRICHER_LABEL" >/dev/null 2>&1 || true
-  rm -f "$plist"
-  ok "retired the old host-side enricher (${LEGACY_ENRICHER_LABEL}) — the AI Intern container does this now"
-}
-
-# Settings → AI usage mode, read straight from the file the board writes (no node needed).
-ai_mode() {
-  sed -n 's/.*"aiMode"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$REPO_DIR/jira-intern/.settings.json" 2>/dev/null | head -1
+# ── 5. Host-side AI enricher (launchd login agent) ────────────────────────────
+# The container cannot run cursor-agent, so pr-report.sh inside it hands AI enrichment off through
+# jira-intern/reports/.enrich/. This keeps a worker running HERE — where the agent is signed in —
+# that honours those hand-offs, so Regenerate and the bulk runs in the board come out enriched at
+# the level set in Settings with no terminal step. launchd restarts it at login and if it dies.
+# Opt out with INSTALL_ENRICHER=0. Remove:  launchctl bootout gui/$(id -u)/com.jira-board.enricher
+ENRICHER_LABEL="com.jira-board.enricher"
+install_enricher() {
+  if [ "${INSTALL_ENRICHER:-1}" != "1" ]; then ok "enricher install skipped (INSTALL_ENRICHER=0)"; return; fi
+  if [ "$(uname -s)" != "Darwin" ]; then
+    log "not macOS — run the enricher yourself:  bash jira-intern/local-runner/enrich-worker.sh &"; return
+  fi
+  if ! command -v cursor-agent >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/cursor-agent" ]; then
+    log "cursor-agent not found on this Mac — AI enrichment stays off; reports will be deterministic"; return
+  fi
+  local plist="$HOME/Library/LaunchAgents/${ENRICHER_LABEL}.plist"
+  local worker="$REPO_DIR/jira-intern/local-runner/enrich-worker.sh"
+  local logf="$REPO_DIR/jira-intern/logs/enricher.launchd.log"
+  mkdir -p "$HOME/Library/LaunchAgents" "$REPO_DIR/jira-intern/logs"
+  cat > "$plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>${ENRICHER_LABEL}</string>
+  <key>ProgramArguments</key><array><string>/bin/bash</string><string>${worker}</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>WorkingDirectory</key><string>${REPO_DIR}</string>
+  <key>StandardOutPath</key><string>${logf}</string>
+  <key>StandardErrorPath</key><string>${logf}</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict></plist>
+PLIST
+  local domain="gui/$(id -u)"
+  # Reload so a changed repo path or script takes effect; bootout is a harmless no-op if not loaded.
+  launchctl bootout "$domain/$ENRICHER_LABEL" >/dev/null 2>&1 || true
+  if launchctl bootstrap "$domain" "$plist" >/dev/null 2>&1; then
+    ok "host AI enricher running as login agent ${ENRICHER_LABEL} (log: jira-intern/logs/enricher.log)"
+  else
+    log "launchctl bootstrap failed — starting the enricher in the background for this session instead"
+    nohup /bin/bash "$worker" >>"$logf" 2>&1 &
+    ok "enricher started (pid $!) — it will not survive a reboot; see docs/DEPLOYMENT.md"
+  fi
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -190,7 +195,7 @@ ensure_docker
 free_port
 deploy
 wait_ready
-retire_legacy_enricher
+install_enricher
 
 log "Opening ${APP_URL}"
 open "$APP_URL" 2>/dev/null || true
@@ -198,8 +203,8 @@ open "$APP_URL" 2>/dev/null || true
 printf '\n════════════════════════════════════════════════════════\n'
 printf '  Board:     %s\n' "$APP_URL"
 printf '  Port:      %s  (dedicated — never changes)\n' "$PORT"
-printf '  Container: %s  +  JIRA-AI-Intern (AI passes)%s\n' "$CONTAINER_NAME" "$([ "$(ai_mode)" = "local" ] && printf '  +  JIRA-LLM (local model runtime)')"
-printf '  AI logs:   docker logs -f JIRA-AI-Intern\n'
+printf '  Container: %s\n' "$CONTAINER_NAME"
+printf '  Enricher:  launchctl print gui/%s/%s   (AI enrichment on this Mac)\n' "$(id -u)" "$ENRICHER_LABEL"
 printf '  Logs:      docker logs -f %s\n' "$CONTAINER_NAME"
 printf '  Stop:      docker compose -f %s/docker-compose.yml down\n' "$REPO_DIR"
 printf '════════════════════════════════════════════════════════\n\n'

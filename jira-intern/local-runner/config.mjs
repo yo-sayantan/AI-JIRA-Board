@@ -190,12 +190,6 @@ function shellenv() {
   // The board's Settings panel writes jira-intern/.settings.json; it overrides config.json so a
   // UI change takes effect without editing (or exposing) the user's personal config file.
   out.push(`REPORTS_AI_LEVEL=${shq(boardSettings().aiLevel ?? cfg.reports?.aiLevel ?? 'moderate')}`)
-  // off | local | cloud. AI usage = None is the off switch; otherwise the mode says which runtime the
-  // AI Intern container (local-runner/ai-intern.sh) uses — it reads the same file.
-  const bs = boardSettings()
-  const level = bs.aiLevel ?? cfg.reports?.aiLevel ?? 'moderate'
-  const mode = bs.aiMode ?? cfg.reports?.aiMode ?? 'cloud'
-  out.push(`REPORTS_AI_MODE=${shq(level === 'none' || mode === 'off' ? 'off' : mode)}`)
   return out.join('\n')
 }
 

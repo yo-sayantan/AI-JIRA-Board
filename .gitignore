@@ -55,7 +55,3 @@ my_dashboard.xml
 # NOTE: jira-intern/config.json IS tracked — it's the single portability file.
 # It holds your name/id/endpoints (no secrets; API keys live in the connector's
 # secretsFile under ~). Swap its values before sharing the repo publicly.
-
-# Local LLM model files (Settings → AI usage → Local). Multi-GB, personal — only the README travels.
-jira-intern/models/*
-!jira-intern/models/README.md

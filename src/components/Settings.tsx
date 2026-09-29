@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { AI_LEVELS, FEATURES, type AiCloudProvider, type FeatureKey, type Settings, type ThemeMode } from '../lib/settings'
-import type { AiEnrichmentState, AiWorkerStatus } from '../lib/runner'
-import { guideUrl } from '../lib/runner'
-import { CLOUD_MODEL_SUGGESTIONS, LOCAL_MODELS, bareModelName, fitFor, type Fit } from '../lib/aiModels'
-import { hexToRgba, relTime } from '../lib/format'
-import { CalendarIcon, DocIcon, GlobeIcon, MoonIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon, WrenchIcon } from './Icons'
+import { AI_LEVELS, FEATURES, type FeatureKey, type Settings, type ThemeMode } from '../lib/settings'
+import type { AiEnrichmentState } from '../lib/runner'
+import { hexToRgba } from '../lib/format'
+import { CalendarIcon, DocIcon, MoonIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from './Icons'
 
 const AI = '#a855f7'
 
@@ -138,12 +136,6 @@ export function SettingsPanel({
                 </div>
                 <AiAvailabilityNote synced={aiLevelSynced} state={aiEnrichment} />
               </Section>
-
-              {/* Added alongside AI usage, not in place of it: None above still means deterministic; this
-                  section only decides WHERE the AI runs when a level is chosen, and with which model. */}
-              <Section title="AI Intern — where the AI runs">
-                <AiRuntimeSection settings={settings} set={set} synced={aiLevelSynced} state={aiEnrichment ?? null} />
-              </Section>
             </div>
           </motion.section>
         </motion.div>
@@ -172,9 +164,9 @@ function AiAvailabilityNote({ synced, state }: { synced: boolean; state?: AiEnri
     if (state.handoff && state.workerAlive) {
       return (
         <div className="mt-2.5 rounded-lg border px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ borderColor: hexToRgba(AI, 0.5), background: hexToRgba(AI, 0.08) }}>
-          <div className="font-bold" style={{ color: AI }}>AI enrichment runs in the AI Intern container</div>
+          <div className="font-bold" style={{ color: AI }}>AI enrichment runs on your Mac</div>
           <p className="mt-0.5 text-[var(--ink-soft)]">
-            This board’s container runs no AI itself, so Regenerate and the bulk runs hand each report to the AI Intern container, which enriches it at the level above with the runtime and model chosen in the section below. A report shows as generating until the enriched version lands. Choose None for deterministic reports.
+            This board is served from a place that cannot run the agent, so Regenerate and the bulk runs hand each report to the background enricher on your Mac, which enriches it at the level above. A report shows as generating until the enriched version lands. Choose None for deterministic reports.
           </p>
         </div>
       )
@@ -182,12 +174,12 @@ function AiAvailabilityNote({ synced, state }: { synced: boolean; state?: AiEnri
     if (state.handoff) {
       return (
         <div className="mt-2.5 rounded-lg border px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ borderColor: hexToRgba(AMBER, 0.5), background: hexToRgba(AMBER, 0.1) }}>
-          <div className="font-bold text-[#b45309]">The AI Intern container isn’t running</div>
+          <div className="font-bold text-[#b45309]">The background enricher on your Mac isn’t running</div>
           <p className="mt-0.5 text-[var(--ink-soft)]">
-            Reports generated now stay deterministic until it is. The deploy script starts it alongside the board (and the JIRA-LLM runtime when Local model is chosen below):
+            Reports generated now stay deterministic until it is. The deploy script installs it as a login agent, so it stays on from then:
           </p>
           <code className="mt-1 block rounded bg-[var(--surface-2)] px-2 py-1 font-mono text-[10.5px] text-[var(--ink)]">bash start-jira-board.sh</code>
-          <p className="mt-1 text-[var(--muted)]">Check on it with: docker logs -f JIRA-AI-Intern</p>
+          <p className="mt-1 text-[var(--muted)]">Or run it by hand for this session: bash jira-intern/local-runner/enrich-worker.sh</p>
         </div>
       )
     }
@@ -199,318 +191,6 @@ function AiAvailabilityNote({ synced, state }: { synced: boolean; state?: AiEnri
     )
   }
   return <p className="mt-2 text-[11px] text-[var(--muted)]">Applies to PR Readiness Report generation on the next run.</p>
-}
-
-// ── AI Intern: runtime + model ────────────────────────────────────────────────
-
-const LOCAL = '#14b8a6'
-const AMBER_C = '#f59e0b'
-const GREEN = '#22c55e'
-
-type Setter = <K extends keyof Settings>(key: K, value: Settings[K]) => void
-
-const RUNTIMES: { key: AiCloudProvider | 'local'; mode: 'local' | 'cloud'; label: string; hint: string; color: string; icon: (c: string) => React.ReactNode }[] = [
-  { key: 'local', mode: 'local', label: 'Local model', hint: 'A model in the JIRA-LLM container — private, slow, free', color: LOCAL, icon: (c) => <WrenchIcon size={14} color={c} /> },
-  { key: 'anthropic', mode: 'cloud', label: 'Cloud API', hint: 'Claude or an OpenAI-compatible API — fast, uses tokens', color: AI, icon: (c) => <GlobeIcon size={14} color={c} /> },
-]
-
-/**
- * Which runtime the AI Intern container uses when AI usage above is not None, and with which model.
- * The container reports what it can see (Docker VM memory, runtime, models, key presence), which
- * drives the fit badges and the readiness note — a choice that cannot work is visible here, not
- * discovered from a report that stayed deterministic.
- */
-function AiRuntimeSection({ settings, set, synced, state }: { settings: Settings; set: Setter; synced: boolean; state: AiEnrichmentState | null }) {
-  const worker = state?.worker ?? null
-  const alive = !!state?.workerAlive
-  const mode = settings.aiMode === 'local' ? 'local' : 'cloud'
-  const off = settings.aiLevel === 'none'
-  return (
-    <>
-      <div className="grid grid-cols-2 gap-1.5">
-        {RUNTIMES.map((r) => {
-          const on = mode === r.mode
-          return (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => set('aiMode', r.mode)}
-              aria-pressed={on}
-              className="flex flex-col gap-1 rounded-xl border p-2.5 text-left transition-all"
-              style={{ borderColor: on ? hexToRgba(r.color, 0.55) : 'var(--line)', background: on ? hexToRgba(r.color, 0.1) : 'var(--surface-2)', opacity: on ? 1 : 0.75 }}
-            >
-              <span className="flex items-center gap-2">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg" style={{ background: hexToRgba(on ? r.color : '#94a3b8', 0.16) }}>
-                  {r.icon(on ? r.color : 'var(--muted)')}
-                </span>
-                <span className="text-[12px] font-bold leading-tight" style={{ color: on ? r.color : 'var(--ink-soft)' }}>
-                  {r.label}
-                </span>
-              </span>
-              <span className="text-[10.5px] leading-snug text-[var(--muted)]">{r.hint}</span>
-            </button>
-          )
-        })}
-      </div>
-
-      {mode === 'local' && <LocalModelPicker value={settings.aiLocalModel} onChange={(v) => set('aiLocalModel', v)} worker={worker} alive={alive} />}
-      {mode === 'cloud' && (
-        <CloudPicker
-          provider={settings.aiCloudProvider}
-          model={settings.aiCloudModel}
-          onProvider={(p) => set('aiCloudProvider', p)}
-          onModel={(m) => set('aiCloudModel', m)}
-          worker={worker}
-        />
-      )}
-
-      {synced && alive && (
-        <RuntimeNote mode={mode} off={off} worker={worker} localModel={settings.aiLocalModel} />
-      )}
-    </>
-  )
-}
-
-function SubTitle({ children }: { children: React.ReactNode }) {
-  return <h4 className="mb-1.5 mt-3 text-[10.5px] font-bold uppercase tracking-wider text-[var(--muted)]">{children}</h4>
-}
-
-function Tag({ children, color }: { children: React.ReactNode; color: string }) {
-  return (
-    <span className="rounded-full border px-1.5 py-[1px] text-[9.5px] font-bold uppercase tracking-wide" style={{ color, borderColor: hexToRgba(color, 0.45), background: hexToRgba(color, 0.1) }}>
-      {children}
-    </span>
-  )
-}
-
-function FitBadge({ fit, ramGB }: { fit: Fit | null; ramGB: number }) {
-  if (fit === null) return <Tag color="#64748b">needs ≈{ramGB} GB</Tag>
-  if (fit === 'fits') return <Tag color={GREEN}>fits your VM</Tag>
-  if (fit === 'tight') return <Tag color={AMBER_C}>tight fit</Tag>
-  return <Tag color="#ef4444">too big for your VM</Tag>
-}
-
-/**
- * Local model: what the runtime already has (click to use), then the catalogue with a memory-fit
- * badge computed from the Docker VM the AI Intern reports. Picking a model that is not in the runtime
- * yet is allowed — the row says exactly what to download and where to put it.
- */
-function LocalModelPicker({ value, onChange, worker, alive }: { value: string; onChange: (v: string) => void; worker: AiWorkerStatus | null; alive: boolean }) {
-  const memGB = alive ? (worker?.vm?.memGB ?? null) : null
-  const available = (worker?.runtime?.models ?? []).map(bareModelName)
-  const isAvail = (tag: string) => available.includes(bareModelName(tag))
-  const current = bareModelName(value)
-  return (
-    <div>
-      <SubTitle>Local model</SubTitle>
-      <p className="text-[11px] leading-relaxed text-[var(--muted)]">
-        {memGB
-          ? `Docker VM: ${memGB} GB memory · ${worker?.vm?.cpus ?? '?'} CPUs. A model’s RAM figure has to fit inside that — raise it in Docker Desktop → Settings → Resources.`
-          : 'Memory fit is unknown until the AI Intern container is running (bash start-jira-board.sh).'}{' '}
-        <a href={`${guideUrl()}#ai`} target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--link)] hover:underline">
-          Where to download and place models →
-        </a>
-      </p>
-
-      {available.length > 0 && (
-        <div className="mt-2">
-          <div className="mb-1 text-[10.5px] font-semibold text-[var(--ink-soft)]">Ready in the runtime now</div>
-          <div className="flex flex-wrap gap-1.5">
-            {available.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => onChange(m)}
-                className="rounded-full border px-2.5 py-[3px] font-mono text-[11px] font-semibold transition-colors"
-                style={{ borderColor: current === m ? LOCAL : 'var(--line)', background: current === m ? hexToRgba(LOCAL, 0.14) : 'transparent', color: current === m ? LOCAL : 'var(--ink-soft)' }}
-              >
-                {m} ✓
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="mt-2 flex flex-col gap-1.5">
-        {LOCAL_MODELS.map((m) => {
-          const fit = fitFor(m, memGB)
-          const avail = isAvail(m.tag)
-          const on = current === bareModelName(m.tag)
-          return (
-            <button
-              key={m.tag}
-              type="button"
-              onClick={() => onChange(m.tag)}
-              aria-pressed={on}
-              className="flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors"
-              style={{ borderColor: on ? hexToRgba(LOCAL, 0.55) : 'var(--line)', background: on ? hexToRgba(LOCAL, 0.1) : 'transparent', opacity: fit === 'no' ? 0.6 : 1 }}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-1.5 text-[12.5px] font-bold" style={{ color: on ? LOCAL : 'var(--ink)' }}>
-                  {m.label}
-                  <span className="font-mono text-[10.5px] font-semibold text-[var(--muted)]">{m.tag}</span>
-                  {m.recommended && <Tag color={AI}>recommended</Tag>}
-                  <FitBadge fit={fit} ramGB={m.ramGB} />
-                  {avail && <Tag color={GREEN}>ready</Tag>}
-                </span>
-                <span className="block text-[11px] leading-snug text-[var(--muted)]">
-                  {m.params} · download ≈ {m.fileGB} GB · RAM ≈ {m.ramGB} GB — {m.blurb}
-                </span>
-                {!avail && (
-                  <span className="mt-0.5 block text-[10.5px] leading-snug text-[var(--muted)]">
-                    Not in the runtime yet: download the Q4_K_M .gguf from{' '}
-                    <a href={m.hf} target="_blank" rel="noopener noreferrer" className="text-[var(--link)] hover:underline" onClick={(e) => e.stopPropagation()}>
-                      Hugging Face
-                    </a>{' '}
-                    into <span className="font-mono">jira-intern/models/</span>, or <span className="font-mono">docker exec JIRA-LLM ollama pull {m.tag}</span>.
-                  </span>
-                )}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      <label className="mt-2 flex items-center gap-2 text-[11px] text-[var(--muted)]">
-        Other model name
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value.trim())}
-          placeholder="e.g. qwen3-8b-q4_k_m"
-          spellCheck={false}
-          className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 py-1 font-mono text-[11.5px] text-[var(--ink)] outline-none focus:border-[var(--muted)]"
-        />
-      </label>
-    </div>
-  )
-}
-
-function CloudPicker({
-  provider,
-  model,
-  onProvider,
-  onModel,
-  worker,
-}: {
-  provider: AiCloudProvider
-  model: string
-  onProvider: (p: AiCloudProvider) => void
-  onModel: (m: string) => void
-  worker: AiWorkerStatus | null
-}) {
-  const keyName = provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'
-  const keys = worker?.runtime?.keys
-  const hasKey = keys ? !!keys[provider] : null
-  return (
-    <div>
-      <SubTitle>Cloud provider</SubTitle>
-      <div className="flex flex-wrap gap-1.5">
-        <Choice active={provider === 'anthropic'} label="Claude" hint="Anthropic Messages API" icon={<SparkleIcon size={12} color={provider === 'anthropic' ? AI : 'currentColor'} />} onClick={() => onProvider('anthropic')} />
-        <Choice active={provider === 'openai'} label="OpenAI-compatible" hint="OpenAI, Azure, a gateway, a second Ollama — set OPENAI_BASE_URL for anything but api.openai.com" onClick={() => onProvider('openai')} />
-      </div>
-      <label className="mt-2 flex items-center gap-2 text-[11px] text-[var(--muted)]">
-        Model
-        <input
-          list="jb-cloud-models"
-          value={model}
-          onChange={(e) => onModel(e.target.value.trim())}
-          placeholder={provider === 'anthropic' ? 'claude-opus-5' : 'the model name your provider expects'}
-          spellCheck={false}
-          className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 py-1 font-mono text-[11.5px] text-[var(--ink)] outline-none focus:border-[var(--muted)]"
-        />
-        <datalist id="jb-cloud-models">
-          {CLOUD_MODEL_SUGGESTIONS[provider]
-            .filter((s) => s.id)
-            .map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.hint}
-              </option>
-            ))}
-        </datalist>
-      </label>
-      {provider === 'anthropic' && (
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {CLOUD_MODEL_SUGGESTIONS.anthropic.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              title={s.hint}
-              onClick={() => onModel(s.id)}
-              className="rounded-full border px-2.5 py-[3px] font-mono text-[11px] font-semibold transition-colors"
-              style={{ borderColor: model === s.id ? AI : 'var(--line)', background: model === s.id ? hexToRgba(AI, 0.14) : 'transparent', color: model === s.id ? AI : 'var(--ink-soft)' }}
-            >
-              {s.id}
-            </button>
-          ))}
-        </div>
-      )}
-      <p className="mt-1.5 text-[11px]" style={{ color: hasKey === false ? '#b45309' : hasKey ? GREEN : 'var(--muted)' }}>
-        {hasKey === null
-          ? `The AI Intern reads ${keyName} from the secrets file (~/.cursor/mcp-secrets.env).`
-          : hasKey
-            ? `${keyName} found in the secrets file.`
-            : `${keyName} is missing from the secrets file (~/.cursor/mcp-secrets.env) — add it, then bash start-jira-board.sh so the container picks it up.`}
-      </p>
-    </div>
-  )
-}
-
-/** The AI Intern's own view of the current choice: reachable runtime, chosen model, what it did last. */
-function RuntimeNote({ mode, off, worker, localModel }: { mode: 'local' | 'cloud'; off: boolean; worker: AiWorkerStatus | null; localModel: string }) {
-  const color = mode === 'local' ? LOCAL : AI
-  const rt = worker?.runtime
-  let title: string
-  let body: React.ReactNode
-  let tone = color
-  if (off) {
-    title = 'AI usage is None — reports stay deterministic'
-    body = 'Pick Low, Moderate or Full above to enrich them with the runtime chosen here.'
-    tone = '#64748b'
-  } else if (rt && !rt.ok) {
-    title = mode === 'local' ? 'Local runtime not reachable' : 'Cloud API not usable yet'
-    tone = AMBER_C
-    body = (
-      <>
-        {rt.error}
-        {mode === 'local' && (
-          <>
-            {' '}
-            Run <span className="font-mono">bash start-jira-board.sh</span> with Local model selected — it starts the JIRA-LLM container — or point <span className="font-mono">AI_LOCAL_ENDPOINT</span> at a native Ollama.
-          </>
-        )}
-      </>
-    )
-  } else if (mode === 'local' && !localModel) {
-    title = 'Pick a local model'
-    tone = AMBER_C
-    body = (
-      <>
-        The runtime is up; choose a model above. Files dropped into <span className="font-mono">jira-intern/models/</span> appear under “Ready in the runtime” within a minute.
-      </>
-    )
-  } else {
-    title = `AI Intern is running — ${mode === 'local' ? `local · ${localModel}` : `${worker?.provider ?? 'cloud'} · ${worker?.model ?? ''}`}`
-    body = (
-      <>
-        Regenerate and the bulk runs are enriched at the AI usage level above; a report shows as generating until the enriched version lands.
-        {worker?.current && <span className="block">Working on {worker.current} now.</span>}
-        {worker?.last && (
-          <span className="block" style={{ color: worker.last.ok ? 'var(--ink-soft)' : '#b45309' }}>
-            Last: {worker.last.key} {worker.last.ok ? 'enriched' : 'failed'} {relTime(worker.last.at, Date.now())}
-            {worker.last.detail ? ` — ${worker.last.detail}` : ''}
-          </span>
-        )}
-      </>
-    )
-  }
-  return (
-    <div className="mt-3 rounded-lg border px-3 py-2.5 text-[11.5px] leading-relaxed text-[var(--ink-soft)]" style={{ borderColor: hexToRgba(tone, 0.5), background: hexToRgba(tone, 0.08) }}>
-      <div className="font-bold" style={{ color: tone }}>
-        {title}
-      </div>
-      <div className="mt-0.5">{body}</div>
-    </div>
-  )
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

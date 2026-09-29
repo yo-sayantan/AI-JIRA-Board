@@ -9,9 +9,6 @@
 
 export type ThemeMode = 'auto' | 'fixed' | 'schedule'
 export type AiLevel = 'none' | 'low' | 'moderate' | 'full'
-/** off = deterministic reports · local = a model in the JIRA-LLM container (or a native Ollama) · cloud = an API. */
-export type AiMode = 'off' | 'local' | 'cloud'
-export type AiCloudProvider = 'anthropic' | 'openai'
 
 export interface Settings {
   /** auto = follow the OS · fixed = always `theme` · schedule = light between the day hours. */
@@ -20,14 +17,7 @@ export interface Settings {
   /** Local hours [start, end) during which the LIGHT theme applies in `schedule` mode. */
   dayStart: number
   dayEnd: number
-  /** AI usage: 'none' = deterministic reports (the off switch); the rest is how long a model may think. */
   aiLevel: AiLevel
-  /** Where the AI runs when aiLevel is not 'none'. ('off' is accepted for compatibility, never chosen in the UI.) */
-  aiMode: AiMode
-  /** Ollama model name for Local — a registered .gguf from jira-intern/models/ or a pulled tag. */
-  aiLocalModel: string
-  aiCloudProvider: AiCloudProvider
-  aiCloudModel: string
   features: Record<FeatureKey, boolean>
 }
 
@@ -98,20 +88,12 @@ export const AI_LEVELS: { key: AiLevel; label: string; hint: string }[] = [
 
 const DEFAULT_FEATURES = Object.fromEntries(FEATURES.map((f) => [f.key, f.default])) as Record<FeatureKey, boolean>
 
-export const DEFAULT_CLOUD_MODEL = 'claude-opus-5'
-
 export const DEFAULT_SETTINGS: Settings = {
   themeMode: 'auto',
   theme: 'dark',
   dayStart: 7,
   dayEnd: 19,
   aiLevel: 'moderate',
-  // "None" in AI usage is the off switch (as it always was); this only says WHERE the AI runs when a
-  // level is chosen. Cloud by default — it works the moment a key is in the secrets file.
-  aiMode: 'cloud',
-  aiLocalModel: '',
-  aiCloudProvider: 'anthropic',
-  aiCloudModel: DEFAULT_CLOUD_MODEL,
   features: DEFAULT_FEATURES,
 }
 
@@ -122,17 +104,11 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(KEY)
     if (!raw) return migrateLegacyTheme(DEFAULT_SETTINGS)
     const parsed = JSON.parse(raw) as Partial<Settings>
-    const merged: Settings = {
+    return {
       ...DEFAULT_SETTINGS,
       ...parsed,
       features: { ...DEFAULT_SETTINGS.features, ...(parsed.features ?? {}) },
     }
-    // A briefly-shipped build stored "off" as a mode; the off switch is AI usage = None, so map it back.
-    if ((merged.aiMode as string) === 'off') {
-      merged.aiMode = 'cloud'
-      merged.aiLevel = 'none'
-    }
-    return merged
   } catch {
     return DEFAULT_SETTINGS
   }

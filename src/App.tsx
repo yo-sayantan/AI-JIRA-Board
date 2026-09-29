@@ -264,18 +264,11 @@ export default function App() {
     setDark(resolveDark(settings))
   }, [now, settings])
 
-  // Mirror the AI settings to the server so the shell runners and the AI Intern container see them
-  // (served mode only) — mode, effort, and which model each mode should use.
+  // Mirror the AI level to the server so the shell runners see it (served mode only).
   useEffect(() => {
     if (!served) return
-    void saveServerSettings({
-      aiLevel: settings.aiLevel,
-      aiMode: settings.aiMode,
-      aiCloudProvider: settings.aiCloudProvider,
-      aiLocalModel: settings.aiLocalModel,
-      aiCloudModel: settings.aiCloudModel,
-    })
-  }, [served, settings.aiLevel, settings.aiMode, settings.aiCloudProvider, settings.aiLocalModel, settings.aiCloudModel])
+    void saveServerSettings({ aiLevel: settings.aiLevel })
+  }, [served, settings.aiLevel])
 
   // Whether the server can run the AI enrichment pass is fixed for the life of the process (env
   // flags and installed binaries), so one read on mount is enough. The Settings panel and the

@@ -31,8 +31,4 @@ jira-intern/_STATUS.md
 # PR report hand-off state — live files shared with the host enricher, never baked in.
 jira-intern/reports/.enrich
 jira-intern/reports/.enricher.*
-jira-intern/reports/.ai-status.json
 jira-intern/reports/.status.json
-# Local model files are gigabytes — they reach the LLM container through a bind mount, never an image.
-jira-intern/models/*.gguf
-jira-intern/models/.registry.json

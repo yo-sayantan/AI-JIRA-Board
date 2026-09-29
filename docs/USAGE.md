@@ -70,10 +70,9 @@ or **not verified** (a gap — shown, never hidden). A ring shows the 0–100 re
 1. *Deterministic base* — `jira-intern/pr_report.py`, from the fetched ticket data. No AI, no network.
 2. *AI enrichment* — `cursor-agent` with your read-only Jira / Bitbucket / Confluence / Dynatrace MCP
    servers rewrites it in place with evidence chains, per-file assessment, risks and a ticket-specific
-   release gate. In Docker this pass runs in the **AI Intern container** with the model chosen in
-   Settings → AI Intern: a local model (a `.gguf` you drop into `jira-intern/models/`, served by the
-   JIRA-LLM container) or a cloud API (Claude or OpenAI-compatible), at the level set in AI usage.
-   AI usage *None* keeps reports deterministic.
+   release gate. In Docker the container hands this pass to the enricher running on your Mac (installed
+   by `start-jira-board.sh`), so it still happens at the AI level set in Settings; it is skipped only
+   when that level is None or no agent CLI exists anywhere.
 
 **When they are generated.** Automatically after every fetch for any ticket whose PR appeared or
 changed (background, capped by `reports.maxPerRun`), after a single-ticket refresh, or on demand from

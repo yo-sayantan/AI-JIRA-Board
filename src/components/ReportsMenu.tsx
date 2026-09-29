@@ -119,11 +119,9 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
               {served && aiEnrichment && !aiEnrichment.available && (
                 <div className="mt-1 text-[10.5px] font-semibold" style={{ color: aiEnrichment.handoff && aiEnrichment.workerAlive ? AI : '#b45309' }}>
                   {aiEnrichment.handoff && aiEnrichment.workerAlive
-                    ? aiEnrichment.worker?.mode === 'off'
-                      ? 'AI usage is None — these will be deterministic (Settings → AI usage).'
-                      : `Enriched by the AI Intern container (${aiEnrichment.worker?.mode ?? 'AI'} · ${aiEnrichment.worker?.model ?? 'model from Settings'}).`
+                    ? 'Enriched on your Mac in the background at the AI level set in Settings.'
                     : aiEnrichment.handoff
-                      ? 'The AI Intern container is not running — these stay deterministic until it is (bash start-jira-board.sh).'
+                      ? 'The enricher on your Mac is not running — these stay deterministic until it is (Settings → AI usage).'
                       : 'Generated without AI here — see Settings → AI usage.'}
                 </div>
               )}

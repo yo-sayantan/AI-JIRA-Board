@@ -178,9 +178,9 @@ export function PrReportOverlay({
                       className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-solid)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink-soft)] hover:border-[var(--muted)] disabled:opacity-60"
                       title={
                         aiWorker
-                          ? 'Rebuild this report: the deterministic base here, then AI enrichment in the AI Intern container with the model set in Settings'
+                          ? 'Rebuild this report: the deterministic base here, then AI enrichment on your Mac at the level set in Settings'
                           : aiHandoff
-                            ? 'Rebuild the deterministic base — the AI Intern container is not running, so the AI pass waits until it is (see the note at the foot of the report)'
+                            ? 'Rebuild the deterministic base — the enricher on your Mac is not running, so the AI pass waits until it is (see the note at the foot of the report)'
                             : aiBlocked
                               ? 'Rebuild the deterministic base in the background — the AI pass cannot run where this board is served (see the note at the foot of the report)'
                               : 'Rebuild this report in the background (deterministic base + AI enrichment)'
@@ -275,19 +275,15 @@ export function PrReportOverlay({
               {!report.enriched && aiWorker && (
                 <span className="basis-full text-[var(--ink-soft)]">
                   {generating
-                    ? 'Being enriched in the AI Intern container with the model set in Settings — this report refreshes here when it lands.'
-                    : aiEnrichment?.worker?.mode === 'off'
-                      ? 'AI usage is None in Settings, so Regenerate keeps this report deterministic. Choose Low, Moderate or Full there to enrich it.'
-                      : 'Regenerate rebuilds this report with AI enrichment in the AI Intern container, using the level, runtime and model set in Settings.'}
+                    ? 'Being enriched on your Mac at the AI level set in Settings — this report refreshes here when it lands.'
+                    : 'Regenerate rebuilds this report with AI enrichment on your Mac at the level set in Settings. Choose None there for a deterministic report.'}
                 </span>
-              )}
-              {!report.enriched && aiWorker && aiEnrichment?.worker?.last && !aiEnrichment.worker.last.ok && aiEnrichment.worker.last.key === report.key && (
-                <span className="basis-full text-[#b45309]">Last AI attempt failed: {aiEnrichment.worker.last.detail}</span>
               )}
               {!report.enriched && aiHandoff && !aiWorker && (
                 <span className="basis-full text-[#b45309]">
-                  AI enrichment waits for the AI Intern container, which is not running — reports stay deterministic until it is. Start it with{' '}
-                  <code className="rounded bg-[var(--surface-2)] px-1.5 py-[1px] font-mono text-[10.5px] text-[var(--ink)]">bash start-jira-board.sh</code>.
+                  AI enrichment waits for the enricher on your Mac, which is not running — reports stay deterministic until it is. Start it with{' '}
+                  <code className="rounded bg-[var(--surface-2)] px-1.5 py-[1px] font-mono text-[10.5px] text-[var(--ink)]">bash start-jira-board.sh</code>{' '}
+                  (it is installed as a login agent, so it stays on).
                 </span>
               )}
               {!report.enriched && aiBlocked && !aiHandoff && (
