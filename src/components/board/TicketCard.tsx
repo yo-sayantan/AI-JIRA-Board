@@ -1,11 +1,11 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { motion } from 'motion/react'
-import type { Ticket } from '../types'
-import { COLUMN_META } from '../lib/columns'
-import { DONE_BOARD_DAYS } from '../data'
-import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, branchesOf, relTime, hexToRgba } from '../lib/format'
-import { Pill, PriorityGlyph, PrBadge, Approvals, PointsTag } from './ui'
-import { TypeIcon, RefreshIcon, TrophyIcon } from './Icons'
+import type { Ticket } from '../../types'
+import { COLUMN_META } from '../../lib/columns'
+import { DONE_BOARD_DAYS } from '../../lib/appConfig'
+import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, branchesOf, relTime, hexToRgba } from '../../lib/format'
+import { Pill, PriorityGlyph, PrBadge, Approvals, PointsTag } from '../common/ui'
+import { TypeIcon, RefreshIcon, TrophyIcon } from '../common/Icons'
 
 /** Days until this Done card auto-retires from the board into the Completed archive. */
 function archivesInDays(t: Ticket, now: number): number | null {
@@ -50,7 +50,7 @@ function motionOff(): boolean {
   }
 }
 
-export function TicketCard({
+export const TicketCard = memo(function TicketCard({
   ticket,
   now,
   onOpen,
@@ -249,7 +249,7 @@ export function TicketCard({
       )}
     </motion.div>
   )
-}
+})
 
 function DoneBurst() {
   const sparks = Array.from({ length: 10 }, (_, i) => i)

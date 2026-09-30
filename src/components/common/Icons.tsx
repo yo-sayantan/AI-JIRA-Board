@@ -341,16 +341,6 @@ export function TrophyIcon({ size = 16, className = '', glint = false }: IP & { 
   )
 }
 
-/** Bold green circular tick — signals a successfully-completed ticket. */
-export function DoneCheckIcon({ size = 14, className = '' }: IP) {
-  return (
-    <svg {...svg(size, className)}>
-      <circle cx="12" cy="12" r="10" fill="#22c55e" />
-      <path d="M7.4 12.4l3 3 6.2-6.6" stroke="#fff" strokeWidth="2.9" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
 export function PersonIcon({ size = 11, className = '', color = 'currentColor' }: IP) {
   return (
     <svg {...svg(size, className)}>
@@ -433,15 +423,6 @@ export function ClockIcon({ size = 14, color = 'currentColor' }: IP) {
     <svg {...svg(size, '')}>
       <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.9" />
       <path d="M12 7.5V12l3 2" {...line(color, 1.9)} />
-    </svg>
-  )
-}
-export function InfoIcon({ size = 14, color = 'currentColor' }: IP) {
-  return (
-    <svg {...svg(size, '')}>
-      <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.9" />
-      <path d="M12 11v5" {...line(color, 2)} />
-      <circle cx="12" cy="7.8" r="1.1" fill={color} />
     </svg>
   )
 }

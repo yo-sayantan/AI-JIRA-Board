@@ -1,4 +1,4 @@
-import { BRANDING } from '../lib/appConfig'
+import { BRANDING } from '../../lib/appConfig'
 
 /** Very thin, fixed footer — credits + a pastel "made by" badge (text/link from config.json). */
 export function Footer() {

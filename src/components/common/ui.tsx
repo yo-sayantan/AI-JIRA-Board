@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import type { ColumnKey, PrState } from '../types'
-import { COLUMN_META } from '../lib/columns'
-import { priorityMeta, typeMeta, prMeta, hexToRgba, branchStatusMeta } from '../lib/format'
-import { APP_CONFIG } from '../lib/appConfig'
+import type { ColumnKey, PrState } from '../../types'
+import { COLUMN_META } from '../../lib/columns'
+import { priorityMeta, typeMeta, prMeta, hexToRgba, branchStatusMeta } from '../../lib/format'
+import { APP_CONFIG } from '../../lib/appConfig'
 import { PriorityIcon, TypeIcon, PrStateIcon, CopyIcon, CheckIcon, ICON_SCALE } from './Icons'
 
 export function Pill({
@@ -98,7 +98,7 @@ export function TypeBadge({ type }: { type?: string | null }) {
   )
 }
 
-export function PrBadge({ state }: { state?: PrState | null; compact?: boolean }) {
+export function PrBadge({ state }: { state?: PrState | null }) {
   // No PR → render nothing (the "Pull request" UI is hidden entirely when absent).
   if (!state || state === 'none') return null
   const m = prMeta(state)

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { CompletedTicket, Ticket } from '../types'
-import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, releaseEnvOf, yearOf, hexToRgba, branchesOf, branchStatusOf, prListOf, isMergedPr, isClosedPr, shortBranch, cycleTime, fmtDays } from '../lib/format'
-import { matchRow, parseQuery } from '../lib/search'
-import { Pill, PrBadge, BranchStatusPill, PointsTag } from './ui'
-import { BranchIcon, ChevronIcon, CommentIcon, ExpandAllIcon, PersonIcon, PrStateIcon, SearchIcon, SparkleIcon, TrophyIcon, TypeIcon } from './Icons'
+import type { CompletedTicket, Ticket } from '../../types'
+import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, releaseEnvOf, yearOf, hexToRgba, branchesOf, branchStatusOf, prListOf, isMergedPr, isClosedPr, shortBranch, cycleTime, fmtDays } from '../../lib/format'
+import { matchRow, parseQuery } from '../../lib/search'
+import { Pill, PrBadge, BranchStatusPill, PointsTag } from '../common/ui'
+import { BranchIcon, ChevronIcon, CommentIcon, ExpandAllIcon, PersonIcon, PrStateIcon, SearchIcon, SparkleIcon, TrophyIcon, TypeIcon } from '../common/Icons'
 
 const DONE = '#22c55e'
 const CONTEXT = '#8b5cf6' // parent tickets owned by others, shown for lineage

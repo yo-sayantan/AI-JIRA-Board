@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { Ticket } from '../types'
-import { NEXT_SPRINT_SECTION as SEC } from '../lib/columns'
+import type { Ticket } from '../../types'
+import { NEXT_SPRINT_SECTION as SEC } from '../../lib/columns'
 import {
   effectiveType,
   fmtDateShort,
@@ -11,8 +11,8 @@ import {
   relTime,
   workdaysBetween,
   type SprintInfo,
-} from '../lib/format'
-import { CalendarIcon, ChevronIcon, TypeIcon } from './Icons'
+} from '../../lib/format'
+import { CalendarIcon, ChevronIcon, TypeIcon } from '../common/Icons'
 
 /** Most urgent first, then most recently touched — same order as the board's To Do column. */
 const byUrgency = (a: Ticket, b: Ticket) =>
@@ -122,7 +122,7 @@ function Row({ ticket, now, onOpen }: { ticket: Ticket; now: number; onOpen: (ke
  * blocked work needs a nudge. This has neither — hierarchy comes from type size, ink level and
  * withheld colour, so the section recedes until you go looking for it.
  */
-export function NextSprint({
+export const NextSprint = memo(function NextSprint({
   tickets,
   now,
   onOpen,
@@ -279,4 +279,4 @@ export function NextSprint({
       )}
     </AnimatePresence>
   )
-}
+})

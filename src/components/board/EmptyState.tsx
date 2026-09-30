@@ -1,6 +1,6 @@
 import { motion } from 'motion/react'
-import { CopyButton } from './ui'
-import { RefreshIcon } from './Icons'
+import { CopyButton } from '../common/ui'
+import { RefreshIcon } from '../common/Icons'
 
 export function EmptyState({
   served,

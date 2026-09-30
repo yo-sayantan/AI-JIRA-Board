@@ -1,8 +1,10 @@
 // Talks to the optional local server (serve.mjs). On file:// none of this is reachable,
 // so callers fall back to a plain reload.
+import type { JiraData } from '../types'
 import { summarizeReport, type PrReport, type PrReportSummary } from './reportTypes'
+import type { ServerSettings } from './settings'
 
-export const RUN_COMMAND = 'bash .ai/jira-intern/local-runner/run-intern.sh'
+export const RUN_COMMAND = 'bash jira-intern/local-runner/run-intern.sh'
 
 /** True when the board was opened through the local server (http/https), not file://. */
 export function isServed(): boolean {
@@ -43,18 +45,14 @@ export interface InternStatus {
   dataModified: number | null
   /** Active + queued refresh keys, in FIFO order (active first). */
   refreshingKeys?: string[]
-  /** Key whose refresh-ticket.sh child is running right now (null when idle/draining wait). */
-  refreshActive?: string | null
-  /** Keys waiting behind the active one. */
-  refreshQueue?: string[]
   /** Exit codes for recently finished per-ticket refreshes (key → code). */
   refreshExits?: Record<string, number>
   /** Live ticket-count progress for the button fill (null when idle). */
   progress?: InternProgress | null
-  /** PR Readiness Reports being generated right now (server queue ∪ cron/terminal runs). */
+  /** Base PR reports being built right now (server queue ∪ cron/terminal runs). */
   reportsGenerating?: string[]
-  /** Exit codes for recently finished report generations (key → code). */
-  reportExits?: Record<string, number>
+  /** Reports the AI intern has queued or is enriching. */
+  reportsEnriching?: string[]
   /** JIRA-AI-Intern health, current job, installed models. */
   ai?: AiInternStatus
 }
@@ -111,6 +109,17 @@ export interface AiInternStatus {
   queuedKeys?: string[]
   queued?: number
   error?: string
+}
+
+/** How many enrich-report jobs the AI intern is running right now (queued ones excluded). */
+export function enrichJobsRunning(ai: AiInternStatus | null): number {
+  const jobs = ai?.active?.length ? ai.active : ai?.current ? [ai.current] : []
+  return jobs.filter((job) => job.type === 'enrich-report').length
+}
+
+export function aiModelLabel(ai: AiInternStatus | null): string | null {
+  if (!ai?.model) return null
+  return ai.cloudEffort ? `${ai.model} · ${ai.cloudEffort}` : ai.model
 }
 
 // ── PR Readiness Reports ──────────────────────────────────────────────────────
@@ -175,25 +184,8 @@ export async function startReportGeneration(key: string): Promise<ReportStart | 
   }
 }
 
-/**
- * Push the settings the shell runners care about to the server. Only the AI level matters to
- * them; everything else is presentation and stays in localStorage.
- */
-export async function saveServerSettings(patch: {
-  aiLevel?: string
-  aiBackend?: string
-  aiLocalModel?: string
-  aiCloudModel?: string
-  aiCloudProvider?: string
-  aiCloudEffort?: string
-  aiUseHostOllama?: boolean
-  reportParallel?: number
-  archiveParallel?: number
-  refreshParallel?: number
-  activeRefresh?: string
-  fullRefresh?: string
-  reportRefresh?: string
-}): Promise<boolean> {
+/** Push the settings the server-side jobs honour; everything else stays in localStorage. */
+export async function saveServerSettings(patch: ServerSettings): Promise<boolean> {
   try {
     const r = await fetch('/api/settings', {
       method: 'POST',
@@ -270,16 +262,6 @@ export async function startTicketRefresh(key: string): Promise<TicketRefreshStar
   }
 }
 
-export async function getAiStatus(): Promise<AiInternStatus | null> {
-  try {
-    const r = await fetch('/api/ai-status', { cache: 'no-store' })
-    if (!r.ok) return { ok: false, down: true, state: 'down', error: `HTTP ${r.status}` }
-    return (await r.json()) as AiInternStatus
-  } catch {
-    return { ok: false, down: true, state: 'down', error: 'AI intern unreachable' }
-  }
-}
-
 export interface CloudModelChoice {
   id: string
   label: string
@@ -348,11 +330,28 @@ export async function pullAiModel(model: string, useHostOllama = false): Promise
   }
 }
 
+let lastStatus: { text: string; value: InternStatus } | null = null
+
+/** Unchanged payloads return the previous object, so state setters can bail out of a re-render. */
 export async function getInternStatus(): Promise<InternStatus | null> {
   try {
     const r = await fetch('/api/intern-status', { cache: 'no-store' })
     if (!r.ok) return null
-    return (await r.json()) as InternStatus
+    const text = await r.text()
+    if (lastStatus?.text !== text) lastStatus = { text, value: JSON.parse(text) as InternStatus }
+    return lastStatus.value
+  } catch {
+    return null
+  }
+}
+
+/** The raw dump behind data.js. Revalidates against the server's ETag, so an unchanged file costs a 304. */
+export async function getDataDump(): Promise<JiraData | null> {
+  try {
+    const r = await fetch('/jira-intern/data.json', { cache: 'no-cache' })
+    if (!r.ok) return null
+    const raw = (await r.json()) as JiraData
+    return Array.isArray(raw?.tickets) ? raw : null
   } catch {
     return null
   }
@@ -374,20 +373,15 @@ export interface RunStartResult {
   ok: boolean
   /** HTTP status from the start endpoint (202 started, 409 already running, 0 on network fail). */
   status: number
-  running?: boolean
+  /** The started run's lastRunAt stamp, for telling its completion apart from an older run's. */
+  runAt?: string
 }
 
 async function startRun(path: string): Promise<RunStartResult> {
   try {
     const r = await fetch(path, { method: 'POST' })
-    let running: boolean | undefined
-    try {
-      const body = (await r.json()) as { running?: boolean }
-      running = body.running
-    } catch {
-      /* non-JSON */
-    }
-    return { ok: r.ok, status: r.status, running }
+    const body = (await r.json().catch(() => ({}))) as { runAt?: string }
+    return { ok: r.ok, status: r.status, runAt: body.runAt }
   } catch {
     return { ok: false, status: 0 }
   }

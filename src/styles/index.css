@@ -401,6 +401,15 @@ a {
 .jb-archive-busy .trophy-glint {
   animation-duration: 1.15s;
 }
+/* Header scope menus tint their items with the menu's own colour (--scope). */
+.jb-scope-item:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--scope) 45%, transparent);
+  box-shadow: 0 8px 18px -12px color-mix(in srgb, var(--scope) 90%, transparent);
+}
+.jb-scope-item:not(:disabled):active {
+  border-color: color-mix(in srgb, var(--scope) 60%, transparent);
+  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--scope) 55%, transparent);
+}
 @keyframes trophy-glint {
   0%, 3%, 16%, 100% { opacity: 0; transform: scale(0.5); }
   8%                { opacity: 1; transform: scale(1.05); }

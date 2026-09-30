@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { CopyButton } from './ui'
-import { EyeOffIcon, RefreshIcon } from './Icons'
-import { RUN_COMMAND } from '../lib/runner'
+import { CopyButton } from '../common/ui'
+import { EyeOffIcon, RefreshIcon } from '../common/Icons'
+import { RUN_COMMAND } from '../../lib/runner'
 
 const QUIPS = [
   'No tickets assigned. Either you shipped everything or JIRA is bluffing. 🃏',

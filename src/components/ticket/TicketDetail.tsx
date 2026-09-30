@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { Ticket, LinkRef, Comment, PullRequest } from '../types'
-import { COLUMN_META } from '../lib/columns'
-import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba, cycleTime, fmtDays } from '../lib/format'
-import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink } from './ui'
+import type { Ticket, LinkRef, Comment, PullRequest } from '../../types'
+import { COLUMN_META } from '../../lib/columns'
+import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba, cycleTime, fmtDays } from '../../lib/format'
+import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink } from '../common/ui'
 import { Pipeline } from './Pipeline'
-import { toneColor, type PrReportSummary } from '../lib/reportTypes'
-import { APP_CONFIG } from '../lib/appConfig'
+import { toneColor, type PrReportSummary } from '../../lib/reportTypes'
+import { APP_CONFIG } from '../../lib/appConfig'
 import {
   ChevronIcon,
   RefreshIcon,
@@ -25,7 +25,7 @@ import {
   BranchIcon,
   PersonIcon,
   TrophyIcon,
-} from './Icons'
+} from '../common/Icons'
 
 /**
  * The one-click path from a ticket to its management-grade verdict. Three states: a report exists

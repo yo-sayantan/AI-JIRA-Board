@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { WarningIcon, RefreshIcon } from './Icons'
+import { WarningIcon, RefreshIcon } from '../common/Icons'
 
 const RED = '#ef4444'
 

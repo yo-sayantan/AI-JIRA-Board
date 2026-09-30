@@ -1,6 +1,7 @@
-import { BOARD_COLUMNS } from '../lib/columns'
-import type { ColumnKey, Ticket } from '../types'
-import { priorityMeta } from '../lib/format'
+import { memo, useMemo } from 'react'
+import { BOARD_COLUMNS } from '../../lib/columns'
+import type { ColumnKey, Ticket } from '../../types'
+import { priorityMeta } from '../../lib/format'
 import { Column } from './Column'
 
 // Within a column: most urgent first, then most recently touched. The Done column
@@ -11,7 +12,7 @@ const byUrgency = (a: Ticket, b: Ticket) =>
 const byRecency = (a: Ticket, b: Ticket) =>
   (b.resolved ?? b.lastUpdate ?? '').localeCompare(a.resolved ?? a.lastUpdate ?? '')
 
-export function Board({
+export const Board = memo(function Board({
   tickets,
   now,
   onOpen,
@@ -26,8 +27,14 @@ export function Board({
   focus?: ColumnKey | null
   onArchive?: (key: string) => void
   onRefreshTicket?: (key: string) => void
-  refreshingKeys?: Set<string>
+  refreshingKeys?: ReadonlySet<string>
 }) {
+  const byColumn = useMemo(() => {
+    const groups = new Map<ColumnKey, Ticket[]>(BOARD_COLUMNS.map((c) => [c.key, []]))
+    for (const t of tickets) groups.get(t.column)?.push(t)
+    for (const [key, list] of groups) list.sort(key === 'done' ? byRecency : byUrgency)
+    return groups
+  }, [tickets])
   const cols = focus ? BOARD_COLUMNS.filter((c) => c.key === focus) : BOARD_COLUMNS
   return (
     <div className="flex gap-3 overflow-x-auto pb-3">
@@ -35,7 +42,7 @@ export function Board({
         <Column
           key={meta.key}
           meta={meta}
-          tickets={tickets.filter((t) => t.column === meta.key).sort(meta.key === 'done' ? byRecency : byUrgency)}
+          tickets={byColumn.get(meta.key) ?? []}
           now={now}
           onOpen={onOpen}
           // Only Done cards can be moved to Completed (off the board, into the archive).
@@ -47,4 +54,4 @@ export function Board({
       ))}
     </div>
   )
-}
+})

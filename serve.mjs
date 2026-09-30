@@ -25,9 +25,8 @@ const serveStatic = createStaticHandler(ROOT, [
 
 const param = (url, name) => (url.searchParams.get(name) || '').trim()
 
-async function reportsGenerating(ai) {
-  const external = await externalGenerating()
-  return [...new Set([...reportQueue.pending, ...external, ...(ai ? enrichingKeys(ai) : [])])]
+async function reportsGenerating() {
+  return [...new Set([...reportQueue.pending, ...(await externalGenerating())])]
 }
 
 /** Archive scope from the query string, or an error message. */
@@ -73,15 +72,17 @@ async function bulkReportKeys(url) {
 
 const routes = {
   'POST /api/run-intern': async (req, res) => {
-    if (!(await startDaily())) return json(res, 409, { ok: false, running: true })
-    json(res, 202, { ok: true, started: true })
+    const runAt = await startDaily()
+    if (!runAt) return json(res, 409, { ok: false, running: true })
+    json(res, 202, { ok: true, started: true, runAt })
   },
 
   'POST /api/run-archive': async (req, res, url) => {
     const { env, error } = archiveScope(url)
     if (error) return json(res, 400, { ok: false, error })
-    if (!(await startArchive(env))) return json(res, 409, { ok: false, running: true })
-    json(res, 202, { ok: true, started: true })
+    const runAt = await startArchive(env)
+    if (!runAt) return json(res, 409, { ok: false, running: true })
+    json(res, 202, { ok: true, started: true, runAt })
   },
 
   'POST /api/run-archive/stop': async (req, res) => {
@@ -106,7 +107,7 @@ const routes = {
   },
 
   'GET /api/reports': async (req, res) => {
-    const [reports, generating] = await Promise.all([reportsIndex(), reportsGenerating(null)])
+    const [reports, generating] = await Promise.all([reportsIndex(), reportsGenerating()])
     json(res, 200, { reports, generating, exits: Object.fromEntries(reportQueue.exits) })
   },
 
@@ -170,20 +171,19 @@ const routes = {
 
   // One call carries everything the board polls for: run state, queues, reports, AI intern.
   'GET /api/intern-status': async (req, res) => {
-    const [run, dataModified, ai] = await Promise.all([
+    const [run, dataModified, ai, generating] = await Promise.all([
       runStatus(),
       stat(PATHS.data).then((s) => s.mtimeMs, () => null),
       aiStatus(),
+      reportsGenerating(),
     ])
     json(res, 200, {
       ...run,
       dataModified,
       refreshingKeys: ticketRefresh.pending,
-      refreshActive: ticketRefresh.active,
-      refreshQueue: ticketRefresh.waiting,
       refreshExits: Object.fromEntries(ticketRefresh.exits),
-      reportsGenerating: await reportsGenerating(ai),
-      reportExits: Object.fromEntries(reportQueue.exits),
+      reportsGenerating: generating,
+      reportsEnriching: [...new Set(enrichingKeys(ai))],
       ai,
     })
   },

@@ -103,7 +103,6 @@
     "timeZone": "Asia/Kolkata",
     "doneBoardDays": 5,
     "polling": {
-      "reportsIdleMs": 15000,
       "reportsBusyMs": 4000,
       "aiIdleMs": 12000,
       "aiBusyMs": 1000

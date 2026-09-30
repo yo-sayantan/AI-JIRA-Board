@@ -12,11 +12,11 @@ import type {
   ReportTableRow,
   ReportTimelineBlock,
   ReportTone,
-} from '../lib/reportTypes'
-import { toneColor } from '../lib/reportTypes'
-import { fmtDate, fmtDateTime, fmtReportMetadata } from '../lib/format'
-import { APP_CONFIG } from '../lib/appConfig'
-import { hrefForKey, shareableLinks } from '../lib/reportLinks'
+} from '../../lib/reportTypes'
+import { toneColor } from '../../lib/reportTypes'
+import { fmtDate, fmtDateTime, fmtReportMetadata } from '../../lib/format'
+import { APP_CONFIG } from '../../lib/appConfig'
+import { hrefForKey, shareableLinks } from '../../lib/reportLinks'
 import { ReportHtml } from './ReportHtml'
 
 /**

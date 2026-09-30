@@ -1,12 +1,13 @@
+import { memo } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { Ticket } from '../types'
-import { HOLD_COLUMN } from '../lib/columns'
+import type { Ticket } from '../../types'
+import { HOLD_COLUMN } from '../../lib/columns'
 import { TicketCard } from './TicketCard'
-import { hexToRgba } from '../lib/format'
-import { PauseIcon } from './Icons'
+import { hexToRgba } from '../../lib/format'
+import { PauseIcon } from '../common/Icons'
 
 /** Rendered ONLY when something is on hold — otherwise it stays out of the way. */
-export function OnHold({ tickets, now, onOpen }: { tickets: Ticket[]; now: number; onOpen: (key: string) => void }) {
+export const OnHold = memo(function OnHold({ tickets, now, onOpen }: { tickets: Ticket[]; now: number; onOpen: (key: string) => void }) {
   return (
     <AnimatePresence initial={false}>
       {tickets.length > 0 && (
@@ -50,4 +51,4 @@ export function OnHold({ tickets, now, onOpen }: { tickets: Ticket[]; now: numbe
       )}
     </AnimatePresence>
   )
-}
+})

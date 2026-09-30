@@ -1,10 +1,9 @@
+import { memo, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import type { ReactNode } from 'react'
-import type { JiraData } from '../types'
-import { currentSprint, fmtDate, fmtDateShort, freshness, hexToRgba, sprintStatus } from '../lib/format'
-import { CalendarIcon, GearIcon, QuestionIcon, RefreshIcon, SearchIcon, SunIcon, MoonIcon, TicketGlyph } from './Icons'
-import { guideUrl, type ArchiveScope } from '../lib/runner'
-import { APP_CONFIG } from '../lib/appConfig'
+import type { JiraData } from '../../types'
+import { currentSprint, fmtDate, fmtDateShort, freshness, hexToRgba, sprintStatus } from '../../lib/format'
+import { CalendarIcon, GearIcon, QuestionIcon, RefreshIcon, SearchIcon, SunIcon, MoonIcon, TicketGlyph } from '../common/Icons'
+import { guideUrl, type ArchiveScope } from '../../lib/runner'
 import { ReportsMenu, type ReportsMenuProps } from './ReportsMenu'
 import { ArchiveMenu } from './ArchiveMenu'
 
@@ -125,7 +124,7 @@ function ProgressButton({
   )
 }
 
-export function Header({
+export const Header = memo(function Header({
   data,
   now,
   query,
@@ -349,4 +348,4 @@ export function Header({
       </div>
     </header>
   )
-}
+})

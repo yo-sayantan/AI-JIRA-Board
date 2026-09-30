@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
-import { ACTIVE_CADENCE, AI_LEVELS, BOARD_CADENCE, FEATURES, LIMITS, clampSetting, type FeatureKey, type Settings } from '../lib/settings'
-import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice } from '../lib/runner'
-import fallbackCatalog from '../../ai-intern/models.json'
-import { hexToRgba } from '../lib/format'
-import { CalendarIcon, DocIcon, DownloadIcon, MoonIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from './Icons'
+import { ACTIVE_CADENCE, AI_LEVELS, BOARD_CADENCE, FEATURES, LIMITS, clampSetting, type AiCloudProvider, type FeatureKey, type Settings } from '../../lib/settings'
+import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice } from '../../lib/runner'
+import fallbackCatalog from '../../../ai-intern/models.json'
+import { hexToRgba } from '../../lib/format'
+import { CalendarIcon, DocIcon, DownloadIcon, MoonIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from '../common/Icons'
 
 const AI = '#a855f7'
 
@@ -804,6 +804,30 @@ function CursorPriceCard({
   )
 }
 
+const CLOUD_PROVIDER_INFO: Record<
+  AiCloudProvider,
+  { label: string; missingKey: string; about: string; prefer: (models: CloudModelChoice[]) => CloudModelChoice }
+> = {
+  cursor: {
+    label: 'Cursor',
+    missingKey: 'CURSOR_API_KEY is read from ~/.cursor/mcp-secrets.env (Cursor Dashboard → API Keys).',
+    about: 'Value picks only: capable models at or under $10 output per 1M tokens, standard speed.',
+    prefer: (models) => models.find((m) => m.id === 'grok-4.7') || models[0],
+  },
+  claude: {
+    label: 'Claude',
+    missingKey: 'Add ANTHROPIC_API_KEY to ~/.cursor/mcp-secrets.env (console.anthropic.com → API keys).',
+    about: 'Haiku only. Opus and Sonnet are left off this list.',
+    prefer: (models) => models.find((m) => /haiku/i.test(m.id)) || models[0],
+  },
+  gemini: {
+    label: 'Gemini',
+    missingKey: 'Add GEMINI_API_KEY to ~/.cursor/mcp-secrets.env (aistudio.google.com → API keys).',
+    about: 'Gemini Flash models from your Google API key. Pro and Ultra are left off.',
+    prefer: (models) => models[0],
+  },
+}
+
 function CloudModelPicker({
   settings,
   onChange,
@@ -817,72 +841,35 @@ function CloudModelPicker({
   onTogglePrices: () => void
   panelRef: RefObject<HTMLElement | null>
 }) {
-  const [claude, setClaude] = useState<CloudModelChoice[]>([])
-  const [cursor, setCursor] = useState<CloudModelChoice[]>([])
-  const [gemini, setGemini] = useState<CloudModelChoice[]>([])
-  const [claudeErr, setClaudeErr] = useState<string | null>(null)
-  const [cursorErr, setCursorErr] = useState<string | null>(null)
-  const [geminiErr, setGeminiErr] = useState<string | null>(null)
-  const [claudeKey, setClaudeKey] = useState(false)
-  const [cursorKey, setCursorKey] = useState(false)
-  const [geminiKey, setGeminiKey] = useState(false)
-  const [loadedFor, setLoadedFor] = useState<'claude' | 'cursor' | 'gemini' | null>(null)
-
   const provider = cloudProviderOf(settings)
+  const info = CLOUD_PROVIDER_INFO[provider]
+  const [loaded, setLoaded] = useState<{ provider: AiCloudProvider; models: CloudModelChoice[]; error: string | null; hasKey: boolean } | null>(null)
 
   useEffect(() => {
-    const which = provider
     let cancelled = false
-    setLoadedFor(null)
+    setLoaded(null)
     void getCloudModels().then((res) => {
       if (cancelled || !res) return
-      setClaude(res.claude?.models ?? [])
-      setCursor(res.cursor?.models ?? [])
-      setGemini(res.gemini?.models ?? [])
-      setClaudeErr(res.claude?.error ?? null)
-      setCursorErr(res.cursor?.error ?? null)
-      setGeminiErr(res.gemini?.error ?? res.error ?? null)
-      setClaudeKey(!!res.claude?.configured)
-      setCursorKey(!!res.cursor?.configured)
-      setGeminiKey(!!res.gemini?.configured)
-      setLoadedFor(which)
+      const entry = res[provider]
+      setLoaded({ provider, models: entry?.models ?? [], error: entry?.error ?? res.error ?? null, hasKey: !!entry?.configured })
     })
     return () => {
       cancelled = true
     }
   }, [provider])
 
-  const models = provider === 'cursor' ? cursor : provider === 'gemini' ? gemini : claude
-  const err = provider === 'cursor' ? cursorErr : provider === 'gemini' ? geminiErr : claudeErr
-  const hasKey = provider === 'cursor' ? cursorKey : provider === 'gemini' ? geminiKey : claudeKey
+  const ready = loaded?.provider === provider
+  const models = useMemo(() => (ready ? loaded.models : []), [ready, loaded])
+  const hasKey = ready && loaded.hasKey
   const selected = models.find((m) => m.id === settings.aiCloudModel) ?? null
   const efforts = selected?.efforts ?? []
 
   useEffect(() => {
-    if (loadedFor !== provider || !models.length) return
-    if (models.some((m) => m.id === settings.aiCloudModel)) return
-    const prefer =
-      provider === 'cursor'
-        ? models.find((m) => m.id === 'grok-4.7') || models[0]
-        : provider === 'claude'
-          ? models.find((m) => /haiku/i.test(m.id)) || models[0]
-          : models[0]
-    onChange({ ...settings, aiCloudModel: prefer.id })
-  }, [loadedFor, models, provider, settings, onChange])
+    if (!models.length || models.some((m) => m.id === settings.aiCloudModel)) return
+    onChange({ ...settings, aiCloudModel: info.prefer(models).id })
+  }, [models, info, settings, onChange])
 
-  const hint = !hasKey
-    ? provider === 'cursor'
-      ? 'CURSOR_API_KEY is read from ~/.cursor/mcp-secrets.env (Cursor Dashboard → API Keys).'
-      : provider === 'gemini'
-        ? 'Add GEMINI_API_KEY to ~/.cursor/mcp-secrets.env (aistudio.google.com → API keys).'
-        : 'Add ANTHROPIC_API_KEY to ~/.cursor/mcp-secrets.env (console.anthropic.com → API keys).'
-    : err
-      ? err
-      : provider === 'cursor'
-        ? 'Value picks only: capable models at or under $10 output per 1M tokens, standard speed.'
-        : provider === 'gemini'
-          ? 'Gemini Flash models from your Google API key. Pro and Ultra are left off.'
-          : 'Haiku only. Opus and Sonnet are left off this list.'
+  const hint = !hasKey ? info.missingKey : (loaded?.error ?? info.about)
 
   return (
     <>
@@ -890,13 +877,11 @@ function CloudModelPicker({
         <select
           value={selected?.id ?? ''}
           onChange={(e) => onChange({ ...settings, aiCloudModel: e.target.value })}
-          aria-label={provider === 'cursor' ? 'Cursor model' : provider === 'gemini' ? 'Gemini model' : 'Claude model'}
+          aria-label={`${info.label} model`}
           disabled={!models.length}
           className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--muted)] disabled:opacity-60"
         >
-          {!models.length && (
-            <option value="">{loadedFor !== provider ? 'Loading models…' : hasKey ? 'No cheaper models on this key' : 'No key yet'}</option>
-          )}
+          {!models.length && <option value="">{!ready ? 'Loading models…' : hasKey ? 'No cheaper models on this key' : 'No key yet'}</option>}
           {models.map((m) => (
             <option key={m.id} value={m.id}>
               {m.label === m.id ? m.label : `${m.label} · ${m.id}`}

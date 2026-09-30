@@ -1,8 +1,8 @@
 import { motion } from 'motion/react'
-import { BOARD_COLUMNS, HOLD_COLUMN } from '../lib/columns'
-import type { ColumnKey } from '../types'
-import { hexToRgba } from '../lib/format'
-import { ColumnIcon, PauseIcon } from './Icons'
+import { BOARD_COLUMNS, HOLD_COLUMN } from '../../lib/columns'
+import type { ColumnKey } from '../../types'
+import { hexToRgba } from '../../lib/format'
+import { ColumnIcon, PauseIcon } from '../common/Icons'
 
 /** Horizontal status pipeline: To Do → In Progress → In Review → QA → Done. */
 export function Pipeline({ current, rawStatus }: { current: ColumnKey; rawStatus?: string | null }) {

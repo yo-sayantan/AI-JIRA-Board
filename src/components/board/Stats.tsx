@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { motion, useSpring } from 'motion/react'
-import { BOARD_COLUMNS, NEXT_SPRINT_SECTION } from '../lib/columns'
-import type { ColumnKey, Ticket } from '../types'
-import { hexToRgba } from '../lib/format'
-import { TrophyIcon, TicketGlyph } from './Icons'
+import { BOARD_COLUMNS, NEXT_SPRINT_SECTION } from '../../lib/columns'
+import type { ColumnKey, Ticket } from '../../types'
+import { hexToRgba } from '../../lib/format'
+import { TrophyIcon, TicketGlyph } from '../common/Icons'
 
 /**
  * What the top chip row currently has selected. A column key filters the board to that
@@ -23,7 +23,7 @@ function AnimatedNumber({ value }: { value: number }) {
   return <span className="tabular-nums">{display}</span>
 }
 
-export function Stats({
+export const Stats = memo(function Stats({
   tickets,
   completedCount,
   nextSprintCount = 0,
@@ -156,4 +156,4 @@ export function Stats({
       )}
     </div>
   )
-}
+})

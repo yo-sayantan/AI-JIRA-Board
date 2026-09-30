@@ -8,15 +8,15 @@ import type {
   ReportStat,
   ReportTab,
   ReportTone,
-} from '../lib/reportTypes'
-import { toneColor, worstTone } from '../lib/reportTypes'
-import { fmtDateTime, fmtReportMetadata, hexToRgba } from '../lib/format'
-import { APP_CONFIG } from '../lib/appConfig'
-import { PrinterIcon, RefreshIcon, SparkleIcon } from './Icons'
+} from '../../lib/reportTypes'
+import { toneColor, worstTone } from '../../lib/reportTypes'
+import { fmtDateTime, fmtReportMetadata, hexToRgba } from '../../lib/format'
+import { APP_CONFIG } from '../../lib/appConfig'
+import { PrinterIcon, RefreshIcon, SparkleIcon } from '../common/Icons'
 import { PrReportPrintDoc } from './PrReportPrint'
 import { ReportHtml } from './ReportHtml'
-import type { AiInternStatus } from '../lib/runner'
-import { hrefForKey, shareableLinks } from '../lib/reportLinks'
+import type { AiInternStatus } from '../../lib/runner'
+import { hrefForKey, shareableLinks } from '../../lib/reportLinks'
 
 /**
  * PR Readiness Report overlay — renders a report GENERICALLY from its block kinds, so the

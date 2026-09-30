@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 
 export type ToastKind = 'info' | 'success' | 'error' | 'loading'
@@ -10,7 +11,7 @@ export interface ToastItem {
 const ICON: Record<ToastKind, string> = { info: 'ⓘ', success: '✓', error: '⚠️', loading: '◌' }
 const COLOR: Record<ToastKind, string> = { info: '#8b9cff', success: '#22c55e', error: '#ef4444', loading: '#8b9cff' }
 
-export function Toasts({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: number) => void }) {
+export const Toasts = memo(function Toasts({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: number) => void }) {
   return (
     <div className="pointer-events-none fixed bottom-12 right-4 z-[60] flex flex-col items-end gap-2">
       <AnimatePresence>
@@ -45,4 +46,4 @@ export function Toasts({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: 
       </AnimatePresence>
     </div>
   )
-}
+})

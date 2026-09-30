@@ -24,21 +24,28 @@ export const ticketRefresh = new KeyQueue({
   isBlocked: dataWriterBusy,
 })
 
-export async function startDaily() {
-  if (await dataWriterBusy()) return false
-  state.daily = true
+function markStarted() {
+  state.lastExit = null
   state.lastRunAt = new Date().toISOString()
+  return state.lastRunAt
+}
+
+/** Returns the new run's lastRunAt stamp, or null when a writer is already busy. */
+export async function startDaily() {
+  if (await dataWriterBusy()) return null
+  state.daily = true
+  const runAt = markStarted()
   runProcess('bash', [PATHS.dailyScript]).then((code) => {
     state.daily = false
     state.lastExit = code
   })
-  return true
+  return runAt
 }
 
 /** Refused while any writer (or a queued ticket refresh) would race it on data.json. */
 export async function startArchive(scopeEnv) {
-  if (ticketRefresh.size > 0 || (await dataWriterBusy())) return false
-  state.lastRunAt = new Date().toISOString()
+  if (ticketRefresh.size > 0 || (await dataWriterBusy())) return null
+  const runAt = markStarted()
   let child = null
   runProcess('bash', [PATHS.archiveScript], {
     env: { ...process.env, ...scopeEnv },
@@ -52,7 +59,7 @@ export async function startArchive(scopeEnv) {
     state.archive = null
     state.lastExit = code
   })
-  return true
+  return runAt
 }
 
 export function stopArchive() {

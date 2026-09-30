@@ -72,15 +72,31 @@ function prsOf(t: Row): PullRequest[] {
   return list.filter(Boolean)
 }
 
-/** Every identifier the row can legitimately answer to, and where each came from. */
-function identifiers(t: Row) {
-  const subs = t.subtasks ?? []
-  return {
-    self: t.key,
-    parent: t.parentKey ?? null,
-    subKeys: subs.map((s) => s.key),
-    prIds: [...prsOf(t), ...subs.flatMap(prsOf)].map((p) => String(p.id ?? '')).filter(Boolean),
+interface Indexed {
+  self: string
+  parent: string | null
+  subKeys: string[]
+  prIds: string[]
+  hay: string
+}
+
+// Rows are immutable per data load, so each is indexed once instead of on every keystroke.
+const indexCache = new WeakMap<Row, Indexed>()
+
+function indexed(t: Row): Indexed {
+  let hit = indexCache.get(t)
+  if (!hit) {
+    const subs = t.subtasks ?? []
+    hit = {
+      self: t.key,
+      parent: t.parentKey ?? null,
+      subKeys: subs.map((s) => s.key),
+      prIds: [...prsOf(t), ...subs.flatMap(prsOf)].map((p) => String(p.id ?? '')).filter(Boolean),
+      hay: haystack(t),
+    }
+    indexCache.set(t, hit)
   }
+  return hit
 }
 
 function haystack(t: Row): string {
@@ -124,8 +140,8 @@ export interface Hit {
 export function matchRow(t: Row, terms: Term[]): Hit | null {
   if (!terms.length) return { score: SCORE.text, viaSubtasks: [] }
 
-  const ids = identifiers(t)
-  const hay = haystack(t)
+  const ids = indexed(t)
+  const { hay } = ids
   let best: number = SCORE.text
   const via = new Set<string>()
 

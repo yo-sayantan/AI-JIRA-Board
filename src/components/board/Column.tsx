@@ -1,11 +1,12 @@
+import { memo } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { ColumnMeta } from '../lib/columns'
-import type { Ticket } from '../types'
+import type { ColumnMeta } from '../../lib/columns'
+import type { Ticket } from '../../types'
 import { TicketCard } from './TicketCard'
-import { hexToRgba } from '../lib/format'
-import { ColumnIcon } from './Icons'
+import { hexToRgba } from '../../lib/format'
+import { ColumnIcon } from '../common/Icons'
 
-export function Column({
+export const Column = memo(function Column({
   meta,
   tickets,
   now,
@@ -20,7 +21,7 @@ export function Column({
   onOpen: (key: string) => void
   onArchive?: (key: string) => void
   onRefreshTicket?: (key: string) => void
-  refreshingKeys?: Set<string>
+  refreshingKeys?: ReadonlySet<string>
 }) {
   return (
     <section className="flex min-w-[244px] flex-1 flex-col">
@@ -71,4 +72,4 @@ export function Column({
       </div>
     </section>
   )
-}
+})

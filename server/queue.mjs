@@ -40,10 +40,6 @@ export class KeyQueue {
     return this.active ? [this.active, ...this.#waiting] : [...this.#waiting]
   }
 
-  get waiting() {
-    return [...this.#waiting]
-  }
-
   get size() {
     return this.#waiting.length + (this.active ? 1 : 0)
   }

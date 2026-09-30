@@ -1,6 +1,6 @@
-import type { PrReport } from '../lib/reportTypes'
-import { linkifyReportHtml } from '../lib/reportLinks'
-import { SafeHtml } from './ui'
+import type { PrReport } from '../../lib/reportTypes'
+import { linkifyReportHtml } from '../../lib/reportLinks'
+import { SafeHtml } from '../common/ui'
 
 /** Ticket keys, PR #n and https URLs in report prose become real <a href> (Jira / Bitbucket / Confluence). */
 export function ReportHtml({

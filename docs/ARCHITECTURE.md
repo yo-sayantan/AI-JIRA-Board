@@ -30,9 +30,10 @@ Key scripts:
 
 | File | Role |
 |---|---|
-| `daily_fetch.py` / `run_fetch.py` | Pull active tickets assigned to you → `data.json` / `data.js`. |
+| `daily_fetch.py` | Pull active tickets assigned to you → `data.json` / `data.js`. Also refreshes one ticket in place. |
 | `completed_archive.py` | Build the full historical "Completed" archive. |
-| `local-runner/*.sh` | Thin wrappers: daily, weekly, per-ticket refresh, summary. |
+| `_jira.py` · `devinfo.py` | Shared Jira/Bitbucket HTTP, field formatting, and branch/PR dev-info used by both fetches. |
+| `local-runner/*.sh` | Thin wrappers: daily, weekly, per-ticket refresh, PR reports. All source `runner-env.sh` for locks, timeouts and agent lookup. |
 | `local-runner/config.mjs` | Deep-merges the project config + personal override into shell vars, rendered prompts, MCP policy, and UI defaults. |
 | `prompts/intern-prompt.md` | The schema the fetch must produce, in prose — mirrors `src/types.ts`. |
 | `config/jira-board.config.json` | **Canonical project defaults/policy** for identity placeholders, endpoints, AI, reports, archive, refresh, UI, timezone, and branding. |
@@ -63,22 +64,51 @@ inlined) so it runs from a double-click. It reads `window.__JIRA_DATA__` at load
 | File | Role |
 |---|---|
 | `src/types.ts` | **The data contract.** Single source of truth for the ticket shape; mirrored by `prompts/intern-prompt.md`. |
-| `src/data.ts` | Loads `window.__JIRA_DATA__`; applies lifecycle rules (e.g. retire old Done tickets). Falls back to a dev fixture. |
-| `src/lib/columns.ts` | Jira status → board column mapping + colours; the Next Sprint / On Hold section identities. |
-| `src/lib/format.ts` | Priority / type / PR / date / sprint helpers (incl. `isNextSprint`, `futureSprintOf`). |
-| `src/components/` | `Header`, `Stats`, `Board`, `Column`, `TicketCard`, `OnHold`, `NextSprint`, `Completed`, `TicketDetail`, … |
-| `serve.mjs` | Zero-dependency Node server for the *optional* live mode (the in-app **Refresh** button runs the fetch). Proxies `/api/ai-*` to JIRA-AI-Intern. |
+| `src/data.ts` | Applies lifecycle rules to a raw dump (e.g. retire old Done tickets). Falls back to a dev fixture. |
+| `src/App.tsx` | Composition only: wires the hooks to the components. |
+| `src/hooks/` | State and side effects: settings sync, board data + in-place reload, intern jobs, reports, drawer stack, toasts. |
+| `src/lib/statusPoller.ts` | The one poller for `/api/intern-status`. Every watcher subscribes with a rate; the fastest wins, and it pauses while the tab is hidden. |
+| `src/lib/boardView.ts` | Pure derivations: search → columns / On Hold / Next Sprint, the key index, counts. |
+| `src/lib/runner.ts` | Typed client for the local server's API. |
+| `src/lib/columns.ts` · `format.ts` · `search.ts` | Status → column mapping, display helpers, ticket search. |
+| `src/components/` | Feature folders: `board/`, `header/`, `ticket/`, `completed/`, `reports/`, `settings/`, `common/`. |
 | `vite.config.ts` | Single-file build; injects the external `../jira-intern/data.js` `<script>`. |
+
+### 3. `serve.mjs` + `server/` — the optional local server
+
+Zero-dependency Node. `serve.mjs` is the route table; `server/` holds the pieces:
+
+| Module | Role |
+|---|---|
+| `config.mjs` | Paths, ports, validation regexes. |
+| `http.mjs` | JSON helpers and the static handler: path allowlist, in-memory gzip, ETag / 304. |
+| `jobs.mjs` · `locks.mjs` · `queue.mjs` | The data writers (daily, archive, per-ticket FIFO) and the lock files that keep them from overlapping. |
+| `reports.mjs` | Report queue, bulk scope resolution, and an mtime-cached index of `reports/`. |
+| `ai.mjs` | JIRA-AI-Intern status (1 s shared cache), its file queue, and the `/api/ai-*` proxy. |
+| `settings.mjs` · `schedule.mjs` | Machine-wide settings and the refresh / report scheduler. |
 
 ## How data reaches the screen
 
-1. The fetch writes `jira-intern/data.js` → `window.__JIRA_DATA__`.
+1. The fetch writes `jira-intern/data.json`, then `data.js` (`window.__JIRA_DATA__`).
 2. `dist/index.html` includes `<script src="../jira-intern/data.js">` (injected by the build).
-3. `src/data.ts` reads that global, normalizes it, and applies board rules.
+3. `src/data.ts` normalizes the dump and applies board rules.
 4. React renders the board, sections, and drawer from `src/types.ts`-shaped data.
 
-Because the data file is external to the bundle, **new data never requires a rebuild** — reload
-the page (or press `r`) and the latest dump shows.
+Because the data file is external to the bundle, **new data never requires a rebuild**. In served
+mode a finished refresh swaps in `/jira-intern/data.json` without reloading the page (an unchanged
+file costs a 304); on `file://` the board reloads to pick up `data.js`.
+
+## Server load
+
+One user, one tab, mostly idle with bursts of background work. So:
+
+- The client makes **one** status request per interval, however many things it is watching:
+  12 s idle, 4 s while runs or reports are in flight, 1 s only during a model download. No
+  polling at all while the tab is hidden or Background auto-refresh is off with nothing running.
+- `/api/intern-status` bundles run state, queues and AI status. Identical payloads don't re-render.
+- The reports index is fetched when a report finishes, not on a timer. The server re-parses only
+  report files whose mtime changed.
+- Static files are gzipped once and revalidated by ETag.
 
 ## Board rules worth knowing
 
@@ -89,13 +119,13 @@ the page (or press `r`) and the latest dump shows.
   cleared current-sprint To Do doesn't look full. See `src/lib/format.ts` → `isNextSprint`.
 - **Completed:** the full historical archive, collapsed by default.
 - **Done retirement:** a Done ticket stays on the board a few days as a "recent win", then retires
-  to Completed automatically (`src/data.ts` → `DONE_BOARD_DAYS`).
+  to Completed automatically (`app.doneBoardDays`, enforced in `src/data.ts`).
 
 ## Two ways it runs
 
 | Mode | Command | Refresh button | Needs |
 |---|---|---|---|
-| **Docker** (recommended) | `docker compose up -d --build` | Runs the fetch in-container; also auto-refreshes every 15 min | Docker + Jira token |
+| **Docker** (recommended) | `docker compose up -d --build` | Runs the fetch in-container; the scheduler also refreshes on the cadences set in Settings | Docker + Jira token |
 | **Static file** | open `dist/index.html` | Re-reads the last dump | Nothing |
 | **Live server** | `npm run serve` | Runs the fetch on your machine | Node + a working local fetch |
 
