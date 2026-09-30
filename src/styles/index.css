@@ -84,6 +84,31 @@ a {
   border-radius: 4px;
 }
 
+/* Header search is a native search field, so the ring above (and the browser's own
+   search highlight) draw a blue line inside the pill on click and while typing.
+   The pill border is the focus cue instead. */
+.jb-search {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+#jb-search {
+  appearance: none;
+  -webkit-appearance: none;
+}
+#jb-search:focus,
+#jb-search:focus-visible,
+.jb-search button:focus,
+.jb-search button:focus-visible {
+  outline: none;
+}
+#jb-search::-webkit-search-decoration,
+#jb-search::-webkit-search-cancel-button,
+#jb-search::-webkit-search-results-button,
+#jb-search::-webkit-search-results-decoration {
+  appearance: none;
+  -webkit-appearance: none;
+  display: none;
+}
+
 /* ── Reusable surfaces ──────────────────────────────────────────────── */
 .glass {
   background: var(--surface);

@@ -9,38 +9,14 @@ set -o pipefail
 KEY="$1"
 [ -z "$KEY" ] && { echo "usage: refresh-ticket.sh <KEY>"; exit 2; }
 
-# Same headless env as run-intern.sh (PATH, shell profile, connector secrets/MCP tokens).
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-[ -f "$HOME/.zprofile" ] && . "$HOME/.zprofile" 2>/dev/null
-[ -f "$HOME/.zshrc" ]    && . "$HOME/.zshrc"    2>/dev/null
-
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lock-util.sh
-. "$HERE/lock-util.sh"
-
-# Portable config (single source of truth: ../config.json) — see run-intern.sh for the pattern.
-AGENT_CONNECTOR=cursor; AGENT_BIN=cursor-agent; AGENT_BIN_FALLBACKS="$HOME/.local/bin/cursor-agent"
-AGENT_PROMPT_FLAG='-p'; AGENT_EXTRA_ARGS='--output-format text --force'; AGENT_MODEL_FLAG='--model'
-AGENT_SECRETS="$HOME/.cursor/mcp-secrets.env"; MODEL_MAIN=auto; TIMEOUT_REFRESH=600; REQUIRED_APPROVALS=2
-command -v node >/dev/null 2>&1 && eval "$(node "$HERE/config.mjs" shellenv 2>/dev/null)"
-if [ -f "$AGENT_SECRETS" ]; then set -a; . "$AGENT_SECRETS"; set +a; fi
-GIT_ROOT="$(cd "$HERE/../../.." && pwd)"
-INTERN_DIR="$(cd "$HERE/.." && pwd)"
-LOG_DIR="$HERE/../logs"; mkdir -p "$LOG_DIR"
+# shellcheck source=runner-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/runner-env.sh"
+load_agent_secrets
 LOG="$LOG_DIR/refresh-${KEY}-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "$INTERN_DIR/cache"
 
-# This rewrites the SHARED data.json. Refuse to run while a daily run (.intern.lock) or the weekly
-# archive (.completed.lock) is mid-write, and take our own .refresh.lock so two refreshes don't
-# clobber each other — otherwise concurrent writers cause lost updates on the canonical file.
-# Stale locks (dead PID / leftover from a Docker recreate) are cleared, not treated as held.
-for L in "$INTERN_DIR/.intern.lock" "$INTERN_DIR/.completed.lock" "$INTERN_DIR/.refresh.lock"; do
-  lock_clear_stale "$L"
-  if lock_is_held "$L"; then
-    echo "$(date): another intern job holds $(basename "$L") — skipping refresh of $KEY" | tee -a "$LOG"
-    exit 3
-  fi
-done
+# This rewrites the SHARED data.json, and our own .refresh.lock keeps two refreshes apart.
+refuse_if_locked "refresh of $KEY" "$INTERN_DIR/.intern.lock" "$INTERN_DIR/.completed.lock" "$INTERN_DIR/.refresh.lock"
 REFRESH_LOCK="$INTERN_DIR/.refresh.lock"
 echo "$$ $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REFRESH_LOCK"
 trap 'rm -f "$REFRESH_LOCK"' EXIT INT TERM
@@ -51,7 +27,6 @@ cd "$GIT_ROOT"
 PREV_DATA="$INTERN_DIR/.data.prev.$KEY.json"
 [ -f "$INTERN_DIR/data.json" ] && cp "$INTERN_DIR/data.json" "$PREV_DATA" 2>/dev/null
 
-TIMEOUT_BIN="$(command -v timeout || command -v gtimeout)"
 code=1
 FAST_OK=""
 
@@ -60,11 +35,7 @@ FAST_OK=""
 # Debug the agent path with FORCE_AGENT=1.
 if [ -z "$FORCE_AGENT" ] && command -v python3 >/dev/null 2>&1 && [ -f "$INTERN_DIR/daily_fetch.py" ]; then
   echo "$(date): fast path — daily_fetch.py --key $KEY (LLM agent is the fallback)…" | tee -a "$LOG"
-  if [ -n "$TIMEOUT_BIN" ]; then
-    "$TIMEOUT_BIN" 300 python3 "$INTERN_DIR/daily_fetch.py" --key "$KEY" >> "$LOG" 2>&1
-  else
-    python3 "$INTERN_DIR/daily_fetch.py" --key "$KEY" >> "$LOG" 2>&1
-  fi
+  run_with_timeout 300 python3 "$INTERN_DIR/daily_fetch.py" --key "$KEY" >> "$LOG" 2>&1
   fast_code=$?
   if [ "$fast_code" = "0" ]; then
     FAST_OK=1
@@ -78,12 +49,7 @@ fi
 if [ "$FAST_OK" != "1" ]; then
 # The agent CLI is located ONLY inside the fallback — Docker has no cursor-agent and must
 # succeed on the Python path above instead of exiting 127 here.
-AGENT="$(command -v "$AGENT_BIN")"
-if [ -z "$AGENT" ]; then
-  IFS=':' read -r -a FBS <<< "$AGENT_BIN_FALLBACKS"
-  for f in "${FBS[@]}"; do [ -x "$f" ] && AGENT="$f" && break; done
-fi
-if [ -z "$AGENT" ]; then
+if ! find_agent; then
   echo "$(date): fast path failed and $AGENT_BIN not found (connector: $AGENT_CONNECTOR)" | tee -a "$LOG"
   rm -f "$PREV_DATA"
   exit 127
@@ -110,10 +76,8 @@ STEPS:
 Do NOT write data.js — the runner re-syncs it. If Jira is unavailable, leave data.json unchanged and stop."
 
 echo "$(date): refreshing $KEY via $AGENT (connector=$AGENT_CONNECTOR)" | tee -a "$LOG"
-RUN=( "$AGENT" "$AGENT_PROMPT_FLAG" "$PROMPT" $AGENT_EXTRA_ARGS )
-EFFECTIVE_MODEL="${MODEL:-$MODEL_MAIN}"
-[ -n "$EFFECTIVE_MODEL" ] && [ "$EFFECTIVE_MODEL" != "auto" ] && RUN+=( "$AGENT_MODEL_FLAG" "$EFFECTIVE_MODEL" )
-if [ -n "$TIMEOUT_BIN" ]; then "$TIMEOUT_BIN" "$TIMEOUT_REFRESH" "${RUN[@]}" >> "$LOG" 2>&1; else "${RUN[@]}" >> "$LOG" 2>&1; fi
+agent_command "$PROMPT"
+run_with_timeout "$TIMEOUT_REFRESH" "${RUN[@]}" >> "$LOG" 2>&1
 code=$?
 
 # Restore aiSummary onto the refreshed ticket (carry-forward, independent of the agent).
@@ -124,12 +88,8 @@ fi
 
 rm -f "$PREV_DATA"
 
-# Deterministically re-sync data.js from data.json so the board picks up the change. Atomic.
-# (Python write_outputs already wrote data.js; this is a no-op safety net for the agent path.)
-if [ -f "$INTERN_DIR/data.json" ] && command -v node >/dev/null 2>&1; then
-  node "$HERE/sync-datajs.mjs" "$INTERN_DIR" 2>>"$LOG" \
-    && echo "$(date): re-synced data.js" | tee -a "$LOG"
-fi
+# Python write_outputs already wrote data.js; this is the safety net for the agent path.
+sync_datajs
 
 # The refresh may have surfaced a new or changed PR — (re)generate this ticket's PR Readiness Report
 # in the background if its fingerprint moved. Never delays or fails the refresh.

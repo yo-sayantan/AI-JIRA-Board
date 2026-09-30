@@ -43,8 +43,6 @@ config_get() {
 REFRESH_ON_START="${REFRESH_ON_START:-$(config_get refresh.onStart)}"
 case "$REFRESH_ON_START" in true) REFRESH_ON_START=1 ;; false) REFRESH_ON_START=0 ;; esac
 REFRESH_ON_START="${REFRESH_ON_START:-1}"
-REFRESH_INTERVAL="${REFRESH_INTERVAL:-$(config_get refresh.intervalSec)}"
-REFRESH_INTERVAL="${REFRESH_INTERVAL:-900}"
 
 # Refresh the runtime UI config even when Jira is offline or startup fetch is disabled.
 # This keeps branding, timezone, feature defaults, and polling policy aligned with config.
@@ -83,14 +81,10 @@ if [ "$REFRESH_ON_START" != "0" ]; then
   run_fetch &
 fi
 
-# 4) Periodic auto-refresh. REFRESH_INTERVAL=0 disables it.
-INTERVAL="$REFRESH_INTERVAL"
-if have_token && [ "$INTERVAL" -gt 0 ] 2>/dev/null; then
-  log "auto-refresh every ${INTERVAL}s"
-  ( while true; do sleep "$INTERVAL"; run_fetch; done ) &
-else
-  log "auto-refresh disabled (set REFRESH_INTERVAL and provide a token to enable)"
-fi
+# 4) Repeat refreshes are owned by the board server, from Settings → Jobs.
+#    A container boot still fetches once above. The old fixed interval would
+#    ignore the twice-a-day / twice-a-week choices.
+log "scheduled refreshes follow Settings (active, full board, PR reports)"
 
 # 5) Serve the board. exec => the server is the signal target under tini.
 log "serving the board on ${BIND_HOST:-0.0.0.0}:${PORT:-4321}"

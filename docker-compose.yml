@@ -9,6 +9,11 @@
 # Published host port is fixed via PORT (default 4321). The desktop launcher and
 # start-jira-board.sh always set the same PORT so every redeploy lands on one
 # dedicated port — never auto-incremented.
+#
+# Docker Desktop stack / Compose project: JIRA-Project
+# (Compose requires a lowercase project name, so it is stored as jira-project.)
+# Containers: JIRA-Board, AI-Intern, AI-Ollama
+name: jira-project
 services:
   jira-board:
     build: .
@@ -49,7 +54,7 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    container_name: JIRA-AI-Ollama
+    container_name: AI-Ollama
     volumes:
       - jira-ai-models:/root/.ollama
     restart: unless-stopped
@@ -61,8 +66,8 @@ services:
 
   jira-ai:
     build: ./ai-intern
-    image: jira-ai-intern:latest
-    container_name: JIRA-AI-Intern
+    image: ai-intern:latest
+    container_name: AI-Intern
     environment:
       INTERN_DIR: /app/jira-intern
       PORT: "4322"
@@ -82,3 +87,5 @@ services:
 
 volumes:
   jira-ai-models:
+    name: jira-board_jira-ai-models
+    external: true

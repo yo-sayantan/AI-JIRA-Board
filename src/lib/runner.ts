@@ -189,6 +189,10 @@ export async function saveServerSettings(patch: {
   aiUseHostOllama?: boolean
   reportParallel?: number
   archiveParallel?: number
+  refreshParallel?: number
+  activeRefresh?: string
+  fullRefresh?: string
+  reportRefresh?: string
 }): Promise<boolean> {
   try {
     const r = await fetch('/api/settings', {

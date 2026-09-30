@@ -30,12 +30,11 @@ INTERN = Path(os.environ.get("INTERN_DIR") or str(HERE.parent / "jira-intern")).
 sys.path.insert(0, str(INTERN))
 
 import ai_queue  # noqa: E402
-from _config import endpoints, load_config, load_secrets as load_config_secrets, secrets_path  # noqa: E402
+from _config import endpoints, load_config, load_secrets as load_config_secrets  # noqa: E402
 
 PORT = int(os.environ.get("PORT") or 4322)
 OLLAMA_URL = os.environ.get("OLLAMA_HOST") or "http://ollama:11434"
 HOST_OLLAMA_URL = os.environ.get("HOST_OLLAMA_URL") or "http://host.docker.internal:11434"
-SECRETS = Path(secrets_path(str(INTERN)))
 CATALOG_PATH = HERE / "models.json"
 ENRICH_PROMPT = (HERE / "prompts" / "enrich.txt").read_text(encoding="utf-8")
 CTX = ssl.create_default_context()
@@ -102,8 +101,6 @@ EFFORTS = ("low", "medium")
 # Claude stays on Haiku. Cursor is the explicit value allow-list _CURSOR_KEEP.
 _CHEAP_RANK = (("haiku", 0),)
 _FLAGSHIP = re.compile(r"opus|sonnet|grok|codex|thinking|composer|\bpro\b|gpt-|gemini", re.I)
-_CURSOR_DROP = re.compile(r"xhigh|(^|[-_.])fast($|[-_.])", re.I)
-_CN_MODELS = ("qwen", "deepseek", "kimi", "glm", "chatglm", "baichuan", "internlm", "minimax", "hunyuan", "moonshot", "yi-")
 # Value picks: capable models whose standard (medium, non-fast) output rate is
 # at most $10 / 1M tokens. Same-price older siblings are left out.
 _CURSOR_KEEP = (
@@ -150,11 +147,37 @@ def ollama_tags(base):
         return {"error": str(e)}
 
 
+def ttl_cache(seconds):
+    """Memoise a no-argument function for `seconds`; the board polls status every second."""
+
+    def wrap(fn):
+        state = {"at": 0.0, "val": None}
+        lock = threading.Lock()
+
+        def cached():
+            with lock:
+                now = time.time()
+                if state["val"] is None or now - state["at"] >= seconds:
+                    state["val"] = fn()
+                    state["at"] = now
+                return state["val"]
+
+        return cached
+
+    return wrap
+
+
+@ttl_cache(30)
 def catalog():
     try:
         return json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     except Exception:
         return {"models": [], "defaultLocal": "qwen2.5-coder:7b"}
+
+
+@ttl_cache(2)
+def cached_settings():
+    return ai_queue.load_settings()
 
 
 def _fmt_bytes(n):
@@ -168,6 +191,7 @@ def _fmt_bytes(n):
     return f"{int(n)} B"
 
 
+@ttl_cache(60)
 def mem_gb():
     try:
         for line in Path("/proc/meminfo").read_text().splitlines():
@@ -228,24 +252,6 @@ def chat_ollama(base, model, system, user, timeout):
         timeout=timeout,
     )
     return (data.get("message") or {}).get("content") or ""
-
-
-def chat_openai(model, system, user, timeout, key, base_url="https://api.openai.com/v1"):
-    data = http_json(
-        base_url.rstrip("/") + "/chat/completions",
-        {
-            "model": model or "gpt-4o-mini",
-            "temperature": 0.2,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        },
-        headers={"Authorization": f"Bearer {key}"},
-        timeout=timeout,
-    )
-    return (((data.get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
 
 
 def chat_anthropic(model, system, user, timeout, key):
@@ -576,7 +582,7 @@ def parallel_workers():
     """Report jobs run this many at a time: AI_PARALLEL, else Settings, else config ai.parallel."""
     raw = os.environ.get("AI_PARALLEL")
     if raw is None:
-        raw = ai_queue.load_settings().get("reportParallel")
+        raw = cached_settings().get("reportParallel")
     if raw is None:
         raw = (load_config(str(INTERN)).get("ai") or {}).get("parallel", 4)
     try:
@@ -1555,13 +1561,24 @@ def enrich_report(job):
 
 
 def data_writers_busy():
+    """True while a data.json writer holds its lock.
+
+    The writers run in the board container, so their PIDs mean nothing here; a lock counts as
+    held until it outlives that job's own timeout, which keeps a 2h archive rebuild protected.
+    """
+    timeouts = load_config(str(INTERN)).get("timeouts") or {}
+    ceilings = {
+        ".intern.lock": timeouts.get("dailySec", 1800),
+        ".completed.lock": timeouts.get("weeklySec", 7200),
+        ".refresh.lock": timeouts.get("refreshSec", 600),
+    }
     now = time.time()
-    for name in (".intern.lock", ".completed.lock", ".refresh.lock"):
+    for name, limit in ceilings.items():
         p = INTERN / name
         try:
-            if p.is_file() and now - p.stat().st_mtime < 1200:
+            if p.is_file() and now - p.stat().st_mtime < int(limit) + 300:
                 return True
-        except OSError:
+        except (OSError, ValueError):
             continue
     return False
 
@@ -1655,7 +1672,7 @@ def pull_model(job):
         else:
             pct = 0
         label = f"{_fmt_bytes(done)} / {_fmt_bytes(tot)}" if tot else (status or "starting")
-        ai_queue.write_status({
+        publish_status({
             "ok": True,
             "state": "pulling",
             "current": {"type": "pull-model", "model": model},
@@ -1772,49 +1789,44 @@ def ollama_tags_cached(base):
 _STATUS_LOCK = threading.RLock()
 
 
-def snapshot_status(extra=None):
-    # Status is a read-modify-write of one file, shared by every worker thread and the HTTP handler.
+def _clear_pull_unless_pulling(status):
+    if status.get("state") != "pulling":
+        status["pulling"] = None
+        status["pullProgress"] = None
+    return status
+
+
+def publish_status(patch):
+    """Persist a job-state change. Shared by every worker thread, so it is serialised."""
     with _STATUS_LOCK:
-        return _snapshot_status(extra)
+        prev = ai_queue.read_status() or {}
+        merged = _clear_pull_unless_pulling({"state": prev.get("state") or "idle", **patch})
+        return ai_queue.write_status(merged)
 
 
-def _snapshot_status(extra=None):
+def status_view():
+    """Job state from disk plus live settings and Ollama facts. Read-only: polled every second."""
     prev = ai_queue.read_status() or {}
-    settings = ai_queue.load_settings()
+    settings = cached_settings()
     use_host = bool(settings.get("aiUseHostOllama"))
-    base = HOST_OLLAMA_URL if use_host else OLLAMA_URL
-    tags = ollama_tags_cached(base)
-    installed = tags if isinstance(tags, list) else []
-    ollama_err = tags.get("error") if isinstance(tags, dict) else None
-    patch = {
+    tags = ollama_tags_cached(HOST_OLLAMA_URL if use_host else OLLAMA_URL)
+    backend = settings.get("aiBackend") or "local"
+    live = {
         "ok": True,
         "state": prev.get("state") or "idle",
-        "current": prev.get("current"),
-        "lastError": prev.get("lastError"),
-        "backend": settings.get("aiBackend") or "local",
-        "model": (
-            settings.get("aiCloudModel")
-            if (settings.get("aiBackend") or "local") == "cloud"
-            else settings.get("aiLocalModel") or catalog().get("defaultLocal")
-        ),
+        "backend": backend,
+        "model": settings.get("aiCloudModel") if backend == "cloud" else settings.get("aiLocalModel") or catalog().get("defaultLocal"),
         "cloudProvider": settings.get("aiCloudProvider") if settings.get("aiCloudProvider") in ("claude", "cursor", "gemini") else "cursor",
         "cloudEffort": settings.get("aiCloudEffort") if settings.get("aiCloudEffort") in EFFORTS else "low",
         "useHostOllama": use_host,
         "ollamaOk": isinstance(tags, list),
-        "ollamaError": ollama_err,
-        "installedModels": installed,
+        "ollamaError": tags.get("error") if isinstance(tags, dict) else None,
+        "installedModels": tags if isinstance(tags, list) else [],
         "catalog": catalog(),
         "memGb": mem_gb(),
-        "pulling": prev.get("pulling"),
-        "pullProgress": prev.get("pullProgress"),
         "parallel": parallel_workers(),
     }
-    if extra:
-        patch.update(extra)
-    if patch.get("state") != "pulling":
-        patch["pulling"] = None
-        patch["pullProgress"] = None
-    return ai_queue.write_status(patch)
+    return _clear_pull_unless_pulling({**prev, **live})
 
 
 def _publish_active(extra=None):
@@ -1835,7 +1847,7 @@ def _publish_active(extra=None):
         patch.pop("pulling", None)
         patch.pop("pullProgress", None)
         patch["state"] = "pulling"
-    snapshot_status(patch)
+    publish_status(patch)
 
 
 def requeue_orphans():
@@ -1854,6 +1866,22 @@ def requeue_orphans():
                 pass
 
 
+IDLE_POLL_SEC = 2
+_SCAN_LOCK = threading.Lock()
+_LAST_EMPTY_SCAN = [0.0]
+
+
+def next_job():
+    """Claim the oldest job. Idle slots share one directory scan per IDLE_POLL_SEC."""
+    with _SCAN_LOCK:
+        if time.time() - _LAST_EMPTY_SCAN[0] < IDLE_POLL_SEC:
+            return None, None
+        job, path = ai_queue.claim_next()
+        if not job:
+            _LAST_EMPTY_SCAN[0] = time.time()
+        return job, path
+
+
 def worker_loop(slot):
     name = threading.current_thread().name
     while not STOP.is_set():
@@ -1861,9 +1889,9 @@ def worker_loop(slot):
         if slot >= parallel_workers():
             time.sleep(3)
             continue
-        job, path = ai_queue.claim_next()
+        job, path = next_job()
         if not job:
-            time.sleep(2)
+            time.sleep(IDLE_POLL_SEC)
             continue
         job = apply_saved_model(job)
         typ = job.get("type")
@@ -1948,36 +1976,30 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
-        if path in ("/health", "/api/health"):
-            st = snapshot_status()
-            return self._json(200, st)
-        if path in ("/api/status", "/status"):
-            return self._json(200, snapshot_status())
-        if path in ("/api/models", "/models"):
-            st = snapshot_status()
-            return self._json(200, {"ok": True, "catalog": catalog(), "installed": st.get("installedModels") or [], "ollamaOk": st.get("ollamaOk"), "memGb": st.get("memGb")})
-        if path in ("/api/cloud-models", "/cloud-models"):
+        if path == "/health":
+            return self._json(200, {"ok": True})
+        if path == "/api/status":
+            return self._json(200, status_view())
+        if path == "/api/models":
+            st = status_view()
+            return self._json(200, {"ok": True, "catalog": st["catalog"], "installed": st["installedModels"], "ollamaOk": st["ollamaOk"], "memGb": st["memGb"]})
+        if path == "/api/cloud-models":
             try:
                 return self._json(200, cloud_models())
             except Exception as e:
                 return self._json(200, {"ok": False, "error": str(e)[:240]})
-        if path in ("/api/jobs", "/jobs"):
-            jobs = ai_queue.list_jobs()
-            for j in jobs:
-                j.pop("_path", None)
-            return self._json(200, {"ok": True, "jobs": jobs, "queued": len(jobs)})
         return self._json(404, {"ok": False, "error": "not found"})
 
     def do_POST(self):
         path = self.path.split("?", 1)[0]
         body = self._read()
-        if path in ("/api/jobs", "/jobs"):
+        if path == "/api/jobs":
             try:
                 payload = ai_queue.enqueue(body)
             except Exception as e:
                 return self._json(400, {"ok": False, "error": str(e)})
             return self._json(202, {"ok": True, "job": payload})
-        if path in ("/api/models/pull", "/models/pull"):
+        if path == "/api/models/pull":
             model = body.get("model") or body.get("id")
             if not model:
                 return self._json(400, {"ok": False, "error": "missing model"})

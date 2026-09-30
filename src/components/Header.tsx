@@ -138,6 +138,7 @@ export function Header({
   runProgress,
   served,
   onRefresh,
+  shortcuts = true,
   onArchiveRefresh,
   onStopArchive,
   reports,
@@ -156,6 +157,8 @@ export function Header({
   runProgress?: RunProgress | null
   served: boolean
   onRefresh: () => void
+  /** When off, / and r do nothing and their hints stay off the controls. */
+  shortcuts?: boolean
   onArchiveRefresh: (target: ArchiveScope) => void
   onStopArchive: () => void
   /** Bulk PR Readiness Report controls — grouped so the header keeps one prop, not five. */
@@ -249,7 +252,7 @@ export function Header({
             </div>
           )}
 
-          <label className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] px-3 py-1.5 card-shadow focus-within:border-[var(--muted)]">
+          <label className="jb-search flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] px-3 py-1.5 card-shadow focus-within:border-[var(--muted)]">
             <span className="text-[var(--muted)]">
               <SearchIcon size={14} />
             </span>
@@ -258,7 +261,7 @@ export function Header({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               type="search"
-              placeholder="Search…  ( / )"
+              placeholder={shortcuts ? 'Search…  ( / )' : 'Search…'}
               className="w-36 bg-transparent text-[13px] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] md:w-60"
             />
             {query && (
@@ -276,8 +279,8 @@ export function Header({
             ariaLabel={served ? 'Refresh the board (active tickets only)' : 'Reload latest data'}
             title={
               served
-                ? 'QUICK refresh — re-fetches only your ACTIVE tickets (seconds). The Completed archive is not touched.  (r)'
-                : 'Reload the latest data dump from disk  (r)'
+                ? `QUICK refresh — re-fetches only your ACTIVE tickets (seconds). The Completed archive is not touched.${shortcuts ? '  (r)' : ''}`
+                : `Reload the latest data dump from disk${shortcuts ? '  (r)' : ''}`
             }
             idleLabel={served ? 'Refresh board' : 'Reload'}
             gradient="linear-gradient(135deg, #7c5cff, #2684ff)"

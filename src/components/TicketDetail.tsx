@@ -151,6 +151,7 @@ export function TicketDetail({
   user,
   report,
   reportsEnabled,
+  briefsEnabled,
   reportGenerating,
   reportLoading,
   onOpenReport,
@@ -161,6 +162,8 @@ export function TicketDetail({
   report?: PrReportSummary | null
   /** Turned off in Settings → the whole report section disappears from the drawer. */
   reportsEnabled?: boolean
+  /** Turned off in Settings → the AI brief on the ticket disappears. */
+  briefsEnabled?: boolean
   reportGenerating?: boolean
   reportLoading?: boolean
   onOpenReport?: (key: string) => void
@@ -362,7 +365,7 @@ export function TicketDetail({
           {/* 1. AI Summary — fastest "what is this about". To Do / In-Progress tickets carry a
               DEEP brief (light HTML: linked docs, related tickets, PR/code state, attachments);
               others a short plain paragraph. SafeHtml renders both (and sanitizes). */}
-          {ticket.aiSummary && ticket.column !== 'done' && (
+          {briefsEnabled !== false && ticket.aiSummary && ticket.column !== 'done' && (
             <div className="mb-4 overflow-hidden rounded-xl border border-[#7c3aed]/35 bg-gradient-to-br from-[#7c3aed]/[0.09] to-[#6366f1]/[0.05]">
               <div className="flex items-center gap-2 border-b border-[#7c3aed]/20 px-3.5 py-2">
                 <SparkleIcon color="#a855f7" size={14} />

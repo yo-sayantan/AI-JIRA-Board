@@ -23,8 +23,16 @@ export interface AppRuntimeConfig {
     theme?: 'dark' | 'light'
     dayStart?: number
     dayEnd?: number
+    toastSeconds?: number
+    toastMax?: number
     features?: Record<string, boolean>
   }
+  schedule?: {
+    activeRefresh?: 'off' | 'daily' | 'twice-daily'
+    fullRefresh?: 'off' | 'daily' | 'weekly' | 'twice-weekly'
+    reportRefresh?: 'off' | 'daily' | 'weekly' | 'twice-weekly'
+  }
+  refresh?: { onStart?: boolean; workers?: number }
   reports?: { defaultWindowDays?: number; presetWindowDays?: number[] }
   archive?: { defaultWindowDays?: number; presetWindowDays?: number[]; workers?: number }
   ai?: {

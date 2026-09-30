@@ -19,7 +19,6 @@ an enriched file that changed anything derived. Nothing here touches the network
   pr_report.py status-add <KEY> <PID> | status-remove <KEY>     generation-in-progress registry
   pr_report.py fingerprint <KEY>
 """
-import copy
 import hashlib
 import json
 import os
@@ -29,6 +28,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config import endpoints, load_config, now_iso as configured_now_iso, time_zone  # noqa: E402
+from datafile import atomic_write  # noqa: E402
 
 INTERN = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(INTERN, "data.json")
@@ -141,10 +141,7 @@ def read_json(path):
 
 def write_json_atomic(path, obj):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = f"{path}.{os.getpid()}.swap"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, path)
+    atomic_write(path, json.dumps(obj, indent=2, ensure_ascii=False))
 
 
 def parse_iso(s):

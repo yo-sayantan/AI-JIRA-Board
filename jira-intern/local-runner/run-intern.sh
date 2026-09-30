@@ -9,47 +9,16 @@
 # Optional model override:  MODEL="auto" bash run-intern.sh
 set -o pipefail
 
-# Shortcuts/launchd start with a minimal environment — restore PATH and load your shell profile.
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-[ -f "$HOME/.zprofile" ] && . "$HOME/.zprofile" 2>/dev/null
-[ -f "$HOME/.zshrc" ]    && . "$HOME/.zshrc"    2>/dev/null
-
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lock-util.sh
-. "$HERE/lock-util.sh"
-
-# ── Portable config (single source of truth: ../config.json) ────────────────
-# Defaults below match the original cursor setup; config.mjs overrides them when present,
-# so switching user / connector (cursor→codex→claude) / models / MCP policy is a config-only change.
-AGENT_CONNECTOR=cursor; AGENT_BIN=cursor-agent; AGENT_BIN_FALLBACKS="$HOME/.local/bin/cursor-agent"
-AGENT_PROMPT_FLAG='-p'; AGENT_EXTRA_ARGS='--output-format text --force'; AGENT_MODEL_FLAG='--model'
-AGENT_SECRETS="$HOME/.cursor/mcp-secrets.env"; AGENT_API_KEY_ENV='CURSOR_API_KEY'
-AGENT_INSTALL_HINT='curl https://cursor.com/install -fsS | bash'
-MODEL_MAIN=auto; TIMEOUT_DAILY=1800
-command -v node >/dev/null 2>&1 && eval "$(node "$HERE/config.mjs" shellenv 2>/dev/null)"
-
-# Load the connector's secrets so headless auth works and MCP tokens are present.
-# set -a exports everything to the agent child process.
-if [ -f "$AGENT_SECRETS" ]; then set -a; . "$AGENT_SECRETS"; set +a; fi
+# shellcheck source=runner-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/runner-env.sh"
+load_agent_secrets
 PROMPT_FILE="$HERE/../prompts/intern-prompt.md"
-GIT_ROOT="$(cd "$HERE/../../.." && pwd)"          # jira-board/jira-intern/local-runner -> git/
-INTERN_DIR="$(cd "$HERE/.." && pwd)"              # jira-board/jira-intern
-LOG_DIR="$HERE/../logs"; mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/run-$(date +%Y%m%d-%H%M%S).log"
 # NOTE: this DAILY run handles ACTIVE tickets only and preserves the existing completed[]. The per-ticket
 # cache + the historical archive are owned by the separate weekly job local-runner/update-completed.sh
 # (run `FRESH=1 bash update-completed.sh` to rebuild the archive).
 
-# Don't run concurrently with the weekly archive or a single-ticket refresh — all three write the
-# same data.json, and overlapping writes cause lost updates / torn files.
-# Stale locks (dead PID / leftover from a Docker recreate) are cleared, not treated as held.
-for L in "$INTERN_DIR/.completed.lock" "$INTERN_DIR/.refresh.lock"; do
-  lock_clear_stale "$L"
-  if lock_is_held "$L"; then
-    echo "$(date): $(basename "$L") held by another intern job — skipping this daily run" | tee -a "$LOG"
-    exit 3
-  fi
-done
+refuse_if_locked "this daily run" "$INTERN_DIR/.completed.lock" "$INTERN_DIR/.refresh.lock"
 
 # Run-lock so the board (served mode) can tell whether the intern is running, even across page
 # refreshes and regardless of who launched it (button or terminal). Removed on any exit.
@@ -68,21 +37,17 @@ echo "$(date): starting jira-intern daily run (connector=$AGENT_CONNECTOR, cwd=$
 PREV_DATA="$INTERN_DIR/.data.prev.json"
 [ -f "$INTERN_DIR/data.json" ] && cp "$INTERN_DIR/data.json" "$PREV_DATA" 2>/dev/null
 
-TIMEOUT_BIN="$(command -v timeout || command -v gtimeout)"
-
 # ── FAST PATH ─────────────────────────────────────────────────────────────────
 # The deterministic fetch (daily_fetch.py) implements the same contract as the LLM
 # agent but finishes in seconds instead of minutes. It is the PRIMARY path; the
 # agent below is the fallback for when the script fails (auth, Jira quirks, drift).
 # Debug the agent path with FORCE_AGENT=1.
 FAST_OK=""
+# daily_fetch.py reads this from its environment; shellenv only assigns it.
+export REFRESH_WORKERS
 if [ -z "$FORCE_AGENT" ] && command -v python3 >/dev/null 2>&1 && [ -f "$INTERN_DIR/daily_fetch.py" ]; then
   echo "$(date): fast path — deterministic daily_fetch.py (LLM agent is the fallback)…" | tee -a "$LOG"
-  if [ -n "$TIMEOUT_BIN" ]; then
-    "$TIMEOUT_BIN" 300 python3 "$INTERN_DIR/daily_fetch.py" >> "$LOG" 2>&1
-  else
-    python3 "$INTERN_DIR/daily_fetch.py" >> "$LOG" 2>&1
-  fi
+  run_with_timeout 300 python3 "$INTERN_DIR/daily_fetch.py" >> "$LOG" 2>&1
   fast_code=$?
   if [ "$fast_code" = "0" ]; then
     FAST_OK=1
@@ -96,12 +61,7 @@ fi
 if [ "$FAST_OK" != "1" ]; then
 # The fast path failed — NOW we need the LLM agent. Locate it (config: connector.<name>.bin /
 # binFallbacks). If it isn't installed there's nothing more we can do, so fail with 127.
-AGENT="$(command -v "$AGENT_BIN")"
-if [ -z "$AGENT" ]; then
-  IFS=':' read -r -a FBS <<< "$AGENT_BIN_FALLBACKS"
-  for f in "${FBS[@]}"; do [ -x "$f" ] && AGENT="$f" && break; done
-fi
-if [ -z "$AGENT" ]; then
+if ! find_agent; then
   echo "$(date): fast path failed and $AGENT_BIN not found (connector: $AGENT_CONNECTOR). Install:  $AGENT_INSTALL_HINT" | tee -a "$LOG"
   exit 127
 fi
@@ -120,24 +80,15 @@ if printf '%s' "$PROMPT_TEXT" | grep -q '{{'; then
   exit 6
 fi
 
-# Extra args come from the connector config (word-split deliberately; args must not contain spaces).
-# MODEL env > config models.main; "auto" means let the connector pick (flag omitted).
-RUN=( "$AGENT" "$AGENT_PROMPT_FLAG" "$PROMPT_TEXT" $AGENT_EXTRA_ARGS )
-EFFECTIVE_MODEL="${MODEL:-$MODEL_MAIN}"
-[ -n "$EFFECTIVE_MODEL" ] && [ "$EFFECTIVE_MODEL" != "auto" ] && RUN+=( "$AGENT_MODEL_FLAG" "$EFFECTIVE_MODEL" )
-
-if [ -n "$TIMEOUT_BIN" ]; then
-  "$TIMEOUT_BIN" "$TIMEOUT_DAILY" "${RUN[@]}" >> "$LOG" 2>&1
-else
-  "${RUN[@]}" >> "$LOG" 2>&1
-fi
+agent_command "$PROMPT_TEXT"
+run_with_timeout "$TIMEOUT_DAILY" "${RUN[@]}" >> "$LOG" 2>&1
 code=$?
 [ "$code" = "124" ] && echo "$(date): TIMED OUT after ${TIMEOUT_DAILY}s (headless agent runs can hang)" | tee -a "$LOG"
 fi
 
 # Crash-safety: a timed-out/killed agent can leave data.json truncated or invalid. If it no longer
 # parses, restore the pre-run snapshot (the only known-good copy) BEFORE we touch data.js — otherwise
-# a bad run permanently corrupts the canonical file. Mirrors summarize-active.sh.
+# a bad run permanently corrupts the canonical file.
 if [ -f "$PREV_DATA" ] && command -v node >/dev/null 2>&1; then
   if [ ! -f "$INTERN_DIR/data.json" ] || ! node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$INTERN_DIR/data.json" 2>/dev/null; then
     echo "$(date): data.json missing/invalid after run — restoring pre-run snapshot" | tee -a "$LOG"
@@ -155,16 +106,7 @@ rm -f "$PREV_DATA"
 # Log rotation — keep the most recent 40 run logs so logs/ doesn't grow forever.
 ls -1t "$LOG_DIR"/run-*.log 2>/dev/null | tail -n +41 | xargs rm -f 2>/dev/null || true
 
-# Keep data.js perfectly in sync with data.json (deterministic — never rely on the agent to write both).
-# The jira-board app loads data.js (window.__JIRA_DATA__) on file://; this guarantees it matches data.json.
-# Atomic write via the shared helper so the board never loads a torn data.js.
-if [ -f "$INTERN_DIR/data.json" ] && command -v node >/dev/null 2>&1; then
-  if node "$HERE/sync-datajs.mjs" "$INTERN_DIR" 2>>"$LOG"; then
-    echo "$(date): regenerated data.js from data.json" | tee -a "$LOG"
-  else
-    echo "$(date): WARNING could not regenerate data.js (is data.json valid JSON?)" | tee -a "$LOG"
-  fi
-fi
+sync_datajs
 
 # PR Readiness Reports (best-effort, BACKGROUND): for every ticket whose PR appeared or changed since
 # its last report, (re)generate jira-intern/reports/<KEY>.json. Detached with nohup so a slow agent

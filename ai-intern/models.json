@@ -3,7 +3,7 @@
   "updated": "2026-09-22",
   "defaultLocal": "qwen2.5-coder:7b",
   "hostOnlyRamGb": 36,
-  "howto": "Add a model by appending an object below. Required: id (Settings dropdown tag, must match ollama create / pull), pull, label, params, ramGb, level (low|moderate|full), fits (container|host), why. Links: ollama (library page), gguf (direct Q4_K_M .gguf URL), ggufFile (filename), ggufPage (Hugging Face repo if the file is split). Restart JIRA-AI-Intern after editing. Settings and the Setup guide both read this file.",
+  "howto": "Add a model by appending an object below. Required: id (Settings dropdown tag, must match ollama create / pull), pull, label, params, ramGb, level (low|moderate|full), fits (container|host), why. Links: ollama (library page), gguf (direct Q4_K_M .gguf URL), ggufFile (filename), ggufPage (Hugging Face repo if the file is split). Restart AI-Intern after editing. Settings and the Setup guide both read this file.",
   "ggufDir": "jira-intern/models",
   "models": [
     {

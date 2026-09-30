@@ -233,6 +233,7 @@ function shellenv() {
   const runtime = boardSettings()
   out.push(`COMPLETED_MAX_FETCH=${shq(cfg.archive?.maxFetch ?? 999)}`)
   out.push(`COMPLETED_WORKERS=${shq(runtime.archiveParallel ?? cfg.archive?.workers ?? 8)}`)
+  out.push(`REFRESH_WORKERS=${shq(runtime.refreshParallel ?? cfg.refresh?.workers ?? 8)}`)
   out.push(`REPORTS_AI_LEVEL=${shq(runtime.aiLevel ?? cfg.ai?.level ?? 'moderate')}`)
   out.push(`AI_BACKEND=${shq(runtime.aiBackend ?? cfg.ai?.backend ?? 'local')}`)
   out.push(`AI_LOCAL_MODEL=${shq(runtime.aiLocalModel ?? cfg.ai?.localModel ?? '')}`)

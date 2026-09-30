@@ -9,7 +9,7 @@
 #   docker compose up -d --build          # easiest (see docker-compose.yml)
 # or:
 #   docker build -t jira-board .
-#   docker run -d --name jira-board -p 4321:4321 \
+#   docker run -d --name JIRA-Board -p 4321:4321 \
 #     -v "$HOME/.cursor/mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro" \
 #     jira-board
 # Then open http://localhost:4321
@@ -40,6 +40,7 @@ WORKDIR /app
 # App server + built board + the whole intern pipeline (scripts, config, baked data).
 COPY --from=build /app/dist ./dist
 COPY serve.mjs package.json ./
+COPY server ./server
 COPY jira-intern ./jira-intern
 COPY config ./config
 # The Setup & Deployment guide, served at /docs/index.html — this is what the board's

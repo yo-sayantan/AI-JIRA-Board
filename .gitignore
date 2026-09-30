@@ -30,6 +30,7 @@ jira-intern/data.js
 jira-intern/reports/
 # Written by the board's Settings panel (AI usage level) — per-machine, not project config.
 jira-intern/.settings.json
+jira-intern/.schedule.json
 jira-intern/.ai-queue/
 jira-intern/.ai-status.json
 jira-intern/.report.lock

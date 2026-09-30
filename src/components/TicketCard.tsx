@@ -78,6 +78,8 @@ export function TicketCard({
   const branches = branchesOf(ticket)
   const archiveIn = archivesInDays(ticket, now)
   const overflow = !!ticket.sprintOverflow
+  // Sub-tasks carry little of their own (no points, rarely a PR or branch), so they get a compact card.
+  const sub = !!ticket.parentKey
   const quiet = motionOff()
   const burst = useMemo(() => {
     if (ticket.column !== 'done' || quiet) return false
@@ -127,7 +129,7 @@ export function TicketCard({
       }}
       whileHover={quiet ? undefined : { y: -6, zIndex: 3, boxShadow: hoverShadow }}
       whileTap={quiet ? undefined : { y: -2, scale: 0.992 }}
-      className="ticket-card group relative flex min-h-[168px] w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[var(--surface-solid)] p-2.5 text-left"
+      className={`ticket-card group relative flex w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[var(--surface-solid)] text-left ${sub ? 'px-2.5 py-2' : 'min-h-[168px] p-2.5'}`}
       style={{
         boxShadow: baseShadow,
         borderColor: overflow ? '#dc2626' : undefined,
@@ -206,12 +208,20 @@ export function TicketCard({
         {rel && <span className="shrink-0 text-[10px] text-[var(--muted)]">{rel}</span>}
       </div>
 
-      <div className="relative mt-1 line-clamp-2 text-[13px] font-semibold leading-snug text-[var(--ink)]">
+      <div className={`relative mt-1 line-clamp-2 font-semibold leading-snug text-[var(--ink)] ${sub ? 'text-[12px]' : 'text-[13px]'}`}>
         {ticket.title}
       </div>
 
-      <div className="relative mt-1.5 flex flex-wrap items-center gap-1">
+      <div className={`relative flex flex-wrap items-center gap-1 ${sub ? 'mt-1' : 'mt-1.5'}`}>
         <PriorityGlyph priority={ticket.priority} />
+        {sub && (
+          <span
+            className="min-w-0 truncate font-mono text-[10px] text-[var(--muted)]"
+            title={`Sub-ticket of ${ticket.parentKey}${ticket.parentTitle ? ` — ${ticket.parentTitle}` : ''}`}
+          >
+            ↳ {ticket.parentKey}
+          </span>
+        )}
         {pr && (prKnownState ? <PrBadge state={pr.state} /> : <Pill color="#94a3b8" title="Pull request linked">⊙ PR</Pill>)}
         {pr && !isClosedPr(pr) && <Approvals approvals={pr.approvals} />}
         {prs.length > 1 && (

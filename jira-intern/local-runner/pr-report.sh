@@ -6,17 +6,13 @@
 # Two passes, so a report ALWAYS exists once a ticket has a pull request:
 #   1. DETERMINISTIC base  — pr_report.py reads the ticket from data.json (PRs, approvals, open
 #      comments, sub-tasks, timeline) and writes reports/<KEY>.json. No AI, no network. Always runs.
-#   2. AI ENRICHMENT       — the connector agent (cursor-agent by default: the same MCP servers and
-#      skills you use in Cursor — Jira, Bitbucket diff, Confluence, Dynatrace, all read-only) rewrites
-#      the report in place with evidence chains, per-file change assessment, risks and a release gate.
+#   2. AI ENRICHMENT       — queued for JIRA-AI-Intern (ai-intern/worker.py), which rewrites the report
+#      in place with evidence chains, per-file change assessment, risks and a release gate.
 #      Skipped with --no-ai / SKIP_REPORT_AI=1 / AI usage None in Settings.
 #
 # Output: jira-intern/reports/<KEY>.json  (+ reports/index.js for file:// via sync-reports.mjs).
 # Exit codes: 0 ok · 2 ticket has no PR / not found.
 set -o pipefail
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-[ -f "$HOME/.zprofile" ] && . "$HOME/.zprofile" 2>/dev/null
-[ -f "$HOME/.zshrc" ]    && . "$HOME/.zshrc"    2>/dev/null
 
 KEY="${1:-}"; shift || true
 IF_NEEDED=0; NO_AI=0
@@ -31,22 +27,11 @@ if ! [[ "$KEY" =~ ^[A-Za-z][A-Za-z0-9]+-[0-9]+$ ]]; then
 fi
 KEY="$(echo "$KEY" | tr '[:lower:]' '[:upper:]')"
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INTERN_DIR="$(cd "$HERE/.." && pwd)"
-GIT_ROOT="$(cd "$HERE/../../.." && pwd)"
+# shellcheck source=runner-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/runner-env.sh"
 REPORTS_DIR="$INTERN_DIR/reports"; mkdir -p "$REPORTS_DIR"
-LOG_DIR="$INTERN_DIR/logs"; mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/report-$KEY-$(date +%Y%m%d-%H%M%S).log"
 PY="$INTERN_DIR/pr_report.py"
-PROMPT_FILE="$INTERN_DIR/prompts/pr-readiness-prompt.md"
-
-# Portable config (see run-intern.sh for the pattern) — connector, model, timeout, MCP policy.
-AGENT_CONNECTOR=cursor; AGENT_BIN=cursor-agent; AGENT_BIN_FALLBACKS="$HOME/.local/bin/cursor-agent"
-AGENT_PROMPT_FLAG='-p'; AGENT_EXTRA_ARGS='--output-format text --force'; AGENT_MODEL_FLAG='--model'
-AGENT_SECRETS="$HOME/.cursor/mcp-secrets.env"; MODEL_REPORT=auto; TIMEOUT_REPORT=600
-command -v node >/dev/null 2>&1 && eval "$(node "$HERE/config.mjs" shellenv 2>/dev/null)"
-if [ -f "$AGENT_SECRETS" ]; then set -a; . "$AGENT_SECRETS"; set +a; fi
-REPORT_MODEL="${REPORT_MODEL:-$MODEL_REPORT}"
 
 [ -f "$INTERN_DIR/data.json" ] || { echo "$(date): no data.json — run the fetch first." | tee -a "$LOG"; exit 2; }
 

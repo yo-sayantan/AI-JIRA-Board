@@ -77,7 +77,12 @@
   },
   "refresh": {
     "onStart": true,
-    "intervalSec": 900
+    "workers": 8
+  },
+  "schedule": {
+    "activeRefresh": "twice-daily",
+    "fullRefresh": "twice-weekly",
+    "reportRefresh": "twice-weekly"
   },
   "reports": {
     "autoGenerate": true,
@@ -112,13 +117,18 @@
       "theme": "dark",
       "dayStart": 7,
       "dayEnd": 19,
+      "toastSeconds": 10,
+      "toastMax": 4,
       "features": {
         "prReports": true,
         "nextSprint": true,
         "completedArchive": true,
         "animations": true,
         "shortcuts": true,
-        "autoRefresh": true
+        "autoRefresh": true,
+        "aiBriefs": true,
+        "onHold": true,
+        "reloadActive": true
       }
     },
     "branding": {

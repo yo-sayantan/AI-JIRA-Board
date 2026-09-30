@@ -2,852 +2,221 @@
 //
 //   node serve.mjs            (or: npm run serve)
 //
-// Opening the board through this server (http://localhost:4321) unlocks the live
-// Refresh button — it runs jira-intern/local-runner/run-intern.sh on your machine
-// and reloads when fresh data lands. Without the server the board still works from
-// file://; Refresh there just reloads the latest dump.
+// Serving the board (http://localhost:4321) unlocks the live Refresh button, per-ticket refresh,
+// the archive rebuild and PR report generation. Without it the board still works from file://.
 import { createServer } from 'node:http'
-import { readFile, readdir, stat, unlink, writeFile, mkdir } from 'node:fs/promises'
-import { spawn } from 'node:child_process'
-import { extname, join, normalize } from 'node:path'
-import { cfg as PROJECT_CONFIG } from './jira-intern/local-runner/config.mjs'
+import { stat } from 'node:fs/promises'
+import { BOARD_PATH, DATE_RE, HOST, KEY_RE, PATHS, PORT, ROOT, YEAR_RE } from './server/config.mjs'
+import { createStaticHandler, json, readBody } from './server/http.mjs'
+import { runStatus, startArchive, startDaily, stopArchive, ticketRefresh } from './server/jobs.mjs'
+import { externalGenerating, readReport, reportQueue, reportsIndex, resolveReportKeys, stopReports } from './server/reports.mjs'
+import { aiStatus, enrichingKeys, localCatalog, proxyAi } from './server/ai.mjs'
+import { readBoardSettings, updateBoardSettings } from './server/settings.mjs'
+import { startScheduler } from './server/schedule.mjs'
 
-const ROOT = import.meta.dirname // the jira-board/ project — everything lives inside it
-const INTERN = join(ROOT, 'jira-intern')
-const SCRIPT = join(INTERN, 'local-runner/run-intern.sh')
-const ARCHIVE_SCRIPT = join(INTERN, 'local-runner/update-completed.sh')
-const REFRESH_SCRIPT = join(INTERN, 'local-runner/refresh-ticket.sh')
-const DATA = join(INTERN, 'data.json')
-const LOCK = join(INTERN, '.intern.lock')
-const COMPLETED_LOCK = join(INTERN, '.completed.lock')
-const PROGRESS = join(INTERN, '.progress.json')
-const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/i
-// A lock older than this (no live PID) is treated as stale and ignored — matches the
-// runner's own 1800s ceiling with headroom, so a SIGKILL/power-loss never wedges Refresh.
-const LOCK_MAX_AGE_MS = 45 * 60 * 1000
+const serveStatic = createStaticHandler(ROOT, [
+  /^\/dist\//,
+  /^\/docs\//,
+  /^\/setup\//,
+  /^\/ai-intern\/models\.json$/,
+  /^\/jira-intern\/data\.js(on)?$/,
+  /^\/jira-intern\/reports\/index\.js$/,
+])
 
-// Is a lock file currently held by a LIVE run? A lock is stale (→ false) when its PID is
-// dead (process.kill(pid,0) throws ESRCH) or its timestamp is older than LOCK_MAX_AGE_MS.
-// Reads "<pid> <ISO-timestamp>". Returns { held, startedAt }.
-// Stale lock files are deleted so the shell runners don't keep refusing work after a Docker
-// recreate left a dead-PID lock on the mounted volume.
-async function lockState(path) {
-  let raw
-  try {
-    raw = await readFile(path, 'utf8')
-  } catch {
-    return { held: false, startedAt: null }
-  }
-  const [pidStr, startedAt] = raw.trim().split(/\s+/)
-  const pid = Number(pidStr)
-  let live = false
-  if (Number.isInteger(pid) && pid > 0) {
-    // Never treat OUR OWN pid as an intern lock. Background entrypoint refresh used to
-    // write `$$` after `exec node`, leaving a lock that matched this server forever and
-    // wedged Refresh / Rebuild archive (always 409 / "already running").
-    if (pid === process.pid) {
-      unlink(path).catch(() => {})
-      return { held: false, startedAt: startedAt ?? null }
-    }
-    try {
-      process.kill(pid, 0) // does not kill — just probes existence
-      live = true
-    } catch (e) {
-      // ESRCH: dead PID → stale. EPERM: process exists but owned by another user → held.
-      if (e.code !== 'ESRCH') live = true
-    }
-  }
-  let held = live
-  if (!held && startedAt) {
-    const age = Date.now() - Date.parse(startedAt)
-    // No live PID: a recent lock without a probeable PID is still treated as held (paranoid);
-    // an aged-out or dead-PID lock is stale.
-    if (!(Number.isInteger(pid) && pid > 0) && Number.isFinite(age) && age <= LOCK_MAX_AGE_MS) {
-      held = true
-    }
-  } else if (!held && !(Number.isInteger(pid) && pid > 0) && !startedAt) {
-    held = true // malformed but present — refuse to race it
-  }
-  if (!held) {
-    unlink(path).catch(() => {})
-    return { held: false, startedAt: startedAt ?? null }
-  }
-  return { held: true, startedAt: startedAt ?? null }
+const param = (url, name) => (url.searchParams.get(name) || '').trim()
+
+async function reportsGenerating(ai) {
+  const external = await externalGenerating()
+  return [...new Set([...reportQueue.pending, ...external, ...(ai ? enrichingKeys(ai) : [])])]
 }
 
-/** Any data.json writer running (daily run OR weekly archive)? */
-async function anyInternRunning() {
-  const [a, b] = await Promise.all([lockState(LOCK), lockState(COMPLETED_LOCK)])
-  return { running: a.held || b.held, startedAt: a.startedAt ?? b.startedAt }
+/** Archive scope from the query string, or an error message. */
+function archiveScope(url) {
+  const scope = param(url, 'scope').toLowerCase() || 'all'
+  const year = param(url, 'year')
+  const since = param(url, 'since')
+  const key = param(url, 'key').toUpperCase()
+  if (!['all', 'year', 'since', 'key'].includes(scope)) return { error: 'bad scope' }
+  if (scope === 'key' && !KEY_RE.test(key)) return { error: 'bad key' }
+  if (scope === 'year' && !YEAR_RE.test(year)) return { error: 'bad year' }
+  if (scope === 'since' && !DATE_RE.test(since)) return { error: 'bad since' }
+  const env = { ARCHIVE_SCOPE: scope }
+  if (scope === 'year') env.ARCHIVE_YEAR = year
+  if (scope === 'since') env.ARCHIVE_SINCE = since
+  if (scope === 'key') env.ARCHIVE_KEY = key
+  return { env }
 }
 
-// Per-ticket refresh queue. Writes hit the SHARED data.json, so only ONE child runs at a
-// time; later clicks are FIFO-queued instead of 409'd. `refreshActive` is the key currently
-// spawning refresh-ticket.sh; `refreshQueue` holds keys waiting their turn (order preserved).
-let refreshActive = null
-const refreshQueue = []
-// Last exit code per key (survives briefly after the child exits so the UI can tell
-// "failed" apart from "already up to date"). Cleared when a new refresh for that key starts.
-const refreshExits = new Map()
-let refreshPumpTimer = null
-
-/** Active key + queued keys, in start order (active first). */
-function refreshPendingKeys() {
-  return refreshActive ? [refreshActive, ...refreshQueue] : [...refreshQueue]
-}
-
-function refreshPendingCount() {
-  return (refreshActive ? 1 : 0) + refreshQueue.length
-}
-
-/** Start the next queued ticket when idle and no daily/archive writer is mid-flight. */
-async function pumpRefreshQueue() {
-  if (refreshPumpTimer) {
-    clearTimeout(refreshPumpTimer)
-    refreshPumpTimer = null
-  }
-  if (refreshActive) return
-  if (refreshQueue.length === 0) return
-
-  // Daily / archive own data.json — wait, don't drop the queue.
-  if (running || archiveRunning) {
-    refreshPumpTimer = setTimeout(() => {
-      refreshPumpTimer = null
-      void pumpRefreshQueue()
-    }, 2000)
-    return
-  }
-  const { running: internBusy } = await anyInternRunning()
-  if (internBusy) {
-    refreshPumpTimer = setTimeout(() => {
-      refreshPumpTimer = null
-      void pumpRefreshQueue()
-    }, 2000)
-    return
-  }
-
-  const key = refreshQueue.shift()
-  if (!key) return
-  refreshActive = key
-  try {
-    const child = spawn('bash', [REFRESH_SCRIPT, key], { cwd: ROOT, stdio: 'ignore' })
-    child.on('exit', (code, signal) => {
-      refreshActive = null
-      // signal-kill → treat as failure (non-zero) so the board doesn't claim success.
-      refreshExits.set(key, signal ? 1 : (code ?? 1))
-      void pumpRefreshQueue()
-    })
-    child.on('error', () => {
-      refreshActive = null
-      refreshExits.set(key, 1)
-      void pumpRefreshQueue()
-    })
-  } catch {
-    refreshActive = null
-    refreshExits.set(key, 1)
-    void pumpRefreshQueue()
-  }
-}
-// PR Readiness Report queue — mirrors the refresh queue. Reports write ONLY jira-intern/reports/
-// (never data.json) but they read data.json and run the agent, so they wait for data writers and
-// run one at a time. Generations started elsewhere (cron backfill, terminal) register themselves
-// in reports/.status.json (pid + startedAt); /api/intern-status merges both so the board shows
-// "generating" regardless of who started it.
-const REPORT_SCRIPT = join(INTERN, 'local-runner/pr-report.sh')
-const REPORTS_DIR = join(INTERN, 'reports')
-const REPORTS_STATUS = join(REPORTS_DIR, '.status.json')
-const SETTINGS_FILE = join(INTERN, '.settings.json')
-const AI_QUEUE = join(INTERN, '.ai-queue')
-const AI_INTERN = process.env.AI_INTERN_URL || 'http://127.0.0.1:4322'
-const AI_LEVELS = ['none', 'low', 'moderate', 'full']
-const AI_BACKENDS = ['local', 'cloud']
-let reportActive = null
-let reportChild = null
-let skipEnrich = false
-const reportQueue = []
-const reportExits = new Map()
-let reportPumpTimer = null
-
-function reportPendingKeys() {
-  return reportActive ? [reportActive, ...reportQueue] : [...reportQueue]
-}
-
-async function readBoardSettings() {
-  const ai = PROJECT_CONFIG.ai || {}
-  const defaults = {
-    aiLevel: ai.level || 'moderate',
-    aiBackend: ai.backend || 'local',
-    aiLocalModel: ai.localModel || '',
-    aiCloudModel: ai.cloudModel || '',
-    aiCloudProvider: ai.cloudProvider || 'cursor',
-    aiCloudEffort: ai.cloudEffort || 'low',
-    aiUseHostOllama: !!ai.useHostOllama,
-    reportParallel: ai.parallel || 4,
-    archiveParallel: PROJECT_CONFIG.archive?.workers || 8,
-  }
-  try {
-    return { ...defaults, ...JSON.parse(await readFile(SETTINGS_FILE, 'utf8')) }
-  } catch {
-    return defaults
-  }
-}
-
-async function aiQueueKeys() {
-  try {
-    const names = await readdir(AI_QUEUE)
-    const keys = []
-    const freshAfter = Date.now() - 30 * 60 * 1000
-    for (const n of names) {
-      const running = n.endsWith('.json.running')
-      if (!n.endsWith('.json') && !running) continue
-      try {
-        const path = join(AI_QUEUE, n)
-        // A crashed claim leaves a .running file forever. Only a recent one means the intern is still on it.
-        if (running && (await stat(path)).mtimeMs < freshAfter) continue
-        const j = JSON.parse(await readFile(path, 'utf8'))
-        if (j.type === 'enrich-report' && j.key) keys.push(String(j.key).toUpperCase())
-      } catch {}
-    }
-    return keys
-  } catch {
-    return []
-  }
-}
-
-async function enqueueEnrich(key, settings) {
-  await mkdir(AI_QUEUE, { recursive: true })
-  const id = `${Date.now()}-${key}`
-  const backend = settings.aiBackend === 'cloud' ? 'cloud' : 'local'
-  const job = {
-    id,
-    type: 'enrich-report',
-    key,
-    level: AI_LEVELS.includes(settings.aiLevel) ? settings.aiLevel : 'moderate',
-    backend,
-    model:
-      backend === 'cloud'
-        ? settings.aiCloudModel || ''
-        : settings.aiLocalModel || 'qwen2.5-coder:7b',
-    cloudProvider: ['claude', 'cursor', 'gemini'].includes(settings.aiCloudProvider) ? settings.aiCloudProvider : 'cursor',
-    cloudEffort: settings.aiCloudEffort === 'medium' ? 'medium' : 'low',
-    useHostOllama: !!settings.aiUseHostOllama,
-    enqueuedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
-  }
-  await writeFile(join(AI_QUEUE, `${id}.json`), JSON.stringify(job, null, 2) + '\n')
-}
-
-function runPython(args) {
-  return new Promise((resolve) => {
-    try {
-      const child = spawn('python3', args, { cwd: ROOT, stdio: 'ignore' })
-      child.on('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)))
-      child.on('error', () => resolve(1))
-    } catch {
-      resolve(1)
-    }
-  })
-}
-
-async function proxyAi(req, res, destPath) {
-  try {
-    let body
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      const chunks = []
-      for await (const c of req) chunks.push(c)
-      body = Buffer.concat(chunks)
-    }
-    const r = await fetch(`${AI_INTERN}${destPath}`, {
-      method: req.method,
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    })
-    const text = await r.text()
-    res
-      .writeHead(r.status, {
-        'Content-Type': r.headers.get('content-type') || 'application/json',
-        'Cache-Control': 'no-store',
-      })
-      .end(text)
-  } catch {
-    json(res, 503, { ok: false, down: true, state: 'down', error: 'AI intern unreachable' })
-  }
-}
-
-async function localAiCatalog() {
-  try {
-    return JSON.parse(await readFile(join(ROOT, 'ai-intern/models.json'), 'utf8'))
-  } catch {
-    return { models: [], defaultLocal: 'qwen2.5-coder:7b' }
-  }
-}
-
-async function internAiStatus() {
-  const queued = await aiQueueKeys()
-  try {
-    const r = await fetch(`${AI_INTERN}/api/status`, { signal: AbortSignal.timeout(4000) })
-    const body = await r.json()
-    return { ...body, ok: body.ok !== false, queuedKeys: queued, queued: queued.length }
-  } catch {
+/** Ticket keys for a bulk report run, or an error message. */
+async function bulkReportKeys(url) {
+  const scope = param(url, 'scope') || 'all'
+  if (scope === 'keys') {
     return {
-      ok: false,
-      down: true,
-      state: 'down',
-      queuedKeys: queued,
-      queued: queued.length,
-      error: 'AI intern unreachable',
-      catalog: await localAiCatalog(),
+      keys: param(url, 'keys')
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter((s) => KEY_RE.test(s)),
     }
+  }
+  const year = param(url, 'year')
+  const since = param(url, 'since')
+  if (scope === 'year' && !YEAR_RE.test(year)) return { error: 'bad year' }
+  if (scope === 'since' && !DATE_RE.test(since)) return { error: 'bad since date' }
+  return {
+    keys: await resolveReportKeys({
+      year: scope === 'year' ? year : null,
+      since: scope === 'since' ? since : null,
+      force: url.searchParams.get('force') === '1',
+    }),
   }
 }
 
-async function pumpReportQueue() {
-  if (reportPumpTimer) {
-    clearTimeout(reportPumpTimer)
-    reportPumpTimer = null
-  }
-  if (reportActive || reportQueue.length === 0) return
-  const { running: internBusy } = await anyInternRunning()
-  if (running || archiveRunning || internBusy) {
-    reportPumpTimer = setTimeout(() => {
-      reportPumpTimer = null
-      void pumpReportQueue()
-    }, 2000)
-    return
-  }
-  const key = reportQueue.shift()
-  if (!key) return
-  reportActive = key
-  const done = (code) => {
-    reportChild = null
-    reportActive = null
-    reportExits.set(key, code)
-    void pumpReportQueue()
-  }
-  try {
-    const child = spawn('python3', [join(INTERN, 'pr_report.py'), 'base', key], { cwd: ROOT, stdio: 'ignore' })
-    reportChild = child
-    child.on('exit', async (code, signal) => {
-      const exit = signal ? 1 : (code ?? 1)
-      const skip = skipEnrich
-      skipEnrich = false
-      if (exit === 0 && !skip) {
-        const settings = await readBoardSettings()
-        if ((settings.aiLevel || 'moderate') !== 'none') {
-          try {
-            await enqueueEnrich(key, settings)
-          } catch (e) {
-            console.error('enqueue enrich failed', e)
-          }
-        }
-      }
-      done(exit)
-    })
-    child.on('error', () => done(1))
-  } catch {
-    done(1)
-  }
-}
+const routes = {
+  'POST /api/run-intern': async (req, res) => {
+    if (!(await startDaily())) return json(res, 409, { ok: false, running: true })
+    json(res, 202, { ok: true, started: true })
+  },
 
-async function stopReports() {
-  reportQueue.length = 0
-  skipEnrich = !!reportChild
-  if (reportChild) {
-    try { reportChild.kill('SIGTERM') } catch {}
-  } else {
-    reportActive = null
-  }
-  try {
-    await writeFile(join(INTERN, '.ai-cancel-report'), '1')
-  } catch {}
-  try {
-    const names = await readdir(AI_QUEUE)
-    for (const n of names) {
-      if (!n.endsWith('.json') || n.startsWith('.')) continue
-      const p = join(AI_QUEUE, n)
-      try {
-        const j = JSON.parse(await readFile(p, 'utf8'))
-        if (j.type === 'enrich-report') await unlink(p)
-      } catch {}
-    }
-  } catch {}
-  try {
-    await writeFile(REPORTS_STATUS, JSON.stringify({ generating: {} }) + '\n')
-  } catch {}
-}
+  'POST /api/run-archive': async (req, res, url) => {
+    const { env, error } = archiveScope(url)
+    if (error) return json(res, 400, { ok: false, error })
+    if (!(await startArchive(env))) return json(res, 409, { ok: false, running: true })
+    json(res, 202, { ok: true, started: true })
+  },
 
-/**
- * Which tickets should a bulk run cover? pr_report.py already owns that decision (it knows which
- * tickets have a PR and whether a stored report still matches the PR fingerprint), so we ask it
- * rather than re-implementing the rules here. Spawned with an ARGUMENT ARRAY and pre-validated
- * values — never a shell string — so a crafted `since`/`year` can't turn into a command.
- */
-function resolveReportKeys({ year, since, force }) {
-  const args = [join(INTERN, 'pr_report.py'), 'needs-report']
-  if (year) args.push('--year', String(year))
-  if (since) args.push('--since', since)
-  if (force) args.push('--force')
-  return new Promise((resolve) => {
-    let out = ''
-    try {
-      const child = spawn('python3', args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
-      child.stdout.on('data', (d) => {
-        out += d
-      })
-      child.on('error', () => resolve([]))
-      child.on('close', () =>
-        resolve(
-          out
-            .split('\n')
-            .map((s) => s.trim().toUpperCase())
-            .filter((s) => KEY_RE.test(s)),
-        ),
-      )
-    } catch {
-      resolve([])
-    }
-  })
-}
+  'POST /api/run-archive/stop': async (req, res) => {
+    await stopArchive()
+    json(res, 200, { ok: true, stopped: true })
+  },
 
-/** Keys some OTHER process is generating right now (reports/.status.json) — dead PIDs ignored. */
-async function externalGenerating() {
-  try {
-    const st = JSON.parse(await readFile(REPORTS_STATUS, 'utf8'))
-    const out = []
-    for (const [key, v] of Object.entries(st?.generating || {})) {
-      const pid = Number(v?.pid)
-      // pid 1 is the container's main process, not this report. A pid from the
-      // intern container also matches pid 1 here, so those rows never expire.
-      if (!Number.isInteger(pid) || pid <= 1) continue
-      const started = Date.parse(v?.startedAt || '')
-      if (Number.isFinite(started) && Date.now() - started > 25 * 60 * 1000) continue
-      try {
-        process.kill(pid, 0)
-        out.push(key)
-      } catch (e) {
-        if (e.code !== 'ESRCH') out.push(key)
-      }
-    }
-    return out
-  } catch {
-    return []
-  }
-}
-
-/** Header-only index of every report on disk (key → verdict/generatedAt/enriched/fingerprint). */
-async function reportsIndex() {
-  const out = {}
-  let names = []
-  try {
-    names = await readdir(REPORTS_DIR)
-  } catch {
-    return out
-  }
-  for (const n of names) {
-    if (!n.endsWith('.json') || n.startsWith('.')) continue
-    try {
-      const r = JSON.parse(await readFile(join(REPORTS_DIR, n), 'utf8'))
-      if (r && typeof r.key === 'string') {
-        out[r.key] = {
-          key: r.key,
-          title: r.title ?? null,
-          timeZone: r.timeZone ?? null,
-          generatedAt: r.generatedAt ?? null,
-          enrichedAt: r.enrichedAt ?? null,
-          enriched: !!r.enriched,
-          fingerprint: r.fingerprint ?? null,
-          verdict: r.verdict ?? null,
-        }
-      }
-    } catch {}
-  }
-  return out
-}
-
-const BOARD = '/dist/index.html'
-// Port: env PORT > merged project config → app.servePort.
-const PORT = Number(process.env.PORT) || Number(PROJECT_CONFIG.app?.servePort) || 4321
-// Interface to bind. Defaults to loopback so a laptop run stays private; the Docker image
-// sets BIND_HOST=0.0.0.0 so the board is reachable via the published port.
-const HOST = process.env.BIND_HOST || '127.0.0.1'
-
-let running = false
-let archiveRunning = false
-let archiveChild = null
-let lastExit = null
-let lastRunAt = null
-
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.txt': 'text/plain; charset=utf-8',
-  '.map': 'application/json',
-}
-
-const json = (res, code, obj) =>
-  res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(obj))
-
-const server = createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://localhost')
-  const path = decodeURIComponent(url.pathname)
-
-  if (path === '/') {
-    res.writeHead(302, { Location: BOARD }).end()
-    return
-  }
-
-  if (path === '/api/run-intern' && req.method === 'POST') {
-    const { running: locked } = await anyInternRunning()
-    if (running || archiveRunning || locked) return json(res, 409, { ok: false, running: true })
-    running = true
-    lastRunAt = new Date().toISOString()
-    try {
-      const child = spawn('bash', [SCRIPT], { cwd: ROOT, stdio: 'ignore' })
-      child.on('exit', (code) => {
-        running = false
-        lastExit = code
-      })
-      child.on('error', () => {
-        running = false
-        lastExit = -1
-      })
-    } catch {
-      running = false
-      lastExit = -1
-    }
-    return json(res, 202, { ok: true, started: true })
-  }
-
-  // The DEEP job: rebuilds the Completed archive (update-completed.sh). Same data.json as the
-  // daily run, so the two never overlap — either being busy 409s the other.
-  if (path === '/api/run-archive' && req.method === 'POST') {
-    const scope = (url.searchParams.get('scope') || 'all').trim().toLowerCase()
-    const year = (url.searchParams.get('year') || '').trim()
-    const since = (url.searchParams.get('since') || '').trim()
-    const key = (url.searchParams.get('key') || '').trim().toUpperCase()
-    if (!['all', 'year', 'since', 'key'].includes(scope)) return json(res, 400, { ok: false, error: 'bad scope' })
-    if (scope === 'key' && !KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
-    if (scope === 'year' && !/^\d{4}$/.test(year)) return json(res, 400, { ok: false, error: 'bad year' })
-    if (scope === 'since' && !/^\d{4}-\d{2}-\d{2}$/.test(since)) return json(res, 400, { ok: false, error: 'bad since' })
-    const { running: locked } = await anyInternRunning()
-    if (running || archiveRunning || locked || refreshPendingCount() > 0) return json(res, 409, { ok: false, running: true })
-    archiveRunning = true
-    lastRunAt = new Date().toISOString()
-    const env = { ...process.env, ARCHIVE_SCOPE: scope }
-    if (scope === 'year') env.ARCHIVE_YEAR = year
-    if (scope === 'since') env.ARCHIVE_SINCE = since
-    if (scope === 'key') env.ARCHIVE_KEY = key
-    try {
-      const child = spawn('bash', [ARCHIVE_SCRIPT], { cwd: ROOT, env, stdio: 'ignore', detached: true })
-      archiveChild = child
-      child.on('exit', (code) => {
-        archiveRunning = false
-        archiveChild = null
-        lastExit = code
-      })
-      child.on('error', () => {
-        archiveRunning = false
-        archiveChild = null
-        lastExit = -1
-      })
-    } catch {
-      archiveRunning = false
-      archiveChild = null
-      lastExit = -1
-    }
-    return json(res, 202, { ok: true, started: true })
-  }
-
-  if (path === '/api/run-archive/stop' && req.method === 'POST') {
-    if (archiveChild?.pid) {
-      try { process.kill(-archiveChild.pid, 'SIGTERM') } catch { try { archiveChild.kill('SIGTERM') } catch {} }
-    }
-    archiveRunning = false
-    archiveChild = null
-    unlink(PROGRESS).catch(() => {})
-    unlink(COMPLETED_LOCK).catch(() => {})
-    return json(res, 200, { ok: true, stopped: true })
-  }
-
-  if (path === '/api/refresh-ticket' && req.method === 'POST') {
-    const key = (url.searchParams.get('key') || '').trim()
+  // Already active or queued is an idempotent success, so the UI can keep watching.
+  'POST /api/refresh-ticket': (req, res, url) => {
+    const key = param(url, 'key')
     if (!KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
-    // Already active or queued → idempotent success so the UI can keep watching.
-    if (refreshActive === key || refreshQueue.includes(key)) {
-      const pending = refreshPendingKeys()
-      return json(res, 202, {
-        ok: true,
-        already: true,
-        key,
-        active: refreshActive,
-        position: pending.indexOf(key),
-        pending,
-      })
-    }
-    // Enqueue FIFO. The pump runs one at a time (shared data.json); if a daily/archive
-    // run is mid-write the key stays queued until that finishes — never dropped.
-    refreshExits.delete(key)
-    refreshQueue.push(key)
-    void pumpRefreshQueue()
-    const pending = refreshPendingKeys()
-    return json(res, 202, {
+    const added = ticketRefresh.add(key)
+    const pending = ticketRefresh.pending
+    json(res, 202, {
       ok: true,
-      queued: true,
-      started: refreshActive === key,
+      ...(added ? { queued: true, started: ticketRefresh.active === key } : { already: true }),
       key,
-      active: refreshActive,
+      active: ticketRefresh.active,
       position: pending.indexOf(key),
       pending,
     })
-  }
+  },
 
-  // ── PR Readiness Reports ────────────────────────────────────────────────────
-  if (path === '/api/reports' && req.method === 'GET') {
-    const [reports, external, queued] = await Promise.all([reportsIndex(), externalGenerating(), aiQueueKeys()])
-    return json(res, 200, {
-      reports,
-      generating: [...new Set([...reportPendingKeys(), ...external, ...queued])],
-      exits: Object.fromEntries(reportExits),
-    })
-  }
-  if (path.startsWith('/api/reports/') && req.method === 'GET') {
-    const key = path.slice('/api/reports/'.length).trim().toUpperCase()
+  'GET /api/reports': async (req, res) => {
+    const [reports, generating] = await Promise.all([reportsIndex(), reportsGenerating(null)])
+    json(res, 200, { reports, generating, exits: Object.fromEntries(reportQueue.exits) })
+  },
+
+  'POST /api/report': (req, res, url) => {
+    const key = param(url, 'key').toUpperCase()
     if (!KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
-    try {
-      const body = await readFile(join(REPORTS_DIR, `${key}.json`))
-      res.writeHead(200, { 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store' }).end(body)
-    } catch {
-      json(res, 404, { ok: false, error: 'no report yet' })
-    }
-    return
-  }
-  // Board settings the shell runners need. Written to jira-intern/.settings.json (git-ignored)
-  // rather than into config.json — that file may resolve to the user's personal ~/.ai/config.json,
-  // which the board has no business rewriting.
-  if (path === '/api/settings' && req.method === 'POST') {
-    let body = ''
-    for await (const chunk of req) {
-      body += chunk
-      if (body.length > 4096) return json(res, 413, { ok: false, error: 'too large' })
-    }
+    const added = reportQueue.add(key)
+    json(res, 202, { ok: true, ...(added ? { queued: true } : { already: true }), key, pending: reportQueue.pending })
+  },
+
+  // Queued through the same one-at-a-time pump as single reports, skipping anything already in
+  // flight here or in a terminal/cron backfill: two writers on one report file would race.
+  'POST /api/reports/bulk': async (req, res, url) => {
+    const { keys, error } = await bulkReportKeys(url)
+    if (error) return json(res, 400, { ok: false, error })
+    const busy = new Set(await externalGenerating())
+    const queued = keys.filter((key) => !busy.has(key) && reportQueue.add(key))
+    json(res, 202, { ok: true, scope: param(url, 'scope') || 'all', matched: keys.length, queued, pending: reportQueue.pending })
+  },
+
+  'POST /api/reports/stop': async (req, res) => {
+    await stopReports()
+    json(res, 200, { ok: true, stopped: true })
+  },
+
+  'GET /api/settings': async (req, res) => {
+    json(res, 200, { ok: true, settings: await readBoardSettings() })
+  },
+
+  'POST /api/settings': async (req, res) => {
+    const body = await readBody(req, 4096)
+    if (body === null) return json(res, 413, { ok: false, error: 'too large' })
     let patch
     try {
       patch = JSON.parse(body || '{}')
     } catch {
       return json(res, 400, { ok: false, error: 'bad json' })
     }
-    const LEVELS = ['none', 'low', 'moderate', 'full']
-    const BACKENDS = ['local', 'cloud']
-    if (patch.aiLevel !== undefined && !LEVELS.includes(patch.aiLevel)) {
-      return json(res, 400, { ok: false, error: 'bad aiLevel' })
-    }
-    if (patch.aiBackend !== undefined && !BACKENDS.includes(patch.aiBackend)) {
-      return json(res, 400, { ok: false, error: 'bad aiBackend' })
-    }
-    if (patch.aiLocalModel !== undefined && (typeof patch.aiLocalModel !== 'string' || patch.aiLocalModel.length > 80)) {
-      return json(res, 400, { ok: false, error: 'bad aiLocalModel' })
-    }
-    if (patch.aiCloudModel !== undefined && (typeof patch.aiCloudModel !== 'string' || patch.aiCloudModel.length > 128)) {
-      return json(res, 400, { ok: false, error: 'bad aiCloudModel' })
-    }
-    if (patch.aiCloudProvider !== undefined && !['claude', 'cursor', 'gemini'].includes(patch.aiCloudProvider)) {
-      return json(res, 400, { ok: false, error: 'bad aiCloudProvider' })
-    }
-    if (patch.aiCloudEffort !== undefined && !['low', 'medium'].includes(patch.aiCloudEffort)) {
-      return json(res, 400, { ok: false, error: 'bad aiCloudEffort' })
-    }
-    const intIn = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi
-    if (patch.reportParallel !== undefined && !intIn(patch.reportParallel, 1, 6)) {
-      return json(res, 400, { ok: false, error: 'bad reportParallel' })
-    }
-    if (patch.archiveParallel !== undefined && !intIn(patch.archiveParallel, 1, 16)) {
-      return json(res, 400, { ok: false, error: 'bad archiveParallel' })
-    }
-    let current = {}
     try {
-      current = JSON.parse(await readFile(SETTINGS_FILE, 'utf8'))
-    } catch {}
-    const next = { ...current }
-    if (patch.aiLevel !== undefined) next.aiLevel = patch.aiLevel
-    if (patch.aiBackend !== undefined) next.aiBackend = patch.aiBackend
-    if (patch.aiLocalModel !== undefined) next.aiLocalModel = patch.aiLocalModel
-    if (patch.aiCloudModel !== undefined) next.aiCloudModel = patch.aiCloudModel
-    if (patch.aiCloudProvider !== undefined) next.aiCloudProvider = patch.aiCloudProvider
-    if (patch.aiCloudEffort !== undefined) next.aiCloudEffort = patch.aiCloudEffort
-    if (patch.aiUseHostOllama !== undefined) next.aiUseHostOllama = !!patch.aiUseHostOllama
-    if (patch.reportParallel !== undefined) next.reportParallel = patch.reportParallel
-    if (patch.archiveParallel !== undefined) next.archiveParallel = patch.archiveParallel
-    try {
-      await writeFile(SETTINGS_FILE, JSON.stringify(next, null, 2) + '\n')
+      const { settings, error } = await updateBoardSettings(patch)
+      if (error) return json(res, 400, { ok: false, error })
+      json(res, 200, { ok: true, settings })
     } catch (e) {
-      return json(res, 500, { ok: false, error: String(e?.message ?? e) })
+      json(res, 500, { ok: false, error: String(e?.message ?? e) })
     }
-    return json(res, 200, { ok: true, settings: next })
-  }
-  if (path === '/api/settings' && req.method === 'GET') {
-    return json(res, 200, { ok: true, settings: await readBoardSettings() })
-  }
+  },
 
-  if (path === '/api/reports/stop' && req.method === 'POST') {
-    await stopReports()
-    return json(res, 200, { ok: true, stopped: true })
-  }
+  'GET /api/ai-status': async (req, res) => {
+    json(res, 200, await aiStatus())
+  },
 
-  // Bulk generation — every ticket with a PR, a year, a date window, or an explicit selection.
-  // Queued one at a time through the same pump as single reports, so a 40-ticket run never
-  // stampedes the agent or collides with a data fetch.
-  if (path === '/api/reports/bulk' && req.method === 'POST') {
-    const scope = (url.searchParams.get('scope') || 'all').trim()
-    const force = url.searchParams.get('force') === '1'
-    let keys = []
-    if (scope === 'keys') {
-      keys = (url.searchParams.get('keys') || '')
-        .split(',')
-        .map((s) => s.trim().toUpperCase())
-        .filter((s) => KEY_RE.test(s))
-    } else {
-      const yearRaw = (url.searchParams.get('year') || '').trim()
-      const sinceRaw = (url.searchParams.get('since') || '').trim()
-      const year = scope === 'year' && /^\d{4}$/.test(yearRaw) ? yearRaw : null
-      const since = scope === 'since' && /^\d{4}-\d{2}-\d{2}$/.test(sinceRaw) ? sinceRaw : null
-      if (scope === 'year' && !year) return json(res, 400, { ok: false, error: 'bad year' })
-      if (scope === 'since' && !since) return json(res, 400, { ok: false, error: 'bad since date' })
-      keys = await resolveReportKeys({ year, since, force })
-    }
-    // Skip anything already in flight — ours OR a terminal/cron backfill's. Two agents writing
-    // the same reports/<KEY>.json would race, and the loser's half-written file is what sticks.
-    const pending = new Set([...reportPendingKeys(), ...(await externalGenerating())])
-    const queued = []
-    for (const key of keys) {
-      if (pending.has(key)) continue
-      pending.add(key)
-      reportExits.delete(key)
-      reportQueue.push(key)
-      queued.push(key)
-    }
-    void pumpReportQueue()
-    return json(res, 202, { ok: true, scope, matched: keys.length, queued, pending: reportPendingKeys() })
-  }
-  // Generate (or regenerate) one ticket's report in the background. Idempotent while queued.
-  if (path === '/api/report' && req.method === 'POST') {
-    const key = (url.searchParams.get('key') || '').trim().toUpperCase()
-    if (!KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
-    if (reportActive === key || reportQueue.includes(key)) {
-      return json(res, 202, { ok: true, already: true, key, pending: reportPendingKeys() })
-    }
-    reportExits.delete(key)
-    reportQueue.push(key)
-    void pumpReportQueue()
-    return json(res, 202, { ok: true, queued: true, key, pending: reportPendingKeys() })
-  }
+  'GET /api/ai-models': async (req, res) => {
+    const ai = await aiStatus()
+    if (!ai.down) return proxyAi(req, res, '/api/models')
+    json(res, 200, { ok: false, down: true, catalog: ai.catalog || (await localCatalog()), installed: ai.installedModels || [], ollamaOk: false })
+  },
 
-  if (path === '/api/ai-status' && req.method === 'GET') {
-    return json(res, 200, await internAiStatus())
-  }
-  if (path === '/api/cloud-models' && req.method === 'GET') {
-    await proxyAi(req, res, '/api/cloud-models')
-    return
-  }
-  if (path === '/api/ai-models' && req.method === 'GET') {
-    const intern = await internAiStatus()
-    if (intern.down) {
-      return json(res, 200, {
-        ok: false,
-        down: true,
-        catalog: intern.catalog || (await localAiCatalog()),
-        installed: intern.installedModels || [],
-        ollamaOk: false,
-      })
-    }
-    await proxyAi(req, res, '/api/models')
-    return
-  }
-  if (path === '/api/ai-models/pull' && req.method === 'POST') {
-    await proxyAi(req, res, '/api/models/pull')
-    return
-  }
-  if (path === '/api/ai-jobs' && req.method === 'POST') {
-    await proxyAi(req, res, '/api/jobs')
-    return
-  }
+  'GET /api/cloud-models': (req, res) => proxyAi(req, res, '/api/cloud-models'),
+  'POST /api/ai-models/pull': (req, res) => proxyAi(req, res, '/api/models/pull'),
+  'POST /api/ai-jobs': (req, res) => proxyAi(req, res, '/api/jobs'),
 
-  if (path === '/api/intern-status') {
-    let dataModified = null
-    try {
-      dataModified = (await stat(DATA)).mtimeMs
-    } catch {}
-    // The lock files are the source of truth for "is a run in progress" — they survive this
-    // server restarting and are also written by terminal-launched runs. In-memory `running` is a
-    // fast backup. Both the daily (.intern.lock) and weekly (.completed.lock) jobs count, and a
-    // stale lock (dead PID / too old) is ignored so a killed run never wedges the board.
-    const { running: locked, startedAt: lockStartedAt } = await anyInternRunning()
-    const startedAt = lockStartedAt ?? lastRunAt
-    const isRunning = running || archiveRunning || locked
-    // Live ticket-count progress written by daily_fetch / completed_archive (button fill).
-    // Drop stale leftovers from a killed run so the button doesn't look mid-progress when idle.
-    let progress = null
-    if (isRunning) {
-      try {
-        progress = JSON.parse(await readFile(PROGRESS, 'utf8'))
-      } catch {}
-    } else {
-      unlink(PROGRESS).catch(() => {})
-    }
-    const ai = await internAiStatus()
-    const aiJobs = Array.isArray(ai?.active) && ai.active.length ? ai.active : ai?.current ? [ai.current] : []
-    const enriching = aiJobs.filter((j) => j?.type === 'enrich-report' && j.key).map((j) => String(j.key).toUpperCase())
-    return json(res, 200, {
-      running: isRunning,
-      job: archiveRunning ? 'archive' : running ? 'daily' : locked ? 'external' : null,
-      lastExit,
-      lastRunAt,
-      startedAt,
+  // One call carries everything the board polls for: run state, queues, reports, AI intern.
+  'GET /api/intern-status': async (req, res) => {
+    const [run, dataModified, ai] = await Promise.all([
+      runStatus(),
+      stat(PATHS.data).then((s) => s.mtimeMs, () => null),
+      aiStatus(),
+    ])
+    json(res, 200, {
+      ...run,
       dataModified,
-      // Active + queued (FIFO order). UI spinners use this; do not treat dataModified alone
-      // as "this key finished" when several are pending.
-      refreshingKeys: refreshPendingKeys(),
-      refreshActive,
-      refreshQueue: [...refreshQueue],
-      // Exit codes for recently finished per-ticket refreshes (key → number).
-      refreshExits: Object.fromEntries(refreshExits),
-      progress,
-      // PR Readiness Reports in flight: this server's queue ∪ cron/terminal generations
-      // ∪ the AI enrichment currently running (it leaves the file queue once claimed).
-      reportsGenerating: [...new Set([...reportPendingKeys(), ...(await externalGenerating()), ...(await aiQueueKeys()), ...enriching])],
-      reportExits: Object.fromEntries(reportExits),
+      refreshingKeys: ticketRefresh.pending,
+      refreshActive: ticketRefresh.active,
+      refreshQueue: ticketRefresh.waiting,
+      refreshExits: Object.fromEntries(ticketRefresh.exits),
+      reportsGenerating: await reportsGenerating(ai),
+      reportExits: Object.fromEntries(reportQueue.exits),
       ai,
     })
-  }
+  },
+}
 
-  // static files, constrained to ROOT
-  const safe = normalize(path).replace(/^(\.\.([/\\]|$))+/, '')
-  const file = join(ROOT, safe)
-  if (!file.startsWith(ROOT)) {
-    res.writeHead(403).end('Forbidden')
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://localhost')
+  const path = decodeURIComponent(url.pathname)
+  if (path === '/') {
+    res.writeHead(302, { Location: BOARD_PATH }).end()
     return
   }
-  try {
-    const body = await readFile(file)
-    res.writeHead(200, { 'Content-Type': MIME[extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-store' }).end(body)
-  } catch {
-    res.writeHead(404).end('Not found')
+  const route = routes[`${req.method} ${path}`]
+  if (route) return route(req, res, url)
+
+  if (req.method === 'GET' && path.startsWith('/api/reports/')) {
+    const key = path.slice('/api/reports/'.length).trim().toUpperCase()
+    if (!KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(await readReport(key))
+    } catch {
+      json(res, 404, { ok: false, error: 'no report yet' })
+    }
+    return
   }
+  if (path.startsWith('/api/')) return json(res, 404, { ok: false, error: 'not found' })
+  if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { ok: false, error: 'method not allowed' })
+  return serveStatic(req, res, path)
 })
 
 server.listen(PORT, HOST, () => {
   const shown = HOST === '0.0.0.0' ? 'localhost' : HOST
-  console.log(`\n  🎫  My Jira Board  →  http://${shown}:${PORT}${BOARD}`)
+  console.log(`\n  🎫  My Jira Board  →  http://${shown}:${PORT}${BOARD_PATH}`)
   console.log(`      Live Refresh enabled (runs the intern). Press Ctrl+C to stop.\n`)
+  startScheduler().catch((e) => console.error('[schedule] failed to start', e))
 })

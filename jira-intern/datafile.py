@@ -52,6 +52,13 @@ def _app_config():
         return None
 
 
+def prepend_status(note):
+    """Newest-first audit log of intern runs (_STATUS.md)."""
+    path = os.path.join(INTERN, "_STATUS.md")
+    old = open(path, encoding="utf-8").read() if os.path.isfile(path) else ""
+    atomic_write(path, f"{note}\n\n{old}")
+
+
 def write_outputs(data):
     """Persist the full dump to data.json and data.js together."""
     atomic_dump(os.path.join(INTERN, "data.json"), data)

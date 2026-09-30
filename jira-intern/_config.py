@@ -10,6 +10,7 @@ Resolution order:
 
 See setup/README.md for how to create ~/.ai/config.json.
 """
+import copy
 import json
 import os
 from datetime import datetime, timezone
@@ -115,8 +116,33 @@ def _schema_errors(value, schema, path="config"):
     return errors
 
 
+_CACHE = {}
+
+
+def _mtime(path):
+    try:
+        return os.path.getmtime(path) if path else None
+    except OSError:
+        return None
+
+
 def load_config(intern_dir):
-    """Deep-merge the optional personal override over the tracked project defaults."""
+    """Deep-merge the optional personal override over the tracked project defaults.
+
+    Cached per process and re-read whenever one of the three files changes, so long-lived
+    workers still pick up edits without re-validating the schema on every call.
+    """
+    paths = (project_config_path(intern_dir), config_path(intern_dir), project_schema_path(intern_dir))
+    stamp = (paths, tuple(_mtime(p) for p in paths))
+    hit = _CACHE.get(paths[0])
+    if hit and hit[0] == stamp:
+        return copy.deepcopy(hit[1])
+    merged = _load_config(intern_dir)
+    _CACHE[paths[0]] = (stamp, merged)
+    return copy.deepcopy(merged)
+
+
+def _load_config(intern_dir):
     project = _read_json(project_config_path(intern_dir), "project config", required=True)
     override_path = config_path(intern_dir)
     if os.environ.get("AI_CONFIG_FILE") and not os.path.isfile(override_path or ""):
