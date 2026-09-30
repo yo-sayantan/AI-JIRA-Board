@@ -155,7 +155,7 @@ Defaults for Settings → Jobs. A choice saved in the app wins over this file.
 | `requiredApprovals` | How many PR approvals count as "approved" (badge + pips). |
 | `timeZone` | IANA timezone used for report generation, enrichment, UI, and PDF timestamps. |
 | `doneBoardDays` | Days a newly Done ticket remains on the active board. |
-| `polling` | Busy/idle report and AI polling intervals. |
+| `polling` | Status poll intervals: `aiIdleMs` idle, `reportsBusyMs` while work is in flight, `aiBusyMs` during a model download. |
 | `progress` | Header progress phase percentages. |
 | `settingsDefaults` | Appearance, notification time and count, and feature defaults before saved browser choices. |
 | `branding.tagline` | Left footer text. |

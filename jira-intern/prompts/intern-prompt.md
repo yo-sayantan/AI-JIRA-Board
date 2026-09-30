@@ -100,7 +100,7 @@ A) ACTIVE + RECENT — `tickets[]` (rich objects). All issues where assignee = c
      [label|url] (those render as corrupted text). type, priority, status, story points,
      labels, components, fix versions, sprint, sprintOverflow (true when the issue has been in
      more than one distinct sprint — Jira's carry-over signal), sprintCount, reporter, assignee, created date, last update.
-   - aiSummary — do NOT generate this here (a separate pass, summarize-active.sh, owns it: deep
+   - aiSummary — do NOT generate this here (the AI intern's summarize-active job owns it: deep
      source-enriched briefs for todo/prog tickets, quick summaries for the rest). If a ticket already
      has `aiSummary` and/or `aiSummaryAt`, PRESERVE BOTH unchanged; otherwise just omit the fields.
    - acceptanceCriteria as a string array (split the AC section into items).

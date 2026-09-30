@@ -9,9 +9,11 @@ export interface AppRuntimeConfig {
   timeZone?: string
   doneBoardDays?: number
   polling?: {
-    reportsIdleMs?: number
+    /** Status poll while reports, runs or the AI intern have work in flight. */
     reportsBusyMs?: number
+    /** Status poll while idle (Background auto-refresh on, or Settings open). */
     aiIdleMs?: number
+    /** Status poll while a model downloads, for the progress bar. */
     aiBusyMs?: number
   }
   progress?: {
@@ -62,8 +64,10 @@ export const APP_CONFIG: Required<Pick<AppRuntimeConfig, 'requiredApprovals'>> &
     typeof injected.requiredApprovals === 'number' && injected.requiredApprovals > 0 ? injected.requiredApprovals : 2,
 }
 
+/** Days a Done ticket stays on the board as a "recent win" before it retires to the archive. */
+export const DONE_BOARD_DAYS = injected.doneBoardDays ?? 5
+
 export const POLLING = {
-  reportsIdleMs: injected.polling?.reportsIdleMs ?? 15_000,
   reportsBusyMs: injected.polling?.reportsBusyMs ?? 4_000,
   aiIdleMs: injected.polling?.aiIdleMs ?? 12_000,
   aiBusyMs: injected.polling?.aiBusyMs ?? 1_000,

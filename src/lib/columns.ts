@@ -110,7 +110,3 @@ export function mapStatusToColumn(status: string | null | undefined): ColumnKey 
   }
   return 'todo'
 }
-
-export function accentFor(key: ColumnKey): string {
-  return COLUMN_META[key]?.accent ?? '#64748b'
-}

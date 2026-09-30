@@ -158,6 +158,53 @@ export function pickCadence<T extends string>(allowed: readonly T[], value: unkn
   return allowed.includes(value as T) ? (value as T) : fallback
 }
 
+type Parse<T> = (value: unknown, fallback: T) => T
+const oneOf =
+  <T extends string>(allowed: readonly T[]): Parse<T> =>
+  (v, f) =>
+    pickCadence(allowed, v, f)
+const text: Parse<string> = (v, f) => (typeof v === 'string' ? v : f)
+const bool: Parse<boolean> = (v, f) => (typeof v === 'boolean' ? v : f)
+const bounded =
+  (key: keyof typeof LIMITS): Parse<number> =>
+  (v, f) =>
+    clampSetting(key, v, f)
+
+/** Settings the server-side jobs honour, mirrored to jira-intern/.settings.json in served mode. */
+const SERVER_FIELDS = {
+  aiLevel: oneOf<AiLevel>(['none', 'low', 'moderate', 'full']),
+  aiBackend: oneOf<AiBackend>(['local', 'cloud']),
+  aiLocalModel: text,
+  aiCloudModel: text,
+  aiCloudProvider: oneOf<AiCloudProvider>(['claude', 'cursor', 'gemini']),
+  aiCloudEffort: oneOf<AiCloudEffort>(['low', 'medium']),
+  aiUseHostOllama: bool,
+  reportParallel: bounded('reportParallel'),
+  archiveParallel: bounded('archiveParallel'),
+  refreshParallel: bounded('refreshParallel'),
+  activeRefresh: oneOf(ACTIVE_CADENCE),
+  fullRefresh: oneOf(BOARD_CADENCE),
+  reportRefresh: oneOf(BOARD_CADENCE),
+} satisfies { [K in keyof Settings]?: Parse<Settings[K]> }
+
+type ServerKey = keyof typeof SERVER_FIELDS
+export type ServerSettings = Pick<Settings, ServerKey>
+const SERVER_KEYS = Object.keys(SERVER_FIELDS) as ServerKey[]
+
+export function serverSettingsOf(s: Settings): ServerSettings {
+  return Object.fromEntries(SERVER_KEYS.map((k) => [k, s[k]])) as ServerSettings
+}
+
+/** Overlay the server's saved values, keeping the current value for anything missing or invalid. */
+export function mergeServerSettings(current: Settings, saved: Record<string, unknown>): Settings {
+  const next = { ...current }
+  for (const k of SERVER_KEYS) {
+    const parse = SERVER_FIELDS[k] as Parse<Settings[typeof k]>
+    ;(next as Record<ServerKey, unknown>)[k] = parse(saved[k], current[k])
+  }
+  return next
+}
+
 export type FeatureKey = (typeof FEATURES)[number]['key']
 
 export const AI_LEVELS: {
@@ -292,8 +339,8 @@ export function resolveDark(s: Settings, at: Date = new Date()): boolean {
 }
 
 /** Apply the resolved theme (and the animation switch) to <html>. */
-export function applySettings(s: Settings): void {
+export function applySettings(s: Settings, at: Date = new Date()): void {
   const el = document.documentElement
-  el.classList.toggle('dark', resolveDark(s))
+  el.classList.toggle('dark', resolveDark(s, at))
   el.classList.toggle('jb-no-anim', !s.features.animations)
 }

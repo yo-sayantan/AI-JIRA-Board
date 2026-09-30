@@ -2,14 +2,15 @@ import type { CompletedTicket, JiraData, Ticket } from './types'
 import { mapStatusToColumn } from './lib/columns'
 import { projectOf } from './lib/format'
 import { fixture } from './fixtures'
-import { APP_CONFIG } from './lib/appConfig'
+import { DONE_BOARD_DAYS } from './lib/appConfig'
 
 export type DataSource = 'live' | 'fixture' | 'empty'
 
-/** How long a freshly-Done ticket stays visible on the board as a "recent win"
- *  before it retires to the Completed archive. Enforced HERE (deterministically,
- *  on every load) so the rule holds even if the intern's dump lags behind. */
-export const DONE_BOARD_DAYS = APP_CONFIG.doneBoardDays ?? 5
+/** The dump data.js injected at page load, if any. */
+export function injectedDump(): JiraData | null {
+  const raw = (window as unknown as { __JIRA_DATA__?: JiraData }).__JIRA_DATA__
+  return raw && Array.isArray(raw.tickets) ? raw : null
+}
 
 function normalizeTicket(t: Ticket): Ticket {
   return {
@@ -51,7 +52,7 @@ export function persistArchivedKeys(s: Set<string>): void {
 /** Read the user-archived key set. Also migrates the legacy "jb-hidden" hide feature
  *  (same intent — off the board, lives in Completed) and prunes keys that have left
  *  the dump entirely (the intern dropped them; the weekly archive owns them now). */
-export function loadArchivedKeys(): Set<string> {
+export function loadArchivedKeys(raw: JiraData | null): Set<string> {
   try {
     const cur = new Set<string>(JSON.parse(localStorage.getItem(ARCHIVE_LS_KEY) || '[]'))
     const legacy: unknown = JSON.parse(localStorage.getItem('jb-hidden') || '[]')
@@ -59,9 +60,7 @@ export function loadArchivedKeys(): Set<string> {
       for (const k of legacy) if (typeof k === 'string') cur.add(k)
       localStorage.removeItem('jb-hidden')
     }
-    const w = window as unknown as { __JIRA_DATA__?: JiraData }
-    const raw = w.__JIRA_DATA__
-    if (raw && Array.isArray(raw.tickets)) {
+    if (raw) {
       const live = new Set(raw.tickets.map((t) => t.key))
       for (const k of [...cur]) if (!live.has(k)) cur.delete(k)
     }
@@ -118,24 +117,23 @@ function prepare(raw: JiraData, now: number, archivedKeys: ReadonlySet<string>):
 
 /**
  * Resolution order:
- *  1. window.__JIRA_DATA__  — set by ../jira-intern/data.js (the real, refreshed dump)
- *  2. dev fixture           — only while running `npm run dev`, so the UI has something to render
- *  3. empty                 — built file with no data yet (shows a friendly "run the intern" state)
+ *  1. the live dump   — data.js at load, or data.json after an in-place reload
+ *  2. dev fixture     — only while running `npm run dev`, so the UI has something to render
+ *  3. empty           — built file with no data yet (shows a friendly "run the intern" state)
  *
  * `userArchived` = keys the USER moved to Completed that would otherwise still be on
  * the board (drives the "· Undo" strip; time-expired retirements are not undoable).
  */
-export function loadData(archivedKeys: ReadonlySet<string> = new Set()): {
+export function loadData(
+  raw: JiraData | null,
+  archivedKeys: ReadonlySet<string>,
+): {
   data: JiraData
   source: DataSource
   userArchived: string[]
 } {
   const now = Date.now()
-  const w = window as unknown as { __JIRA_DATA__?: JiraData }
-  const raw = w.__JIRA_DATA__
-  if (raw && Array.isArray(raw.tickets)) {
-    return { ...prepare(raw, now, archivedKeys), source: 'live' }
-  }
+  if (raw) return { ...prepare(raw, now, archivedKeys), source: 'live' }
   if (import.meta.env.DEV) return { ...prepare(fixture, now, archivedKeys), source: 'fixture' }
   return { data: { tickets: [], completed: [], notes: [] }, source: 'empty', userArchived: [] }
 }
