@@ -20,7 +20,7 @@ import { StaleBanner } from './components/StaleBanner'
 import { Footer } from './components/Footer'
 import { EyeOffIcon } from './components/Icons'
 import { freshness, isNextSprint, prListOf } from './lib/format'
-import { applySettings, loadSettings, resolveDark, saveSettings, type Settings } from './lib/settings'
+import { ACTIVE_CADENCE, BOARD_CADENCE, applySettings, clampSetting, loadSettings, pickCadence, resolveDark, saveSettings, type Settings } from './lib/settings'
 import { SettingsPanel } from './components/Settings'
 import { matches, parseQuery } from './lib/search'
 import { POLLING } from './lib/appConfig'
@@ -31,6 +31,17 @@ function indexTickets(list: Ticket[] | undefined, map: Map<string, Ticket>) {
     if (!map.has(t.key)) map.set(t.key, t)
     if (t.subtasks?.length) indexTickets(t.subtasks, map)
   }
+}
+
+function enrichReportRunningCount(ai: AiInternStatus | null): number {
+  let jobs = ai?.active
+  if (!jobs?.length && ai?.current) jobs = [ai.current]
+  return (jobs ?? []).filter((job) => job.type === 'enrich-report').length
+}
+
+function reportModelLabel(ai: AiInternStatus | null): string | null {
+  if (!ai?.model) return null
+  return ai.cloudEffort ? `${ai.model} · ${ai.cloudEffort}` : ai.model
 }
 
 export default function App() {
@@ -99,22 +110,23 @@ export default function App() {
   const runWatchGeneration = useRef(0)
   const archiveToastRef = useRef<number | null>(null)
 
+  const toastPrefs = useRef({ seconds: settings.toastSeconds, max: settings.toastMax })
+  toastPrefs.current = { seconds: settings.toastSeconds, max: settings.toastMax }
   const dismiss = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), [])
   const toast = useCallback(
-    (msg: string, kind: ToastItem['kind'] = 'info', ttl = 2800) => {
+    (msg: string, kind: ToastItem['kind'] = 'info', _ttl?: number) => {
       const id = ++toastId.current
-      const sticky = ttl === 0
-      setToasts((t) => {
-        const next = [...t, { id, msg, kind, sticky }]
-        const pinned = next.filter((x) => x.sticky)
-        const rest = next.filter((x) => !x.sticky).slice(-3)
-        return [...pinned, ...rest]
-      })
-      if (ttl) setTimeout(() => dismiss(id), ttl)
+      const { seconds, max } = toastPrefs.current
+      setToasts((t) => [...t, { id, msg, kind }].slice(-max))
+      setTimeout(() => dismiss(id), seconds * 1000)
       return id
     },
     [dismiss],
   )
+  // Lowering the limit trims what is already on screen, oldest first.
+  useEffect(() => {
+    setToasts((t) => (t.length > settings.toastMax ? t.slice(-settings.toastMax) : t))
+  }, [settings.toastMax])
 
   // ── PR Readiness Reports ────────────────────────────────────────────────────
   const reportsGeneratingRef = useRef(reportsGenerating)
@@ -158,7 +170,8 @@ export default function App() {
   useEffect(() => {
     if (!settings.features.prReports) return
     void refreshReportsIndex()
-    if (!served || !settings.features.autoRefresh) return
+    // Off means no idle polling. A batch the user just started still needs progress.
+    if (!served || (!settings.features.autoRefresh && reportsGenerating.size === 0)) return
     let timer: ReturnType<typeof setTimeout>
     let cancelled = false
     const tick = async () => {
@@ -171,16 +184,18 @@ export default function App() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [served, refreshReportsIndex, settings.features.prReports, settings.features.autoRefresh])
+  }, [served, refreshReportsIndex, settings.features.prReports, settings.features.autoRefresh, reportsGenerating.size])
 
   useEffect(() => {
     if (!served) return
     let timer: ReturnType<typeof setTimeout>
     let cancelled = false
+    const live = settings.features.autoRefresh || refreshing || archiveRefreshing || reportsGenerating.size > 0 || settingsOpen
     const tick = async () => {
       const s = await getInternStatus()
       if (cancelled) return
       if (s?.ai) setAiStatus(s.ai)
+      if (!live) return
       timer = setTimeout(tick, s?.ai?.state === 'working' || s?.ai?.state === 'pulling' ? POLLING.aiBusyMs : POLLING.aiIdleMs)
     }
     void tick()
@@ -188,7 +203,7 @@ export default function App() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [served])
+  }, [served, settings.features.autoRefresh, refreshing, archiveRefreshing, reportsGenerating.size, settingsOpen])
 
   const handleOpenReport = useCallback(
     async (key: string) => {
@@ -315,6 +330,12 @@ export default function App() {
           aiCloudProvider: (saved.aiCloudProvider as Settings['aiCloudProvider']) ?? current.aiCloudProvider,
           aiCloudEffort: (saved.aiCloudEffort as Settings['aiCloudEffort']) ?? current.aiCloudEffort,
           aiUseHostOllama: (saved.aiUseHostOllama as boolean) ?? current.aiUseHostOllama,
+          reportParallel: clampSetting('reportParallel', saved.reportParallel, current.reportParallel),
+          archiveParallel: clampSetting('archiveParallel', saved.archiveParallel, current.archiveParallel),
+          refreshParallel: clampSetting('refreshParallel', saved.refreshParallel, current.refreshParallel),
+          activeRefresh: pickCadence(ACTIVE_CADENCE, saved.activeRefresh, current.activeRefresh),
+          fullRefresh: pickCadence(BOARD_CADENCE, saved.fullRefresh, current.fullRefresh),
+          reportRefresh: pickCadence(BOARD_CADENCE, saved.reportRefresh, current.reportRefresh),
         }))
       }
       setServerSettingsReady(true)
@@ -332,8 +353,14 @@ export default function App() {
       aiCloudProvider: settings.aiCloudProvider,
       aiCloudEffort: settings.aiCloudEffort,
       aiUseHostOllama: settings.aiUseHostOllama,
+      reportParallel: settings.reportParallel,
+      archiveParallel: settings.archiveParallel,
+      refreshParallel: settings.refreshParallel,
+      activeRefresh: settings.activeRefresh,
+      fullRefresh: settings.fullRefresh,
+      reportRefresh: settings.reportRefresh,
     })
-  }, [served, serverSettingsReady, settings.aiLevel, settings.aiBackend, settings.aiLocalModel, settings.aiCloudModel, settings.aiCloudProvider, settings.aiCloudEffort, settings.aiUseHostOllama])
+  }, [served, serverSettingsReady, settings.aiLevel, settings.aiBackend, settings.aiLocalModel, settings.aiCloudModel, settings.aiCloudProvider, settings.aiCloudEffort, settings.aiUseHostOllama, settings.reportParallel, settings.archiveParallel, settings.refreshParallel, settings.activeRefresh, settings.fullRefresh, settings.reportRefresh])
 
   // The header's sun/moon flips the theme directly; doing so pins it, since "auto" or a schedule
   // would otherwise override the click on the next evaluation.
@@ -482,7 +509,7 @@ export default function App() {
 
     // served mode: run the intern live, then reload when fresh data lands.
     setRefreshing(true)
-    const loading = toast('Refreshing the board — re-fetching your active tickets…', 'loading', 0)
+    const loading = toast('Refreshing the board. Fetching your active tickets…', 'loading', 0)
     const onDone = () => setRefreshing(false)
     const before = (await getInternStatus())?.dataModified ?? null
     await beginOrWatch(startInternRun, before, loading, {
@@ -491,6 +518,13 @@ export default function App() {
       failMsg: 'Could not start the intern run.',
     })
   }, [toast, beginOrWatch])
+
+  const reloadedActive = useRef(false)
+  useEffect(() => {
+    if (!served || !settings.features.reloadActive || reloadedActive.current) return
+    reloadedActive.current = true
+    void handleRefresh()
+  }, [served, settings.features.reloadActive, handleRefresh])
 
   // The DEEP job: rebuild the Completed archive (every closed ticket + PRs/branches). Slow by design.
   const handleArchiveRefresh = useCallback(async (target: ArchiveScope = { scope: 'all' }) => {
@@ -666,13 +700,18 @@ export default function App() {
   // Next Sprint section (To Do tickets whose sprint hasn't started — see isNextSprint).
   // User-archived tickets were already retired to completed[] inside loadData.
   const nextSprintTickets = filtered.filter((t) => isNextSprint(t, now))
-  const holdTickets = filtered.filter((t) => t.column === 'hold')
-  const boardTickets = filtered.filter((t) => t.column !== 'hold' && !isNextSprint(t, now))
+  const holdTickets = filtered.filter((t) => t.column === 'hold' && !isNextSprint(t, now))
+  // On Hold off: those tickets stay visible, in To Do, instead of disappearing with the strip.
+  const boardTickets = filtered.flatMap((t) => {
+    if (isNextSprint(t, now)) return []
+    if (t.column !== 'hold') return [t]
+    return settings.features.onHold ? [] : [{ ...t, column: 'todo' as const }]
+  })
   // "Nothing on the board" must ignore next-sprint work too — otherwise finishing the
   // sprint never earns the celebration, because next sprint's queue is always sitting there.
   const hasAnyActive = useMemo(
-    () => data.tickets.some((t) => t.column !== 'hold' && !isNextSprint(t, now)),
-    [data.tickets, now],
+    () => data.tickets.some((t) => !isNextSprint(t, now) && (t.column !== 'hold' || !settings.features.onHold)),
+    [data.tickets, now, settings.features.onHold],
   )
   const myCompletedCount = useMemo(
     () => data.completed.filter((c) => c.mine !== false && !c.parentKey).length,
@@ -747,7 +786,7 @@ export default function App() {
       <div className="w-full px-4 pb-24 md:px-6 lg:px-8">
         <EmptyState served={served} refreshing={refreshing} onRefresh={handleRefresh} runCommand={RUN_COMMAND} />
         <Footer />
-        <Toasts toasts={toasts} />
+        <Toasts toasts={toasts} onDismiss={dismiss} />
       </div>
     )
   }
@@ -763,9 +802,11 @@ export default function App() {
         toggleTheme={toggleTheme}
         refreshing={refreshing}
         archiveRefreshing={archiveRefreshing}
+        archiveParallel={settings.archiveParallel}
         runProgress={runProgress}
         served={served}
         onRefresh={handleRefresh}
+        shortcuts={settings.features.shortcuts}
         onArchiveRefresh={handleArchiveRefresh}
         onStopArchive={handleStopArchive}
         onOpenSettings={() => {
@@ -782,8 +823,8 @@ export default function App() {
                 onBulk: handleBulkReports,
                 onOne: handleGenerateReport,
                 onStop: handleStopReports,
-                currentKey: aiStatus?.current?.type === 'enrich-report' ? aiStatus.current.key : null,
-                modelLabel: aiStatus?.model ? `${aiStatus.model}${aiStatus.cloudEffort ? ` · ${aiStatus.cloudEffort}` : ''}` : null,
+                runningCount: enrichReportRunningCount(aiStatus),
+                modelLabel: reportModelLabel(aiStatus),
               }
             : undefined
         }
@@ -804,7 +845,7 @@ export default function App() {
           The Completed chip counts MY tickets only — the archive also carries team-mates'
           sub-tickets for context, and it opens on the same "Mine" scope. */}
       <Stats
-        tickets={filtered.filter((t) => !isNextSprint(t, now))}
+        tickets={boardTickets}
         completedCount={settings.features.completedArchive ? myCompletedCount : null}
         nextSprintCount={settings.features.nextSprint ? nextSprintTickets.length : 0}
         active={sel}
@@ -813,7 +854,14 @@ export default function App() {
       />
 
       {!hasAnyActive ? (
-        <FunEmptyBoard served={served} refreshing={refreshing} onRefresh={handleRefresh} />
+        <FunEmptyBoard
+          served={served}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          archivedCount={userArchived.length}
+          archivedKeys={userArchived}
+          onUndo={restoreArchived}
+        />
       ) : filtered.length === 0 ? (
         // Gate on `filtered`, not `boardTickets`: a search that only hits On Hold / Next Sprint
         // DID match something, and those sections render it right below — claiming "no tickets
@@ -831,7 +879,7 @@ export default function App() {
         <Board tickets={boardTickets} now={now} onOpen={openTicket} focus={focus} onArchive={archiveTicket} onRefreshTicket={handleRefreshTicket} refreshingKeys={refreshingKeys} />
       )}
 
-      {userArchived.length > 0 && (
+      {hasAnyActive && userArchived.length > 0 && (
         <div className="mt-2 flex justify-end">
           <button
             onClick={restoreArchived}
@@ -843,7 +891,7 @@ export default function App() {
         </div>
       )}
 
-      <OnHold tickets={holdTickets} now={now} onOpen={openTicket} />
+      {settings.features.onHold && <OnHold tickets={holdTickets} now={now} onOpen={openTicket} />}
 
       {/* Next sprint's queue — hidden until its top chip (or "All") is picked. 'all' opens it
           fully; 'next' reveals the minimal corner icon to expand on demand. */}
@@ -896,6 +944,7 @@ export default function App() {
               user={data.user}
               report={settings.features.prReports ? (reportsIndex?.reports[t.key] ?? null) : null}
               reportsEnabled={settings.features.prReports}
+              briefsEnabled={settings.features.aiBriefs}
               reportGenerating={reportsGenerating.has(t.key)}
               reportLoading={reportLoadingKey === t.key}
               onOpenReport={handleOpenReport}
@@ -917,8 +966,8 @@ export default function App() {
         internStatus={aiStatus}
       />
 
-      <NoticesDock notes={data.notes ?? []} />
-      <Toasts toasts={toasts} />
+      <NoticesDock notes={data.notes ?? []} seconds={settings.toastSeconds} />
+      <Toasts toasts={toasts} onDismiss={dismiss} />
     </div>
   )
 }

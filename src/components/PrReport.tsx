@@ -127,7 +127,7 @@ export function PrReportOverlay({
             onClick={(e) => e.stopPropagation()}
           >
             {/* Verdict-coloured top bar */}
-            <div className="h-1.5 w-full" style={{ background: `linear-gradient(90deg, ${vc}, ${hexToRgba(vc, 0.2)})` }} />
+            <div className="h-1.5 w-full rounded-t-2xl" style={{ background: `linear-gradient(90deg, ${vc}, ${hexToRgba(vc, 0.2)})` }} />
 
             {/* Header */}
             <header className="flex flex-wrap items-start gap-3 border-b border-[var(--line)] px-5 py-4 lg:px-8">
@@ -147,6 +147,14 @@ export function PrReportOverlay({
                     <span className="font-mono normal-case tracking-normal text-[var(--ink-soft)]">{report.key}</span>
                   )}
                   <ProvenanceChip provenance={report.enriched ? 'ai' : 'derived'} big />
+                  {generating && (
+                    <span className="inline-flex items-center gap-1 rounded-full border px-1.5 py-[2px] text-[10.5px] font-semibold normal-case tracking-normal" style={{ color: '#a855f7', borderColor: hexToRgba('#a855f7', 0.4), background: hexToRgba('#a855f7', 0.1) }}>
+                      <motion.span className="inline-flex" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}>
+                        <SparkleIcon size={9} color="#a855f7" />
+                      </motion.span>
+                      AI report generating…
+                    </span>
+                  )}
                 </div>
                 <h2 className="mt-1 text-[17px] font-extrabold leading-snug text-[var(--ink)]">{report.title}</h2>
                 {v && (
@@ -210,7 +218,7 @@ export function PrReportOverlay({
                       <motion.span className="inline-flex" animate={generating ? { rotate: 360 } : { rotate: 0 }} transition={generating ? { repeat: Infinity, duration: 0.9, ease: 'linear' } : { duration: 0.2 }}>
                         <RefreshIcon size={12} color="currentColor" />
                       </motion.span>
-                      {generating ? 'Regenerating…' : 'Regenerate'}
+                      {generating ? 'AI intern working' : 'Regenerate'}
                     </button>
                   )}
                   <button

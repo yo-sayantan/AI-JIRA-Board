@@ -7,6 +7,25 @@ import { SparkleIcon } from './Icons'
 
 const AI = '#a855f7'
 
+function formatModelPart(part: string): string {
+  return part
+    .trim()
+    .replace(/^cursor[/:]/i, '')
+    .replace(/[-_/:]+/g, ' ')
+    .replace(/\b(gpt)\b/gi, 'GPT')
+    .replace(/\b(\d+)b\b/gi, '$1B')
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
+}
+
+function formatModelLabel(label: string): string {
+  return label.split('·').map(formatModelPart).filter(Boolean).join(' · ')
+}
+
+function reportsBusyLine(done: number, peak: number, runningCount: number, modelLabel?: string | null): string {
+  const model = modelLabel ? formatModelLabel(modelLabel) : ''
+  return `${done}/${peak} done · ${runningCount} running${model ? ` · ${model}` : ''}`
+}
+
 /** Twinkling sparkle while reports generate. The glyph stays; it does not spin like a refresh. */
 function AiSpark({ busy }: { busy: boolean }) {
   return (
@@ -48,7 +67,7 @@ function daysAgo(n: number): string {
 /**
  * Batch entry point for PR Readiness Reports: run every ticket that has a pull request, or narrow
  * to a time window or a single ticket. Generation always happens on the server, one ticket at a
- * time through the same queue the per-ticket buttons use, so a 40-ticket run and a single click
+ * through the same queue the per-ticket buttons use, with bounded parallel workers so a bulk run and a single click
  * can't race each other onto the agent.
  */
 export interface ReportsMenuProps {
@@ -62,13 +81,13 @@ export interface ReportsMenuProps {
   onBulk: (target: ReportScope, force: boolean) => void
   onOne: (key: string) => void
   onStop: () => void
-  /** Ticket the intern is enriching right now, if any. */
-  currentKey?: string | null
+  /** Report jobs actively executing, excluding queued work. */
+  runningCount?: number
   /** Saved cloud model actually running, e.g. "grok-4.5 · medium". */
   modelLabel?: string | null
 }
 
-export function ReportsMenu({ served, generating, withPrCount, reportCount, onBulk, onOne, onStop, currentKey, modelLabel }: ReportsMenuProps) {
+export function ReportsMenu({ served, generating, withPrCount, reportCount, onBulk, onOne, onStop, runningCount = 0, modelLabel }: ReportsMenuProps) {
   const [open, setOpen] = useState(false)
   const [force, setForce] = useState(false)
   const [since, setSince] = useState(() => daysAgo(APP_CONFIG.reports?.defaultWindowDays ?? 30))
@@ -84,6 +103,7 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
   const done = peak > 0 ? Math.max(0, peak - busy) : 0
   const pct = peak > 0 ? Math.round((done / peak) * 100) : 0
   const fill = busy > 0 ? Math.max(8, pct) : 0
+  const busyLine = reportsBusyLine(done, peak, Math.min(runningCount, busy), modelLabel)
 
   useEffect(() => {
     if (!open) return
@@ -139,17 +159,17 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
-            className="absolute right-0 z-50 mt-2 w-[330px] origin-top-right rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] shadow-2xl"
+            className="absolute right-0 z-50 mt-2 w-[330px] origin-top-right overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] shadow-2xl"
             role="menu"
           >
             <div
-              className="relative overflow-hidden border-b border-[var(--line)] px-3.5 py-2.5"
+              className="relative overflow-hidden rounded-t-xl border-b border-[var(--line)] px-3.5 py-2.5"
               style={{ background: hexToRgba(AI, busy ? 0.16 : 0.07) }}
               role={busy ? 'progressbar' : undefined}
               aria-valuenow={busy ? pct : undefined}
               aria-valuemin={busy ? 0 : undefined}
               aria-valuemax={busy ? 100 : undefined}
-              aria-label={busy ? `Report generation ${done} of ${peak}` : undefined}
+              aria-label={busy ? busyLine : undefined}
             >
               {busy > 0 && (
                 <motion.span
@@ -182,11 +202,12 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
               )}
               <div className="relative">
                 <div className="text-[12px] font-extrabold" style={{ color: AI }}>
-                  Generate PR Readiness Reports
+                  {busy > 0 ? 'Generating PR readiness reports...' : 'Generate PR Readiness Reports'}
                 </div>
                 <div className="mt-0.5 text-[11px] text-[var(--muted)]">
-                  {reportCount} of {withPrCount} tickets with a pull request have a report.
-                  {busy > 0 ? ` ${done}/${peak} done${currentKey ? ` · ${currentKey}` : ''}${modelLabel ? ` · ${modelLabel}` : ''}` : ''}
+                  {busy > 0
+                    ? busyLine
+                    : `${reportCount} of ${withPrCount} tickets with a pull request have a report.`}
                 </div>
               </div>
             </div>
@@ -289,17 +310,20 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
 
 function MenuItem({ label, hint, onClick }: { label: string; hint: string; onClick: () => void }) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
       role="menuitem"
-      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[var(--surface-2)]"
+      whileHover={{ y: -1 }}
+      whileTap={{ scale: 0.985, y: 0 }}
+      transition={{ type: 'spring', stiffness: 520, damping: 26 }}
+      className="flex w-full items-center gap-2 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-left shadow-none transition-[background-color,border-color,box-shadow] duration-150 hover:border-[#a855f7]/45 hover:bg-[var(--surface-2)] hover:shadow-[0_8px_18px_-12px_rgba(168,85,247,0.9)] active:border-[#a855f7]/60 active:shadow-[0_2px_6px_-2px_rgba(168,85,247,0.55)]"
     >
       <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: AI }} />
       <span className="min-w-0 flex-1">
         <span className="block text-[12px] font-semibold text-[var(--ink)]">{label}</span>
         <span className="block text-[10.5px] text-[var(--muted)]">{hint}</span>
       </span>
-    </button>
+    </motion.button>
   )
 }

@@ -61,7 +61,7 @@ function PrReportButton({
           <RefreshIcon size={13} color={ai} />
         </motion.span>
         <span className="font-bold" style={{ color: ai }}>
-          Generating PR readiness report…
+          AI intern working…
         </span>
         <span className="text-[var(--muted)]"></span>
       </div>
@@ -151,6 +151,7 @@ export function TicketDetail({
   user,
   report,
   reportsEnabled,
+  briefsEnabled,
   reportGenerating,
   reportLoading,
   onOpenReport,
@@ -161,6 +162,8 @@ export function TicketDetail({
   report?: PrReportSummary | null
   /** Turned off in Settings → the whole report section disappears from the drawer. */
   reportsEnabled?: boolean
+  /** Turned off in Settings → the AI brief on the ticket disappears. */
+  briefsEnabled?: boolean
   reportGenerating?: boolean
   reportLoading?: boolean
   onOpenReport?: (key: string) => void
@@ -362,7 +365,7 @@ export function TicketDetail({
           {/* 1. AI Summary — fastest "what is this about". To Do / In-Progress tickets carry a
               DEEP brief (light HTML: linked docs, related tickets, PR/code state, attachments);
               others a short plain paragraph. SafeHtml renders both (and sanitizes). */}
-          {ticket.aiSummary && ticket.column !== 'done' && (
+          {briefsEnabled !== false && ticket.aiSummary && ticket.column !== 'done' && (
             <div className="mb-4 overflow-hidden rounded-xl border border-[#7c3aed]/35 bg-gradient-to-br from-[#7c3aed]/[0.09] to-[#6366f1]/[0.05]">
               <div className="flex items-center gap-2 border-b border-[#7c3aed]/20 px-3.5 py-2">
                 <SparkleIcon color="#a855f7" size={14} />
@@ -379,7 +382,7 @@ export function TicketDetail({
 
           {/* 2. Description — full detail */}
           {ticket.description && (
-            <Section title="Description" icon={<DocIcon color={accent} size={14} />} accent={accent}>
+            <Section title="Description" icon={<DocIcon color={accent} size={14} />} accent={accent} defaultOpen={false}>
               <SafeHtml html={ticket.description} />
             </Section>
           )}
@@ -421,7 +424,6 @@ export function TicketDetail({
               icon={<BranchIcon color={accent} size={14} />}
               accent={accent}
               count={branches.length > 1 ? branches.length : undefined}
-              defaultOpen={false}
             >
               <div className="flex flex-col gap-1.5">
                 {branches.map((b, i) => (
@@ -495,7 +497,7 @@ export function TicketDetail({
 
           {/* 12. External links — reference */}
           {ticket.externalLinks && ticket.externalLinks.length > 0 && (
-            <Section title="External links" icon={<GlobeIcon color={accent} size={14} />} accent={accent} count={ticket.externalLinks.length}>
+            <Section title="External links" icon={<GlobeIcon color={accent} size={14} />} accent={accent} count={ticket.externalLinks.length} defaultOpen={false}>
               <RefCards items={ticket.externalLinks} />
             </Section>
           )}
@@ -505,7 +507,7 @@ export function TicketDetail({
 
           {/* 14. Update log — status history + last updated */}
           {((ticket.updateLog && ticket.updateLog.length > 0) || ticket.lastUpdate) && (
-            <Section title="Update log" icon={<ClockIcon color={accent} size={14} />} accent={accent} count={ticket.updateLog?.length || undefined} defaultOpen={false}>
+            <Section title="Update log" icon={<ClockIcon color={accent} size={14} />} accent={accent} count={ticket.updateLog?.length || undefined}>
               {ticket.lastUpdate && (
                 <div className="mb-2.5 text-[12px] text-[var(--muted)]">
                   Last updated <span className="font-semibold text-[var(--ink-soft)]">{fmtDateTime(ticket.lastUpdate)}</span> ({relTime(ticket.lastUpdate, now)})
@@ -560,7 +562,7 @@ function Section({
   const [open, setOpen] = useState(defaultOpen) // sections expand by default unless told otherwise
   return (
     <div className="mb-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-solid)]">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left">
+      <button aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left">
         <span className="inline-flex" aria-hidden>{icon}</span>
         <span className="text-[13px] font-bold text-[var(--ink)]">{title}</span>
         {typeof count === 'number' && (

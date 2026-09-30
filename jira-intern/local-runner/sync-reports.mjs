@@ -17,7 +17,7 @@ if (!dir) {
 const reportsDir = join(dir, 'reports')
 mkdirSync(reportsDir, { recursive: true })
 const dst = join(reportsDir, 'index.js')
-const tmp = join(reportsDir, '.index.js.swap')
+const tmp = join(reportsDir, `.index.js.${process.pid}.swap`)
 
 const reports = {}
 for (const name of readdirSync(reportsDir)) {

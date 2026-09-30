@@ -3,7 +3,7 @@
   "$id": "https://jira-board.local/config/jira-board.config.schema.json",
   "title": "Jira Board project configuration",
   "type": "object",
-  "required": ["version", "user", "endpoints", "connector", "mcp", "ai", "timeouts", "refresh", "reports", "archive", "app"],
+  "required": ["version", "user", "endpoints", "connector", "mcp", "ai", "timeouts", "refresh", "schedule", "reports", "archive", "app"],
   "properties": {
     "$schema": { "type": "string" },
     "version": { "const": 1 },
@@ -79,7 +79,8 @@
         "cloudProvider": { "enum": ["claude", "cursor", "gemini"] },
         "cloudModel": { "type": "string" },
         "cloudEffort": { "enum": ["low", "medium"] },
-        "useHostOllama": { "type": "boolean" }
+        "useHostOllama": { "type": "boolean" },
+        "parallel": { "type": "integer", "minimum": 1, "maximum": 6 }
       },
       "additionalProperties": false
     },
@@ -89,10 +90,21 @@
     },
     "refresh": {
       "type": "object",
-      "required": ["onStart", "intervalSec"],
+      "required": ["onStart"],
       "properties": {
         "onStart": { "type": "boolean" },
+        "workers": { "type": "integer", "minimum": 1, "maximum": 16 },
         "intervalSec": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "schedule": {
+      "type": "object",
+      "required": ["activeRefresh", "fullRefresh", "reportRefresh"],
+      "properties": {
+        "activeRefresh": { "enum": ["off", "daily", "twice-daily"] },
+        "fullRefresh": { "enum": ["off", "daily", "weekly", "twice-weekly"] },
+        "reportRefresh": { "enum": ["off", "daily", "weekly", "twice-weekly"] }
       },
       "additionalProperties": false
     },
@@ -146,6 +158,8 @@
             "theme": { "enum": ["dark", "light"] },
             "dayStart": { "type": "integer", "minimum": 0, "maximum": 23 },
             "dayEnd": { "type": "integer", "minimum": 0, "maximum": 23 },
+            "toastSeconds": { "type": "integer", "minimum": 2, "maximum": 10 },
+            "toastMax": { "type": "integer", "minimum": 1, "maximum": 10 },
             "features": { "type": "object", "additionalProperties": { "type": "boolean" } }
           },
           "additionalProperties": false

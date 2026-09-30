@@ -91,6 +91,10 @@ export interface AiInternStatus {
   down?: boolean
   state?: string
   current?: { type?: string; key?: string; model?: string } | null
+  /** Every job running right now — report jobs run several at a time. */
+  active?: { type?: string; key?: string; model?: string }[]
+  /** How many report jobs the intern runs at once. */
+  parallel?: number
   lastError?: string | null
   backend?: string
   model?: string
@@ -183,6 +187,12 @@ export async function saveServerSettings(patch: {
   aiCloudProvider?: string
   aiCloudEffort?: string
   aiUseHostOllama?: boolean
+  reportParallel?: number
+  archiveParallel?: number
+  refreshParallel?: number
+  activeRefresh?: string
+  fullRefresh?: string
+  reportRefresh?: string
 }): Promise<boolean> {
   try {
     const r = await fetch('/api/settings', {

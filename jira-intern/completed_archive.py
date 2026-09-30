@@ -17,27 +17,38 @@ import json
 import os
 import re
 import sys
-import time
-import urllib.parse
-import urllib.request
 import urllib.error
-import ssl
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from html import escape
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import devinfo  # noqa: E402  (needs the path fix above when run from another cwd)
-from _config import endpoints, load_config, load_secrets  # noqa: E402
+from _jira import (  # noqa: E402
+    EXCLUDE_PROJECTS,
+    JIRA_BASE,
+    ac_list,
+    changelog_done_date,
+    comments_from_issue,
+    fetch_comments,
+    is_excluded,
+    iso,
+    issue_links,
+    light_html,
+    load_env,
+    person_fmt,
+    search_jira,
+    search_keys,
+    status_column,
+    story_points,
+    wiki_to_html,
+)
 from _sprint import apply_sprint  # noqa: E402
-from datafile import atomic_write, write_outputs  # noqa: E402
+from datafile import atomic_write, prepend_status, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
 
 INTERN = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(INTERN, "cache")
 DATA_JSON = os.path.join(INTERN, "data.json")
-STATUS_MD = os.path.join(INTERN, "_STATUS.md")
-JIRA_BASE, _CONFLUENCE_BASE, BITBUCKET_BASE = endpoints(INTERN)
 # Identity is resolved server-side via JQL currentUser(); the `mine` flag is set from
 # membership in that search's result set, not by comparing account ids here.
 
@@ -48,34 +59,6 @@ JIRA_BASE, _CONFLUENCE_BASE, BITBUCKET_BASE = endpoints(INTERN)
 #    so work I finished and handed off stays mine instead of flipping to a context parent.
 SCHEMA = 4
 
-
-def _excluded_projects():
-    """Project keys to drop entirely (config.json → excludeProjects). Case-insensitive."""
-    try:
-        cfg = load_config(INTERN)
-        return {str(p).strip().upper() for p in (cfg.get("excludeProjects") or []) if str(p).strip()}
-    except Exception:
-        return set()
-
-
-EXCLUDE_PROJECTS = _excluded_projects()
-
-
-def is_excluded(key):
-    """True when a ticket key belongs to an excluded project (e.g. ACKYARISK-190 → ACKYARISK)."""
-    return bool(key) and key.split("-")[0].upper() in EXCLUDE_PROJECTS
-
-
-FIELDS = (
-    "summary,status,issuetype,priority,updated,created,resolutiondate,assignee,reporter,"
-    "labels,components,fixVersions,description,comment,issuelinks,parent,subtasks,"
-    "customfield_10402,customfield_57402,customfield_10404,customfield_10405,customfield_10700"
-)
-
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
-
 MAX_FETCH = int(os.environ.get("COMPLETED_MAX_FETCH", "999"))
 WORKERS = int(os.environ.get("COMPLETED_WORKERS", "6"))
 # How many freshly built tickets to accumulate before flushing data.json. A deep rebuild
@@ -84,241 +67,12 @@ WORKERS = int(os.environ.get("COMPLETED_WORKERS", "6"))
 FLUSH_EVERY = 10
 
 
-def load_env():
-    for key, value in load_secrets(INTERN).items():
-        os.environ.setdefault(key, value)
-
-
-def _is_transient_net(exc):
-    """DNS blips, timeouts, and 5xx — worth retrying. 4xx is not."""
-    if isinstance(exc, urllib.error.HTTPError):
-        return exc.code >= 500
-    if isinstance(exc, urllib.error.URLError):
-        return True
-    return isinstance(exc, (TimeoutError, ConnectionError, OSError))
-
-
-def _get_json(url, headers, timeout, retries=4):
-    """GET with retry/backoff — Docker DNS and corporate VPN flaps are common here."""
-    last = None
-    for attempt in range(retries + 1):
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, context=ctx, timeout=timeout) as r:
-                return json.loads(r.read())
-        except Exception as e:
-            last = e
-            if attempt >= retries:
-                break
-            delay = min(30, 2 ** attempt) if _is_transient_net(e) else (1 + attempt)
-            time.sleep(delay)
-    raise last
-
-
-def jira_get(path):
-    return _get_json(
-        JIRA_BASE + path,
-        {"Authorization": f"Bearer {os.environ['JIRA_PERSONAL_TOKEN']}", "Accept": "application/json"},
-        timeout=120,
-    )
-
-
-def iso(s):
-    if not s:
-        return None
-    if isinstance(s, str):
-        return s.replace("+0000", "Z").replace(".000+0000", "Z").replace(".000Z", "Z")
-    return None
-
-
-def status_column(name):
-    """Map a raw Jira status name onto a board column. See daily_fetch.status_column."""
-    n = (name or "").lower().strip()
-    for keys, col in [
-        (("to do", "open", "backlog", "reopened", "selected for development"), "todo"),
-        (("in progress", "dev in progress", "work in progress", "in development"), "prog"),
-        (("in review", "code review", "ready4review", "ready for review", "review"), "rev"),
-        (("qa", "in qa", "under qa", "ready for qa", "ready4qa", "awaiting qa",
-          "testing", "in test", "in testing", "verification", "verify"), "qa"),
-        (("done", "completed", "closed", "resolved", "released"), "done"),
-        (("on hold", "hold", "blocked", "waiting", "parked", "impeded"), "hold"),
-    ]:
-        if n in keys:
-            return col
-    tokens = set(re.findall(r"[a-z0-9]+", n))
-    if "qa" in tokens or "testing" in tokens or "verification" in tokens:
-        return "qa"
-    if "review" in tokens:
-        return "rev"
-    return "prog"
-
-
 def is_done(issue):
     f = issue.get("fields") or {}
     cat = ((f.get("status") or {}).get("statusCategory") or {}).get("key")
     if cat:
         return cat == "done"
     return status_column((f.get("status") or {}).get("name")) == "done"
-
-
-def changelog_done_date(changelog):
-    """Fallback for resolved: Jira stamps resolutiondate only when the Resolution field is
-    set, so a workflow transition straight to Done can leave it null. Use the newest
-    changelog transition into a done-column status instead."""
-    dates = [
-        h.get("created")
-        for h in (changelog or {}).get("histories") or []
-        for it in h.get("items") or []
-        if it.get("field") == "status" and status_column(it.get("toString")) == "done" and h.get("created")
-    ]
-    return iso(max(dates)) if dates else None
-
-
-def light_html(html):
-    if not html:
-        return None
-    if not re.search(r"<", html):
-        return f"<p>{escape(html)}</p>"
-    allowed = {"p", "b", "ul", "li", "code", "a", "i", "h3"}
-    html = re.sub(
-        r"<(/?)([\w]+)[^>]*>",
-        lambda m: f"<{m.group(1)}{m.group(2).lower()}>" if m.group(2).lower() in allowed else "",
-        html,
-    )
-    html = re.sub(r'<a[^>]*href=["\']([^"\']+)["\'][^>]*>', r'<a href="\1">', html, flags=re.I)
-    return html.strip() or None
-
-
-def wiki_to_html(text):
-    if not text:
-        return None
-    if text.strip().startswith("<"):
-        return light_html(text)
-    lines, out, in_ul = text.split("\n"), [], False
-    for line in lines:
-        s = line.strip()
-        if s.startswith("* ") or s.startswith("- "):
-            if not in_ul:
-                out.append("<ul>")
-                in_ul = True
-            out.append(f"<li>{escape(s[2:])}</li>")
-        else:
-            if in_ul:
-                out.append("</ul>")
-                in_ul = False
-            if s:
-                out.append(f"<p>{escape(s)}</p>")
-    if in_ul:
-        out.append("</ul>")
-    return "".join(out) or None
-
-
-def ac_list(raw):
-    if not raw:
-        return []
-    if isinstance(raw, list):
-        return [str(x).strip() for x in raw if str(x).strip()]
-    parts = re.split(r"\n(?=\*|\d+\.|- )|\n\n", str(raw))
-    items = []
-    for p in parts:
-        p = re.sub(r"^[\*\-]\s*", "", p.strip())
-        p = re.sub(r"^\d+\.\s*", "", p)
-        if p:
-            items.append(p)
-    return items if items else ([str(raw).strip()] if str(raw).strip() else [])
-
-
-def search_jira(jql, fields=FIELDS, expand=None):
-    all_issues, start = [], 0
-    while True:
-        params = {"jql": jql, "startAt": start, "maxResults": 100, "fields": fields}
-        if expand:
-            params["expand"] = expand
-        try:
-            data = jira_get("/rest/api/2/search?" + urllib.parse.urlencode(params))
-        except urllib.error.HTTPError as e:
-            if "statusCategory" in jql and e.code == 400:
-                return search_jira(jql.replace("statusCategory = Done", "status in (Done, Closed, Resolved)"), fields, expand)
-            raise
-        batch = data.get("issues", [])
-        all_issues.extend(batch)
-        if not batch:  # permission-filtered results can leave total > returned — never spin
-            break
-        start += len(batch)
-        if start >= data.get("total", 0):
-            break
-    return all_issues
-
-
-def search_keys(keys, expand=None):
-    """Batched `key in (...)` lookup — one request per 100 keys instead of one per key."""
-    out = []
-    keys = [k for k in keys if k]
-    for i in range(0, len(keys), 100):
-        out.extend(search_jira("key in (" + ",".join(keys[i : i + 100]) + ")", expand=expand))
-    return out
-
-
-def comments_from_issue(f):
-    """Comments straight off the search payload when complete; None when Jira truncated."""
-    c = f.get("comment") or {}
-    listed = c.get("comments") or []
-    total = c.get("total", len(listed))
-    if total > len(listed):
-        return None
-    ordered = sorted(listed, key=lambda x: x.get("created", ""), reverse=True)
-    out = []
-    for x in ordered:
-        body = x.get("renderedBody") or wiki_to_html(x.get("body", "")) or f"<p>{escape(x.get('body',''))}</p>"
-        out.append({
-            "author": (x.get("author") or {}).get("displayName"),
-            "when": iso(x.get("created")),
-            "body": light_html(body) or body,
-        })
-    return out, len(ordered), (iso(ordered[0]["created"]) if ordered else None)
-
-
-def fetch_comments(key):
-    comments, start = [], 0
-    while True:
-        data = jira_get(f"/rest/api/2/issue/{key}/comment?startAt={start}&maxResults=100&expand=renderedBody")
-        batch = data.get("comments", [])
-        comments.extend(batch)
-        if not batch:
-            break
-        start += len(batch)
-        if start >= data.get("total", 0):
-            break
-    comments.sort(key=lambda c: c.get("created", ""), reverse=True)
-    out = []
-    for c in comments:
-        body = c.get("renderedBody") or wiki_to_html(c.get("body", "")) or f"<p>{escape(c.get('body',''))}</p>"
-        out.append({
-            "author": (c.get("author") or {}).get("displayName"),
-            "when": iso(c.get("created")),
-            "body": light_html(body) or body,
-        })
-    return out, len(comments), (iso(comments[0]["created"]) if comments else None)
-
-
-def person_fmt(u):
-    if not u:
-        return None
-    return f"{u.get('displayName')} ({(u.get('name') or u.get('key') or '').upper()})"
-
-
-def issue_links(f):
-    related = []
-    for link in f.get("issuelinks") or []:
-        for direction, rel_key in [("outwardIssue", "outward"), ("inwardIssue", "inward")]:
-            if direction in link:
-                o = link[direction]
-                related.append({
-                    "key": o["key"], "url": f"{JIRA_BASE}/browse/{o['key']}",
-                    "summary": o["fields"]["summary"], "status": o["fields"]["status"]["name"],
-                    "relation": link.get("type", {}).get(rel_key, "relates"),
-                })
-    return related
 
 
 def build_update_log(created, changelog):
@@ -341,8 +95,12 @@ def build_update_log(created, changelog):
     return deduped
 
 
-def cache_is_stale(ticket):
-    return (ticket or {}).get("schema", 0) < SCHEMA
+def _read_cache(key):
+    try:
+        with open(os.path.join(CACHE, f"{key}.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
 
 
 def dev_fields(key, dev_map, prior):
@@ -396,7 +154,6 @@ def build_completed(issue, prior, dev_map, children, pr_overrides, mine):
     key = issue["key"]
     status = f["status"]["name"]
     column = status_column(status)
-    sp = f.get("customfield_10402") or f.get("customfield_57402")
 
     # Full comment history is worth an extra request for my own tickets; for a context parent
     # the inline page that came free with the search is plenty.
@@ -431,7 +188,7 @@ def build_completed(issue, prior, dev_map, children, pr_overrides, mine):
         "column": column,
         "type": f["issuetype"]["name"],
         "priority": (f.get("priority") or {}).get("name"),
-        "storyPoints": int(sp) if sp is not None and sp == int(sp) else (float(sp) if sp else None),
+        "storyPoints": story_points(f),
         "commentCount": comment_count,
         "latestComment": latest_comment,
         "lastUpdate": iso(f.get("updated")),
@@ -510,11 +267,6 @@ def merge_completed_only(completed_list):
     write_outputs(data)
 
 
-def prepend_status(note):
-    existing = open(STATUS_MD, "r", encoding="utf-8").read() if os.path.isfile(STATUS_MD) else ""
-    atomic_write(STATUS_MD, note + "\n\n" + existing)
-
-
 def _scope():
     """all | year | since | key, from the board menu. Anything else is a full archive."""
     scope = (os.environ.get("ARCHIVE_SCOPE") or "all").strip().lower()
@@ -559,7 +311,7 @@ def main():
     load_env()
     os.makedirs(CACHE, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    set_progress("archive", done=0, total=0, phase="starting")
+    set_progress("archive", done=0, total=0, phase="starting", pct=0)
 
     try:
         return _main(ts)
@@ -583,7 +335,7 @@ def _main(ts):
     # `was` catches work reassigned away from me after I finished it.
     # A scoped run (year, since, or one key) narrows the Jira search. The merge then
     # updates only those rows so the rest of completed[] stays.
-    set_progress("archive", done=0, total=0, phase="searching")
+    set_progress("archive", done=0, total=0, phase="searching", pct=0)
     scope, year, since, one_key = _scope()
     scoped = scope != "all"
     base_jql = "(assignee was currentUser() OR assignee = currentUser())"
@@ -609,7 +361,7 @@ def _main(ts):
     # ── 2. Pull in the PARENT of each of my sub-tickets, for lineage/context only — even when
     # it belongs to someone else. We do NOT fetch its other children: a team-mate's sibling
     # sub-ticket I never touched is not my work to track (see the module docstring).
-    set_progress("archive", done=0, total=0, phase="parents")
+    set_progress("archive", done=0, total=0, phase="parents", pct=5)
     for issue in search_keys(sorted(parent_keys), expand="changelog"):
         issues.setdefault(issue["key"], issue)
 
@@ -624,40 +376,49 @@ def _main(ts):
     done_keys = [k for k, i in issues.items() if is_done(i) and not is_excluded(k)]
     done_keys.sort(key=lambda k: issues[k]["fields"].get("resolutiondate") or "", reverse=True)
 
-    # ── 5. Which of those actually need rebuilding.
-    priors, stale = {}, []
-    for key in done_keys:
-        path = os.path.join(CACHE, f"{key}.json")
-        prior = None
-        if os.path.isfile(path):
-            try:
-                prior = json.load(open(path))
-            except Exception:
-                prior = None
-        priors[key] = prior
-        if scoped or prior is None or cache_is_stale(prior):
-            stale.append(key)
-    stale = stale[:MAX_FETCH]
+    # ── 5. Every menu action is an explicit refresh of its result set: Jira is the source of
+    # truth, so every matching ticket is rebuilt. A scoped run still reads the cached row as
+    # the fallback for fields an auxiliary lookup (e.g. dev-status) fails to return; a full
+    # rebuild starts clean so no stale details are inherited.
+    clean_rebuild = scope == "all"
+    stale = done_keys[:MAX_FETCH]
+    priors = {} if clean_rebuild else {key: _read_cache(key) for key in stale}
+    total = len(stale) or 1
 
-    # Progress denominator: tickets that actually need work this run. If the cache is warm,
-    # fall back to the full archive size so the button still fills through assemble/write.
-    work_keys = stale if stale else done_keys
-    total = len(work_keys) or 1
-
-    # ── 6. One parallel dev-status batch for the stale tickets AND their children, so no
-    # ticket build has to make its own branch/PR calls. (Children are my own sub-tickets, so
-    # they are usually already in `stale` — this just guarantees a nested row has its PRs.)
-    set_progress("archive", done=0, total=total, phase="devinfo")
+    # ── 6. One parallel dev-status batch for the rebuilt tickets AND their children, so no
+    # ticket build has to make its own branch/PR calls.
+    set_progress("archive", done=0, total=total, phase="devinfo", pct=5)
     dev_targets = set(stale)
     for key in stale:
         dev_targets.update(c["key"] for c in children_by_parent.get(key, []))
-    dev_map = devinfo.fetch_many(sorted(dev_targets), workers=WORKERS) if dev_targets else {}
+
+    def dev_progress(done, phase_total, key):
+        weighted = 5 + (50 * done / phase_total if phase_total else 50)
+        set_progress("archive", done=done, total=phase_total, phase="devinfo", current=key, pct=weighted)
+
+    dev_map = (
+        devinfo.fetch_many(
+            sorted(dev_targets),
+            ids={k: issues[k]["id"] for k in dev_targets if k in issues},
+            workers=WORKERS,
+            on_progress=dev_progress,
+        )
+        if dev_targets
+        else {}
+    )
 
     newly_cached, failed = [], []
     pending = 0
 
     def build(key):
         try:
+            # A full rebuild must not inherit stale ticket details. Remove each old cache
+            # immediately before replacing it, after Jira and dev-status have been fetched.
+            if clean_rebuild:
+                try:
+                    os.remove(os.path.join(CACHE, f"{key}.json"))
+                except FileNotFoundError:
+                    pass
             ticket = build_completed(
                 issues[key], priors.get(key), dev_map, children_by_parent.get(key, []),
                 pr_overrides, key in mine_keys,
@@ -667,32 +428,28 @@ def _main(ts):
         except Exception as e:
             return key, e
 
-    if stale:
-        set_progress("archive", done=0, total=total, phase="building")
-        with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-            for key, err in ex.map(build, stale):
-                if err is not None:
-                    sys.stderr.write(f"WARN build {key}: {err}\n")
-                    failed.append(key)
-                else:
-                    newly_cached.append(key)
-                    pending += 1
-                    if pending >= FLUSH_EVERY:
-                        partial = assemble(done_keys)
-                        if scoped:
-                            upsert_completed(partial)
-                        else:
-                            merge_completed_only(partial)
-                        pending = 0
-                done_n = len(newly_cached) + len(failed)
-                set_progress("archive", done=done_n, total=total, phase="building", current=key)
-    else:
-        # Warm cache — still walk the list so the button fills while we assemble.
-        set_progress("archive", done=0, total=total, phase="assembling")
-        for i, key in enumerate(done_keys, start=1):
-            set_progress("archive", done=i, total=total, phase="assembling", current=key)
+    set_progress("archive", done=0, total=total, phase="building", pct=55)
+    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+        futures = {ex.submit(build, key): key for key in stale}
+        for future in as_completed(futures):
+            key, err = future.result()
+            if err is not None:
+                sys.stderr.write(f"WARN build {key}: {err}\n")
+                failed.append(key)
+            else:
+                newly_cached.append(key)
+                pending += 1
+                if pending >= FLUSH_EVERY:
+                    partial = assemble(done_keys)
+                    if scoped:
+                        upsert_completed(partial)
+                    else:
+                        merge_completed_only(partial)
+                    pending = 0
+            done_n = len(newly_cached) + len(failed)
+            set_progress("archive", done=done_n, total=total, phase="building", current=key, pct=55 + 43 * done_n / total)
 
-    set_progress("archive", done=total, total=total, phase="writing")
+    set_progress("archive", done=total, total=total, phase="writing", pct=99)
     rows = assemble(done_keys)
     if scoped:
         upsert_completed(rows)
@@ -707,11 +464,11 @@ def _main(ts):
         f"**{ts}** — Completed-archive intern: **{len(completed)}** rows "
         f"({mine_count} mine + {context_count} parent tickets I have a sub-ticket under; "
         f"{sub_count} of the rows are sub-tickets). {len(newly_cached)} rebuilt this run, "
-        f"{len(done_keys) - len(stale)} reused, {len(failed)} failed. "
+        f"{len(done_keys) - len(stale)} skipped over maxFetch, {len(failed)} failed. "
         f"Jira dev-status; merged completed[] only — tickets[] untouched."
     )
     prepend_status(note)
-    set_progress("archive", done=total, total=total, phase="done")
+    set_progress("archive", done=total, total=total, phase="done", pct=100)
     print(json.dumps({
         "completed_in_archive": len(completed),
         "mine": mine_count,
@@ -720,7 +477,8 @@ def _main(ts):
         "with_prs": sum(1 for r in completed if r.get("prs")),
         "universe_scanned": len(issues),
         "rebuilt_this_run": len(newly_cached),
-        "reused_cache": len(done_keys) - len(stale),
+        "cache_cleared_and_rebuilt": len(newly_cached) if clean_rebuild else 0,
+        "skipped_over_max_fetch": len(done_keys) - len(stale),
         "failed": failed[:10],
     }, indent=2))
     return 0

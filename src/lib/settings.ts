@@ -36,7 +36,38 @@ export interface Settings {
   aiCloudEffort: AiCloudEffort
   /** Talk to Ollama.app on the Mac (Metal) instead of the Linux Docker VM (CPU). */
   aiUseHostOllama: boolean
+  /** PR readiness reports the AI intern builds at once. */
+  reportParallel: number
+  /** Tickets the Completed-archive rebuild fetches at once. */
+  archiveParallel: number
+  /** Tickets the dashboard refresh builds at once. */
+  refreshParallel: number
+  /** Seconds a notification stays on screen before it dismisses itself. */
+  toastSeconds: number
+  /** Most notifications on screen at once; the oldest go first. */
+  toastMax: number
+  /** Server schedule for the active-ticket fetch. */
+  activeRefresh: ActiveCadence
+  /** Server schedule for active tickets plus the Completed archive. */
+  fullRefresh: BoardCadence
+  /** Server schedule for PR reports that are stale or below 100. */
+  reportRefresh: BoardCadence
   features: Record<FeatureKey, boolean>
+}
+
+/** Inclusive bounds for the number boxes. The server clamps to the same ranges. */
+export const LIMITS = {
+  reportParallel: { min: 1, max: 6 },
+  archiveParallel: { min: 1, max: 16 },
+  refreshParallel: { min: 1, max: 16 },
+  toastSeconds: { min: 2, max: 10 },
+  toastMax: { min: 1, max: 10 },
+} as const
+
+export function clampSetting(key: keyof typeof LIMITS, v: unknown, fallback: number): number {
+  const n = Math.round(Number(v))
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(LIMITS[key].max, Math.max(LIMITS[key].min, n))
 }
 
 /**
@@ -81,19 +112,51 @@ export const FEATURES = [
     key: 'shortcuts',
     default: true,
     label: 'Keyboard shortcuts',
-    hint: 'Focus search with / and refresh with r',
+    hint: '/ search · r refresh',
     detail:
-      'Enables the single-key shortcuts on the board. They are already suppressed while a drawer is open or you are typing, so turn this off only if they still clash with something.',
+      'Turns on / to focus search and r to refresh, and shows those keys on the search box and refresh button. They stay off while you are typing or a ticket is open. Escape still closes a ticket.',
   },
   {
     key: 'autoRefresh',
     default: true,
     label: 'Background auto-refresh',
-    hint: 'Polls for fresh data and report progress',
+    hint: 'Live progress while the board is open',
     detail:
-      'Quietly re-checks the server so reports started from a terminal or a scheduled run appear without reloading. Turning it off makes the board fully manual and removes all background network calls.',
+      'Polls for report progress and intern status while the board is open. Off stops those polls. A refresh or report you start yourself still updates until it finishes.',
+  },
+  {
+    key: 'aiBriefs',
+    default: true,
+    label: 'AI briefs',
+    hint: 'The summary at the top of a ticket',
+    detail: 'Shows the generated brief on the ticket page. Off hides it. Reports and the intern keep running.',
+  },
+  {
+    key: 'onHold',
+    default: true,
+    label: 'On Hold section',
+    hint: 'The strip for blocked tickets',
+    detail: 'Shows On Hold under the board. Off puts those tickets back in To Do instead of hiding them.',
+  },
+  {
+    key: 'reloadActive',
+    default: true,
+    label: 'Refresh on open',
+    hint: 'Fetch active tickets on every reload',
+    detail: 'Each time you open or reload the board, fetch your active tickets. Scheduled jobs are separate and keep running when this is off.',
   },
 ] as const
+
+/** How often the server refreshes active tickets. */
+export const ACTIVE_CADENCE = ['off', 'daily', 'twice-daily'] as const
+/** How often the server rebuilds the whole board, or refreshes unfinished PR reports. */
+export const BOARD_CADENCE = ['off', 'daily', 'weekly', 'twice-weekly'] as const
+export type ActiveCadence = (typeof ACTIVE_CADENCE)[number]
+export type BoardCadence = (typeof BOARD_CADENCE)[number]
+
+export function pickCadence<T extends string>(allowed: readonly T[], value: unknown, fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback
+}
 
 export type FeatureKey = (typeof FEATURES)[number]['key']
 
@@ -151,6 +214,14 @@ export const DEFAULT_SETTINGS: Settings = {
   aiCloudModel: APP_CONFIG.ai?.cloudModel ?? '',
   aiCloudEffort: APP_CONFIG.ai?.cloudEffort ?? 'low',
   aiUseHostOllama: APP_CONFIG.ai?.useHostOllama ?? false,
+  reportParallel: clampSetting('reportParallel', APP_CONFIG.ai?.parallel, 4),
+  archiveParallel: clampSetting('archiveParallel', APP_CONFIG.archive?.workers, 8),
+  refreshParallel: clampSetting('refreshParallel', APP_CONFIG.refresh?.workers, 8),
+  toastSeconds: clampSetting('toastSeconds', APP_CONFIG.settingsDefaults?.toastSeconds, 10),
+  toastMax: clampSetting('toastMax', APP_CONFIG.settingsDefaults?.toastMax, 4),
+  activeRefresh: pickCadence(ACTIVE_CADENCE, APP_CONFIG.schedule?.activeRefresh, 'twice-daily'),
+  fullRefresh: pickCadence(BOARD_CADENCE, APP_CONFIG.schedule?.fullRefresh, 'twice-weekly'),
+  reportRefresh: pickCadence(BOARD_CADENCE, APP_CONFIG.schedule?.reportRefresh, 'twice-weekly'),
   features: DEFAULT_FEATURES,
 }
 
@@ -170,6 +241,14 @@ export function loadSettings(): Settings {
           : parsed.aiCloudEffort === 'medium'
             ? 'medium'
             : 'low',
+      reportParallel: clampSetting('reportParallel', parsed.reportParallel, DEFAULT_SETTINGS.reportParallel),
+      archiveParallel: clampSetting('archiveParallel', parsed.archiveParallel, DEFAULT_SETTINGS.archiveParallel),
+      refreshParallel: clampSetting('refreshParallel', parsed.refreshParallel, DEFAULT_SETTINGS.refreshParallel),
+      toastSeconds: clampSetting('toastSeconds', parsed.toastSeconds, DEFAULT_SETTINGS.toastSeconds),
+      toastMax: clampSetting('toastMax', parsed.toastMax, DEFAULT_SETTINGS.toastMax),
+      activeRefresh: pickCadence(ACTIVE_CADENCE, parsed.activeRefresh, DEFAULT_SETTINGS.activeRefresh),
+      fullRefresh: pickCadence(BOARD_CADENCE, parsed.fullRefresh, DEFAULT_SETTINGS.fullRefresh),
+      reportRefresh: pickCadence(BOARD_CADENCE, parsed.reportRefresh, DEFAULT_SETTINGS.reportRefresh),
       features: { ...DEFAULT_FEATURES, ...(parsed.features ?? {}) },
     }
   } catch {

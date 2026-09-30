@@ -13,9 +13,18 @@ set -euo pipefail
 
 # ── Fixed port — never auto-increment. Change here (or via env) only. ─────────
 PORT="${PORT:-4321}"
+COMPOSE_PROJECT_NAME="jira-project"
 CONTAINER_NAME="JIRA-Board"
 IMAGE_NAME="jira-board:latest"
+PROJECT_LABEL="JIRA-Project"
+# Prior names from earlier deploys — remove so the new stack can take the port.
+STALE_CONTAINERS=(
+  JIRA-Project JIRA-Board
+  JIRA-AI-Intern AI-Intern
+  JIRA-AI-Ollama AI-Ollama
+)
 APP_URL="http://localhost:${PORT}/dist/index.html"
+export COMPOSE_PROJECT_NAME
 
 # Resolve the repo this script lives in (works even when launched from Desktop).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,11 +63,14 @@ ensure_docker() {
 free_port() {
   log "Reclaiming dedicated port ${PORT}…"
 
-  # Prefer the known container name first (compose / previous runs of this script).
-  if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
-    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-    ok "Removed existing container '${CONTAINER_NAME}'"
-  fi
+  # Prefer known container names first (compose / previous runs of this script).
+  local name
+  for name in "${STALE_CONTAINERS[@]}"; do
+    if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
+      docker rm -f "$name" >/dev/null 2>&1 || true
+      ok "Removed existing container '${name}'"
+    fi
+  done
 
   # Also stop anything else still bound to PORT (stale compose project, old test run, …).
   local ids
@@ -90,7 +102,9 @@ deploy() {
 
   log "Building image ${IMAGE_NAME} (this can take a minute the first time)…"
   # Compose reads PORT from the environment for the published port mapping.
+  # COMPOSE_PROJECT_NAME groups the stack in Docker Desktop as JIRA-Project.
   export PORT
+  docker compose -p jira-board down --remove-orphans >/dev/null 2>&1 || true
   docker compose build --pull 2>&1 | tail -n 20
   ok "Image built"
 
@@ -121,7 +135,7 @@ wait_ready() {
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-printf '\n🎫  My Jira Board — Docker deploy\n'
+printf '\n🎫  %s — Docker deploy\n' "$PROJECT_LABEL"
 printf '    repo: %s\n' "$REPO_DIR"
 printf '    port: %s  (fixed — same every run)\n' "$PORT"
 
@@ -134,9 +148,10 @@ log "Opening ${APP_URL}"
 open "$APP_URL" 2>/dev/null || true
 
 printf '\n════════════════════════════════════════════════════════\n'
+printf '  Project:   %s\n' "$PROJECT_LABEL"
 printf '  Board:     %s\n' "$APP_URL"
 printf '  Port:      %s  (dedicated — never changes)\n' "$PORT"
-printf '  Container: %s\n' "$CONTAINER_NAME"
+printf '  Containers: JIRA-Board, AI-Intern, AI-Ollama\n'
 printf '  Logs:      docker logs -f %s\n' "$CONTAINER_NAME"
 printf '  Stop:      docker compose -f %s/docker-compose.yml down\n' "$REPO_DIR"
 printf '════════════════════════════════════════════════════════\n\n'

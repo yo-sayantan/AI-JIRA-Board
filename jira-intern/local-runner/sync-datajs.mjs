@@ -24,7 +24,7 @@ try {
   // Also expose the app-facing config section (branding, requiredApprovals, …) so the
   // built app picks it up at runtime off file:// — portability without a rebuild.
   const appCfg = cfg.app
-    ? { ...cfg.app, reports: cfg.reports || {}, archive: cfg.archive || {}, ai: cfg.ai || {} }
+    ? { ...cfg.app, reports: cfg.reports || {}, archive: cfg.archive || {}, ai: cfg.ai || {}, schedule: cfg.schedule || {}, refresh: cfg.refresh || {} }
     : null
   const js =
     '// AUTO-GENERATED from data.json. Do not edit by hand.\n' +

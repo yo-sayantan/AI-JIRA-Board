@@ -4,32 +4,50 @@ import copy
 import json
 import os
 import re
-import ssl
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import devinfo  # noqa: E402  (needs the path fix above when run from another cwd)
-from _config import endpoints, identity, load_config, load_secrets  # noqa: E402
+from _config import identity  # noqa: E402
+from _jira import (  # noqa: E402
+    BITBUCKET_BASE,
+    CONFLUENCE_BASE,
+    EXCLUDE_PROJECTS,
+    FIELDS,
+    JIRA_BASE,
+    REQUIRED_APPROVALS,
+    ac_list,
+    changelog_done_date,
+    comments_for,
+    is_excluded,
+    iso,
+    issue_links,
+    jira_get,
+    light_html,
+    load_env,
+    person_fmt,
+    search_jira,
+    status_column,
+    story_points,
+    wiki_to_html,
+)
+from _jira import bb_get as _bb_get  # noqa: E402
 from _sprint import apply_sprint  # noqa: E402
-from datafile import atomic_dump, atomic_write, write_outputs  # noqa: E402
+from datafile import atomic_dump, prepend_status, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
 
 INTERN = os.path.dirname(os.path.abspath(__file__))
-# Identity and endpoints come from config.json (see _config.py for the resolution order) —
-# never hardcoded, so this repo carries no company hostnames and porting is config-only.
-JIRA_BASE, CONFLUENCE_BASE, BITBUCKET_BASE = endpoints(INTERN)
-BB_BASE = f"{BITBUCKET_BASE}/rest/api/1.0" if BITBUCKET_BASE else ""
 # Host-only form, used to recognise Confluence links among a ticket's remote links.
 CONFLUENCE_HOST = CONFLUENCE_BASE.split("://")[-1].split("/")[0] if CONFLUENCE_BASE else ""
 _ME = identity(INTERN)
 USER = {"name": _ME["name"], "accountId": _ME["accountId"], "jiraBase": JIRA_BASE}
-MY_ACCOUNT = _ME["accountId"]
+MY_ACCOUNT = _ME["accountId"].upper()
 
 REPO_HINTS = {
     "FIDM": ["pidclientadm", "preciseid", "preciseid_eks", "pidadmin", "fraudadmin"],
@@ -44,16 +62,6 @@ BB_PROJECT = {
     "POPD": "FARS", "NACLEN": "FRDBIZID",
 }
 
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
-
-FIELDS = (
-    "summary,status,issuetype,priority,updated,created,resolutiondate,assignee,reporter,"
-    "labels,components,fixVersions,description,comment,issuelinks,parent,subtasks,"
-    "customfield_10402,customfield_57402,customfield_10404,customfield_10405,customfield_10700"
-)
-
 BB_OK = True
 
 # Branches/PRs/reviews for every key in this run, prefetched in one parallel batch from
@@ -61,267 +69,21 @@ BB_OK = True
 # FAILED — never that the ticket has no code — so callers fall back instead of wiping data.
 DEV = {}
 
-
-def _config_int(path_keys, default):
-    try:
-        cfg = load_config(INTERN)
-        for k in path_keys:
-            cfg = cfg[k]
-        return int(cfg)
-    except Exception:
-        return default
-
-
-REQUIRED_APPROVALS = _config_int(("app", "requiredApprovals"), 2)
-
-
-def _excluded_projects():
-    """Project keys to drop entirely (config.json → excludeProjects). Case-insensitive."""
-    try:
-        cfg = load_config(INTERN)
-        return {str(p).strip().upper() for p in (cfg.get("excludeProjects") or []) if str(p).strip()}
-    except Exception:
-        return set()
-
-
-EXCLUDE_PROJECTS = _excluded_projects()
-
-
-def is_excluded(key):
-    """True when a ticket key belongs to an excluded project (e.g. ACKYARISK-190 → ACKYARISK)."""
-    return bool(key) and key.split("-")[0].upper() in EXCLUDE_PROJECTS
-
-
-def load_env():
-    for key, value in load_secrets(INTERN).items():
-        os.environ.setdefault(key, value)
-
-
-def _is_transient_net(exc):
-    """DNS blips, timeouts, and 5xx — worth retrying. 4xx is not."""
-    if isinstance(exc, urllib.error.HTTPError):
-        return exc.code >= 500
-    if isinstance(exc, urllib.error.URLError):
-        return True
-    return isinstance(exc, (TimeoutError, ConnectionError, OSError))
-
-
-def _get_json(url, headers, timeout, retries=4):
-    """GET with retry/backoff — Docker DNS and corporate VPN flaps are common here."""
-    last = None
-    for attempt in range(retries + 1):
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, context=ctx, timeout=timeout) as r:
-                return json.loads(r.read())
-        except Exception as e:
-            last = e
-            if attempt >= retries:
-                break
-            # Exponential backoff for network/DNS; short linear for other errors.
-            delay = min(30, 2 ** attempt) if _is_transient_net(e) else (1 + attempt)
-            time.sleep(delay)
-    raise last
-
-
-def jira_get(path):
-    return _get_json(
-        JIRA_BASE + path,
-        {"Authorization": f"Bearer {os.environ['JIRA_PERSONAL_TOKEN']}", "Accept": "application/json"},
-        timeout=120,
-    )
+# Tickets (and their sub-tasks) are built this many at a time — Settings → Parallel refresh.
+WORKERS = max(1, min(16, int(os.environ.get("REFRESH_WORKERS") or 8)))
+# Ticket builds nest Bitbucket fan-outs (repos × states per PR scan), so cap requests in flight.
+_BB_SLOTS = threading.BoundedSemaphore(16)
 
 
 def bb_get(path, *, mark_down=True):
     global BB_OK
-    tok = os.environ.get("BITBUCKET_PAT") or os.environ.get("ATLASSIAN_TOKEN", "")
     try:
-        return _get_json(
-            BB_BASE + path,
-            {"Authorization": f"Bearer {tok}", "Accept": "application/json"},
-            timeout=45,
-            retries=1,
-        )
+        with _BB_SLOTS:
+            return _bb_get(path)
     except Exception:
         if mark_down:
             BB_OK = False
         raise
-
-
-def iso(s):
-    if s is None:
-        return None
-    if isinstance(s, (int, float)):
-        ts = s / 1000 if s > 1e12 else s
-        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    if isinstance(s, str):
-        return s.replace("+0000", "Z").replace(".000+0000", "Z").replace(".000Z", "Z")
-    return None
-
-
-def status_column(name):
-    """Map a raw Jira status name onto a board column.
-
-    Exact aliases first; then a whole-word fallback so variants like "Ready for QA" /
-    "Under QA" land in QA without every phrasing having to be listed. Unknown statuses
-    default to In Progress (in-flight work).
-    """
-    n = (name or "").lower().strip()
-    mapping = [
-        (("to do", "open", "backlog", "reopened", "selected for development"), "todo", False),
-        (("in progress", "dev in progress", "work in progress", "in development"), "prog", False),
-        (("in review", "code review", "ready4review", "ready for review", "review"), "rev", False),
-        # "Ready for QA" / "Under QA" / plain "QA" all fold into the QA column.
-        (("qa", "in qa", "under qa", "ready for qa", "ready4qa", "awaiting qa",
-          "testing", "in test", "in testing", "verification", "verify"), "qa", False),
-        (("done", "completed", "closed", "resolved", "released"), "done", False),
-        (("on hold", "hold", "blocked", "waiting", "parked", "impeded"), "hold", True),
-    ]
-    for keys, col, hold in mapping:
-        if n in keys:
-            return col, hold
-    # Whole-word fallback — catches "Ready for QA", "Moved to QA", etc. without listing every phrasing.
-    # "qa" checked before "review" so "Ready for QA Review" (if it ever appears) still lands in QA.
-    tokens = set(re.findall(r"[a-z0-9]+", n))
-    if "qa" in tokens or "testing" in tokens or "verification" in tokens:
-        return "qa", False
-    if "review" in tokens:
-        return "rev", False
-    return "prog", False
-
-
-def light_html(html):
-    if not html:
-        return None
-    if not re.search(r"<", html):
-        from html import escape
-        return f"<p>{escape(html)}</p>"
-    allowed = {"p", "b", "ul", "li", "code", "a", "i", "h3"}
-    html = re.sub(
-        r"<(/?)([\w]+)[^>]*>",
-        lambda m: f"<{m.group(1)}{m.group(2).lower()}>" if m.group(2).lower() in allowed else "",
-        html,
-    )
-    html = re.sub(r'<a[^>]*href=["\']([^"\']+)["\'][^>]*>', r'<a href="\1">', html, flags=re.I)
-    return html.strip() or None
-
-
-def wiki_to_html(text):
-    if not text:
-        return None
-    from html import escape
-    if text.strip().startswith("<"):
-        return light_html(text)
-    lines, out, in_ul = text.split("\n"), [], False
-    for line in lines:
-        s = line.strip()
-        if s.startswith("* ") or s.startswith("- "):
-            if not in_ul:
-                out.append("<ul>")
-                in_ul = True
-            out.append(f"<li>{escape(s[2:])}</li>")
-        else:
-            if in_ul:
-                out.append("</ul>")
-                in_ul = False
-            if s:
-                out.append(f"<p>{escape(s)}</p>")
-    if in_ul:
-        out.append("</ul>")
-    return "".join(out) or None
-
-
-# parse_sprint / apply_sprint live in _sprint.py (current sprint + overflow).
-
-
-def ac_list(raw):
-    if not raw:
-        return []
-    if isinstance(raw, list):
-        return [str(x).strip() for x in raw if str(x).strip()]
-    parts = re.split(r"\n(?=\*|\d+\.|- )|\n\n", str(raw))
-    items = []
-    for p in parts:
-        p = re.sub(r"^[\*\-]\s*", "", p.strip())
-        p = re.sub(r"^\d+\.\s*", "", p)
-        if p:
-            items.append(p)
-    return items if items else ([str(raw).strip()] if str(raw).strip() else [])
-
-
-def search_jira(jql, fields=FIELDS, expand=None):
-    all_issues, start = [], 0
-    while True:
-        params = {"jql": jql, "startAt": start, "maxResults": 100, "fields": fields}
-        if expand:
-            params["expand"] = expand
-        data = jira_get("/rest/api/2/search?" + urllib.parse.urlencode(params))
-        batch = data.get("issues", [])
-        all_issues.extend(batch)
-        if not batch:  # permission-filtered results can leave total > returned — never spin
-            break
-        start += len(batch)
-        if start >= data.get("total", 0):
-            break
-    return all_issues
-
-
-def comments_from_issue(f):
-    """Comments straight off the search payload when it's complete — saves one HTTP call per
-    ticket. Returns None when Jira truncated the list (caller falls back to pagination)."""
-    c = f.get("comment") or {}
-    listed = c.get("comments") or []
-    total = c.get("total", len(listed))
-    if total > len(listed):
-        return None
-    ordered = sorted(listed, key=lambda x: x.get("created", ""), reverse=True)
-    out = []
-    for x in ordered:
-        body = x.get("renderedBody") or wiki_to_html(x.get("body", "")) or f"<p>{x.get('body','')}</p>"
-        out.append({
-            "author": (x.get("author") or {}).get("displayName"),
-            "when": iso(x.get("created")),
-            "body": light_html(body) or body,
-        })
-    latest = iso(ordered[0]["created"]) if ordered else None
-    return out, len(ordered), latest
-
-
-def fetch_comments(key):
-    comments, start = [], 0
-    while True:
-        data = jira_get(f"/rest/api/2/issue/{key}/comment?startAt={start}&maxResults=100&expand=renderedBody")
-        batch = data.get("comments", [])
-        comments.extend(batch)
-        if not batch:
-            break
-        start += len(batch)
-        if start >= data.get("total", 0):
-            break
-    comments.sort(key=lambda c: c.get("created", ""), reverse=True)
-    out = []
-    for c in comments:
-        body = c.get("renderedBody") or wiki_to_html(c.get("body", "")) or f"<p>{c.get('body','')}</p>"
-        out.append({
-            "author": (c.get("author") or {}).get("displayName"),
-            "when": iso(c.get("created")),
-            "body": light_html(body) or body,
-        })
-    latest = iso(comments[0]["created"]) if comments else None
-    return out, len(comments), latest
-
-
-def changelog_done_date(changelog):
-    """Fallback resolved date: Jira stamps resolutiondate only when the Resolution field is
-    set, so a workflow transition straight to Done can leave it null. Use the newest
-    changelog transition into a done-column status instead."""
-    dates = [
-        h.get("created")
-        for h in (changelog or {}).get("histories") or []
-        for it in h.get("items") or []
-        if it.get("field") == "status" and status_column(it.get("toString"))[0] == "done" and h.get("created")
-    ]
-    return iso(max(dates)) if dates else None
 
 
 def build_update_log(key, created, status, resolved, changelog, prior_log=None):
@@ -348,8 +110,7 @@ def build_update_log(key, created, status, resolved, changelog, prior_log=None):
     if not entries or entries[-1]["text"] != "Opened":
         entries.append({"when": opened_day, "text": "Opened"})
 
-    col, _ = status_column(status)
-    if col == "done":
+    if status_column(status) == "done":
         done_day = (iso(resolved) or "")[:10] or datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if not any(e.get("text", "").startswith("Marked DONE") for e in entries):
             entries.insert(0, {"when": done_day, "text": f"Marked DONE — {done_day}"})
@@ -363,32 +124,6 @@ def build_update_log(key, created, status, resolved, changelog, prior_log=None):
                 if t not in prior_texts:
                     entries.insert(0, e)
     return entries
-
-
-def pr_comment_stats(bb_proj, slug, pid):
-    total, resolved = 0, 0
-    try:
-        start = 0
-        pages = 0
-        while pages < 3:
-            data = bb_get(
-                f"/projects/{bb_proj}/repos/{slug}/pull-requests/{pid}/activities?start={start}&limit=100",
-                mark_down=False,
-            )
-            for act in data.get("values") or []:
-                if act.get("action") == "COMMENTED":
-                    total += 1
-                    c = act.get("comment") or {}
-                    if c.get("state") == "RESOLVED" or c.get("severity") == "BLOCKER":
-                        resolved += 1
-            pages += 1
-            if data.get("isLastPage", True):
-                break
-            start += data.get("size", 100)
-    except Exception:
-        pass
-    open_c = max(0, total - resolved)
-    return total, resolved, open_c
 
 
 def pr_to_obj(pr, bb_proj=None):
@@ -410,7 +145,7 @@ def pr_to_obj(pr, bb_proj=None):
     reviewers = [((r.get("user") or {}).get("displayName")) for r in reviewers_raw if (r.get("user") or {}).get("displayName")]
     # Activity pages are only needed while a PR is still reviewable — merged/declined PRs
     # get fixed stats (saves 1-3 Bitbucket calls per closed PR).
-    ct, cr, open_c = pr_comment_stats(project, slug, pid) if slug and pid and not (merged or declined) else (0, 0, 0)
+    ct, cr, open_c = devinfo.pr_comment_stats(project, slug, pid) if slug and pid and not (merged or declined) else (0, 0, 0)
     if merged:
         pstate = "merged"
         open_c = 0
@@ -477,30 +212,17 @@ def bb_search_all_prs(key):
     return found
 
 
-def pick_primary_pr(prs):
-    if not prs:
-        return {"state": "none"}
-    open_prs = [p for p in prs if not p.get("merged") and p.get("state") not in ("declined",)]
-    if open_prs:
-        return open_prs[0]
-    merged = [p for p in prs if p.get("merged")]
-    if merged:
-        return merged[0]
-    return prs[0]
-
-
 def code_for(key):
     """Branches + PRs for one ticket, or None when nothing could be looked up.
 
-    Jira's dev-status index is authoritative and repo-agnostic, so it leads. The old
-    Bitbucket key-scan stays on as a supplement for the handful of tickets in a daily
-    run: it costs little here and covers the case where the Jira↔Bitbucket link is
-    temporarily down."""
+    Jira's dev-status index is authoritative and repo-agnostic, so it leads. The Bitbucket
+    key-scan (up to repos × 3 listings per ticket) only runs when dev-status has no PRs for
+    the ticket, which is the symptom of the Jira↔Bitbucket link being down."""
     dev = DEV.get(key)
     prs = list(dev["prs"]) if dev else []
     branches = list(dev["branches"]) if dev else []
 
-    if BB_OK:
+    if BB_OK and not prs:
         try:
             seen = {p.get("id") for p in prs}
             for extra in bb_search_all_prs(key):
@@ -518,7 +240,7 @@ def code_for(key):
         return None
 
     branches = list(dict.fromkeys(b for b in branches if b))
-    pr = pick_primary_pr(prs)
+    pr = devinfo.pick_primary_pr(prs)
     return {
         "branches": branches,
         "prs": prs,
@@ -540,33 +262,13 @@ def apply_code(ticket, key):
     return ticket
 
 
-def person_fmt(u):
-    if not u:
-        return None
-    return f"{u.get('displayName')} ({(u.get('name') or u.get('key') or '').upper()})"
-
-
 def is_mine(assignee):
     if not assignee:
         return False
+    if not MY_ACCOUNT:
+        return False
     name = (assignee.get("name") or assignee.get("key") or "").upper()
-    return name == MY_ACCOUNT or MY_ACCOUNT in (assignee.get("displayName") or "")
-
-
-def issue_links(f):
-    related = []
-    for link in f.get("issuelinks") or []:
-        for direction, issue_key in [("outwardIssue", "outward"), ("inwardIssue", "inward")]:
-            if direction in link:
-                o = link[direction]
-                rel = link.get("type", {})
-                relation = rel.get(issue_key, "relates")
-                related.append({
-                    "key": o["key"], "url": f"{JIRA_BASE}/browse/{o['key']}",
-                    "summary": o["fields"]["summary"], "status": o["fields"]["status"]["name"],
-                    "relation": relation,
-                })
-    return related
+    return name == MY_ACCOUNT or MY_ACCOUNT in (assignee.get("displayName") or "").upper()
 
 
 def extract_links(*texts, prior_conf=None, prior_ext=None):
@@ -613,8 +315,7 @@ def build_basic_subtask(si, parent_key):
     to force a trip to Jira."""
     sf = si["fields"]
     sk = si["key"]
-    col, hold = status_column(sf["status"]["name"])
-    sp = sf.get("customfield_10402") or sf.get("customfield_57402")
+    col = status_column(sf["status"]["name"])
     sub = {
         "key": sk,
         "title": sf.get("summary"),
@@ -622,13 +323,13 @@ def build_basic_subtask(si, parent_key):
         "column": col,
         "type": sf["issuetype"]["name"],
         "priority": (sf.get("priority") or {}).get("name"),
-        "storyPoints": int(sp) if sp is not None and sp == int(sp) else (float(sp) if sp else None),
+        "storyPoints": story_points(sf),
         "url": f"{JIRA_BASE}/browse/{sk}",
         "assignee": person_fmt(sf.get("assignee")),
         "reporter": person_fmt(sf.get("reporter")),
         "parentKey": parent_key,
         "done": col == "done",
-        "onHold": hold,
+        "onHold": col == "hold",
         "created": iso(sf.get("created")),
         "lastUpdate": iso(sf.get("updated")),
         "resolved": iso(sf.get("resolutiondate")) or (changelog_done_date(si.get("changelog")) if col == "done" else None),
@@ -652,9 +353,8 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
     f = issue["fields"]
     key = issue["key"]
     status = f["status"]["name"]
-    column, on_hold = status_column(status)
+    column = status_column(status)
     itype = f["issuetype"]["name"]
-    sp = f.get("customfield_10402") or f.get("customfield_57402")
 
     # ── Unchanged short-circuit — skips the expensive Jira side (comments, links, changelog).
     # Jira bumps `updated` on every edit/comment/transition, so matching (status, updated)
@@ -681,8 +381,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         apply_sprint(ticket, f.get("customfield_10404"))
         return refresh_prs_only(ticket, key)
 
-    inline = comments_from_issue(f)
-    comments, comment_count, latest_comment = inline if inline is not None else fetch_comments(key)
+    comments, comment_count, latest_comment = comments_for(key, f)
 
     epic_key = f.get("customfield_10405")
     parent = f.get("parent")
@@ -715,7 +414,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
     )
 
     def carry_ai_fields(ticket_obj):
-        """aiSummary is owned by summarize-active.sh — never drop on refresh."""
+        """aiSummary is written by the AI intern's summarize-active job — never drop it on refresh."""
         if prior:
             if prior.get("aiSummary") and not ticket_obj.get("aiSummary"):
                 ticket_obj["aiSummary"] = prior["aiSummary"]
@@ -730,7 +429,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         "column": column,
         "type": itype,
         "priority": (f.get("priority") or {}).get("name"),
-        "storyPoints": int(sp) if sp is not None and sp == int(sp) else (float(sp) if sp else None),
+        "storyPoints": story_points(f),
         "branch": branch,
         "branches": branches,
         "pr": pr if pr else {"state": "none"},
@@ -741,7 +440,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         "created": iso(f.get("created")),
         "resolved": iso(f.get("resolutiondate")) or (changelog_done_date(issue.get("changelog")) if column == "done" else None),
         "done": column == "done",
-        "onHold": on_hold,
+        "onHold": column == "hold",
         "url": f"{JIRA_BASE}/browse/{key}",
         "reporter": person_fmt(f.get("reporter")),
         "assignee": person_fmt(f.get("assignee")),
@@ -780,20 +479,26 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
     return carry_ai_fields(ticket)
 
 
-def build_subtasks(parent_key, sub_issues, prior_map, state):
+def build_subtasks(parent_key, sub_issues, prior_map, state, pool=None):
     """Sub-tasks from the single batched `parent in (…)` search — the issues already carry
-    full FIELDS + changelog, so no per-subtask GETs. Mine → full brief; others → basic."""
-    subs = []
-    for si in sub_issues:
+    full FIELDS + changelog, so no per-subtask GETs. Mine → full brief; others → basic.
+    With `pool`, sub-tasks build concurrently; order is kept either way."""
+    def one(si):
         sk = si["key"]
-        assignee = si["fields"].get("assignee")
-        if is_mine(assignee):
+        if is_mine(si["fields"].get("assignee")):
             full = build_ticket(si, prior_map.get(sk), state.get(sk))
             full["parentKey"] = parent_key
-            subs.append(full)
-        else:
-            subs.append(build_basic_subtask(si, parent_key))
-    return subs
+            return full
+        return build_basic_subtask(si, parent_key)
+
+    if pool is None or len(sub_issues) < 2:
+        return [one(si) for si in sub_issues]
+    return list(pool.map(one, sub_issues))
+
+
+def _issue_ids(*groups):
+    """key → numeric id for issues already fetched, so devinfo skips its own id search."""
+    return {i["key"]: i["id"] for group in groups for i in group if i.get("id")}
 
 
 def ticket_to_state(t):
@@ -810,7 +515,6 @@ def ticket_to_state(t):
 
 
 def main():
-    global BB_OK, DEV
     load_env()
     existing_path = os.path.join(INTERN, "data.json")
     state_path = os.path.join(INTERN, ".state.json")
@@ -849,10 +553,10 @@ def _main(existing_path, state_path):
 
     prior_map = {t["key"]: t for t in existing.get("tickets", [])}
 
-    # probe Bitbucket once
+    # Probe Bitbucket once; the key-scan supplement is skipped for the run when it is down.
     BB_OK = True
     try:
-        bb_get("/projects/FRAUD/repos/pidclientadm/pull-requests?limit=1")
+        bb_get("/projects?limit=1")
     except Exception:
         BB_OK = False
 
@@ -900,7 +604,7 @@ def _main(existing_path, state_path):
     for subs in (subs_by_parent or {}).values():
         dev_keys.extend(si["key"] for si in subs)
     try:
-        DEV = devinfo.fetch_many(list(dict.fromkeys(dev_keys)), workers=10)
+        DEV = devinfo.fetch_many(list(dict.fromkeys(dev_keys)), ids=_issue_ids(issues, *(subs_by_parent or {}).values()), workers=WORKERS)
     except Exception:
         DEV = {}
 
@@ -908,23 +612,41 @@ def _main(existing_path, state_path):
     tickets = []
     new_state = {}
 
-    for i, key in enumerate(active_keys, start=1):
-        set_progress("daily", done=i - 1, total=total, phase="building", current=key)
+    def build_one(key):
         prior = prior_map.get(key)
-        prev_state = state.get(key, {})
-        issue = issue_map[key]
-        force = key not in state or not prior
-        ticket = build_ticket(issue, prior, prev_state, force_refresh=force)
-
-        # subtasks
+        ticket = build_ticket(issue_map[key], prior, state.get(key, {}), force_refresh=key not in state or not prior)
         if subs_by_parent is not None:
-            subs = build_subtasks(key, subs_by_parent.get(key, []), prior_map, state)
+            subs = build_subtasks(key, subs_by_parent.get(key, []), prior_map, state, pool=sub_pool)
             if subs:
                 ticket["subtasks"] = subs
                 ticket["subtaskCount"] = len(subs)
             else:
                 ticket.pop("subtasks", None)
                 ticket["subtaskCount"] = 0
+        return ticket
+
+    built_lock = threading.Lock()
+    built_count = [0]
+
+    def on_built(key):
+        with built_lock:
+            built_count[0] += 1
+            set_progress("daily", done=built_count[0], total=total, phase="building", current=key)
+
+    def build_tracked(key):
+        ticket = build_one(key)
+        on_built(key)
+        return ticket
+
+    set_progress("daily", done=0, total=total, phase="building")
+    # Separate pools: parents wait on their sub-tasks, so sharing one pool could deadlock.
+    with ThreadPoolExecutor(max_workers=WORKERS) as sub_pool, \
+            ThreadPoolExecutor(max_workers=max(1, min(WORKERS, total))) as pool:
+        built = list(pool.map(build_tracked, active_keys))
+
+    for key, ticket in zip(active_keys, built):
+        prior = prior_map.get(key)
+        prev_state = state.get(key, {})
 
         if not prev_state and not prior:
             changes["new"].append(f"{key}: {ticket.get('title', '')[:60]}")
@@ -944,7 +666,6 @@ def _main(existing_path, state_path):
 
         tickets.append(ticket)
         new_state[key] = ticket_to_state(ticket)
-        set_progress("daily", done=i, total=total, phase="building", current=key)
 
     set_progress("daily", done=total, total=total, phase="writing")
     notes = [f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}: Daily fetch — Jira REST" + ("" if BB_OK else "; Bitbucket unreachable — PR/branch data carried forward") + "."]
@@ -977,12 +698,6 @@ def _main(existing_path, state_path):
     )
     set_progress("daily", done=total, total=total, phase="done")
     return out, changes, notes
-
-
-def prepend_status(note):
-    p = os.path.join(INTERN, "_STATUS.md")
-    old = open(p, encoding="utf-8").read() if os.path.isfile(p) else ""
-    atomic_write(p, f"{note}\n\n{old}")
 
 
 def fetch_issue(key):
@@ -1095,7 +810,12 @@ def refresh_one(key):
     try:
         # enrich_open=False: skip Bitbucket activity pages (30s timeouts each). Jira
         # dev-status still supplies branches/PRs/approvals — enough for the card badge.
-        DEV = devinfo.fetch_many(list(dict.fromkeys(dev_keys)), workers=6, enrich_open=False)
+        DEV = devinfo.fetch_many(
+            list(dict.fromkeys(dev_keys)),
+            ids=_issue_ids([issue], (subs_by_parent or {}).get(key, [])),
+            workers=6,
+            enrich_open=False,
+        )
     except Exception:
         DEV = {}
 

@@ -211,7 +211,7 @@ export function CompletedOverlay({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -30, scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 300, damping: 32 }}
-            className="relative flex max-h-full w-full max-w-[1400px] flex-col overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
+            className="relative flex max-h-full w-full max-w-[1540px] flex-col overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
             role="dialog"
             aria-modal="true"
           >
@@ -592,41 +592,43 @@ function CompletedRow({ it, expanded, onToggle, onOpen, onOpenKey }: { it: Compl
               </div>
 
               <div className="mt-3.5 flex flex-col gap-2.5">
-                <Section label={branches.length > 1 ? `Branches (${branches.length})` : 'Branch'} icon={<BranchIcon size={12} color="var(--muted)" />}>
-                  {branches.length ? (
-                    <div className="flex flex-col gap-1.5">
-                      {branches.map((b, i) => (
-                        <span key={i} className="inline-flex flex-wrap items-center gap-2">
-                          <code className="break-all font-mono text-[11.5px] text-[var(--ink-soft)]">{b}</code>
-                          <BranchStatusPill state={branchStatusOf(b, it)} />
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-[12px] text-[var(--muted)]">No branch recorded in Jira.</span>
-                  )}
-                </Section>
-
-                {prs.length > 0 && (
-                  <Section label={prs.length > 1 ? `Pull requests (${prs.length})` : 'Pull request'} icon={<PrStateIcon state="merged" color="var(--muted)" size={12} />}>
-                    <div className="flex flex-col gap-1.5">
-                      {prs.map((p, i) => (
-                        <span key={i} className="inline-flex flex-wrap items-center gap-2">
-                          {p.state && p.state !== 'none' ? <PrBadge state={p.state} /> : <Pill color={PR_PURPLE}>⬡ PR</Pill>}
-                          {p.merged && p.state !== 'merged' && <Pill color={PR_PURPLE}>merged</Pill>}
-                          {/* One ticket's PRs can live in different repos, so the number alone is ambiguous. */}
-                          {p.repo && <code className="rounded bg-[var(--surface-solid)] px-1.5 py-[1px] font-mono text-[10.5px] text-[var(--ink-soft)]">{p.repo}</code>}
-                          {typeof p.approvals === 'number' && <span className="text-[11px] text-[var(--muted)]">{p.approvals} approval{p.approvals === 1 ? '' : 's'}</span>}
-                          {p.url && (
-                            <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-bold hover:underline" style={{ color: 'var(--pr-link)' }}>
-                              {p.id ? `#${p.id}` : 'view'} ↗
-                            </a>
-                          )}
-                        </span>
-                      ))}
-                    </div>
+                <div className={prs.length > 0 ? 'grid grid-cols-1 items-start gap-2.5 md:grid-cols-2' : ''}>
+                  <Section label={branches.length > 1 ? `Branches (${branches.length})` : 'Branch'} icon={<BranchIcon size={12} color="var(--muted)" />}>
+                    {branches.length ? (
+                      <div className="flex flex-col gap-1.5">
+                        {branches.map((b, i) => (
+                          <span key={i} className="inline-flex flex-wrap items-center gap-2">
+                            <code className="break-all font-mono text-[11.5px] text-[var(--ink-soft)]">{b}</code>
+                            <BranchStatusPill state={branchStatusOf(b, it)} />
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[12px] text-[var(--muted)]">No branch recorded in Jira.</span>
+                    )}
                   </Section>
-                )}
+
+                  {prs.length > 0 && (
+                    <Section label={prs.length > 1 ? `Pull requests (${prs.length})` : 'Pull request'} icon={<PrStateIcon state="merged" color="var(--muted)" size={12} />}>
+                      <div className="flex flex-col gap-1.5">
+                        {prs.map((p, i) => (
+                          <span key={i} className="inline-flex flex-wrap items-center gap-2">
+                            {p.state && p.state !== 'none' ? <PrBadge state={p.state} /> : <Pill color={PR_PURPLE}>⬡ PR</Pill>}
+                            {p.merged && p.state !== 'merged' && <Pill color={PR_PURPLE}>merged</Pill>}
+                            {/* One ticket's PRs can live in different repos, so the number alone is ambiguous. */}
+                            {p.repo && <code className="rounded bg-[var(--surface-solid)] px-1.5 py-[1px] font-mono text-[10.5px] text-[var(--ink-soft)]">{p.repo}</code>}
+                            {typeof p.approvals === 'number' && <span className="text-[11px] text-[var(--muted)]">{p.approvals} approval{p.approvals === 1 ? '' : 's'}</span>}
+                            {p.url && (
+                              <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-bold hover:underline" style={{ color: 'var(--pr-link)' }}>
+                                {p.id ? `#${p.id}` : 'view'} ↗
+                              </a>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </Section>
+                  )}
+                </div>
 
                 {/* The whole point of the master-ticket view: who did which piece, and how it was reviewed. */}
                 {subs.length > 0 && (

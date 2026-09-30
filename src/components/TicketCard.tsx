@@ -3,9 +3,9 @@ import { motion } from 'motion/react'
 import type { Ticket } from '../types'
 import { COLUMN_META } from '../lib/columns'
 import { DONE_BOARD_DAYS } from '../data'
-import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, branchesOf, relTime, shortBranch, hexToRgba } from '../lib/format'
+import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, branchesOf, relTime, hexToRgba } from '../lib/format'
 import { Pill, PriorityGlyph, PrBadge, Approvals, PointsTag } from './ui'
-import { TypeIcon, CommentIcon, RefreshIcon, TrophyIcon } from './Icons'
+import { TypeIcon, RefreshIcon, TrophyIcon } from './Icons'
 
 /** Days until this Done card auto-retires from the board into the Completed archive. */
 function archivesInDays(t: Ticket, now: number): number | null {
@@ -19,6 +19,27 @@ function archivesInDays(t: Ticket, now: number): number | null {
 }
 
 const celebratedDone = new Set<string>()
+
+/** Full branch name, wrapping only after / or _ so a key like FRAUDBUSTE-267 stays intact. */
+function BranchName({ name }: { name: string }) {
+  const parts = name.split(/([/_])/)
+  return (
+    <span className="block font-mono text-[10px] leading-3 opacity-80" title={name}>
+      {parts.map((part, i) =>
+        part === '/' || part === '_' ? (
+          <span key={i}>
+            {part}
+            <wbr />
+          </span>
+        ) : (
+          <span key={i} className="whitespace-nowrap">
+            {part}
+          </span>
+        ),
+      )}
+    </span>
+  )
+}
 
 function motionOff(): boolean {
   try {
@@ -57,6 +78,8 @@ export function TicketCard({
   const branches = branchesOf(ticket)
   const archiveIn = archivesInDays(ticket, now)
   const overflow = !!ticket.sprintOverflow
+  // Sub-tasks carry little of their own (no points, rarely a PR or branch), so they get a compact card.
+  const sub = !!ticket.parentKey
   const quiet = motionOff()
   const burst = useMemo(() => {
     if (ticket.column !== 'done' || quiet) return false
@@ -106,7 +129,7 @@ export function TicketCard({
       }}
       whileHover={quiet ? undefined : { y: -6, zIndex: 3, boxShadow: hoverShadow }}
       whileTap={quiet ? undefined : { y: -2, scale: 0.992 }}
-      className="ticket-card group relative flex h-[168px] w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[var(--surface-solid)] p-2.5 text-left"
+      className={`ticket-card group relative flex w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[var(--surface-solid)] text-left ${sub ? 'px-2.5 py-2' : 'min-h-[168px] p-2.5'}`}
       style={{
         boxShadow: baseShadow,
         borderColor: overflow ? '#dc2626' : undefined,
@@ -185,12 +208,20 @@ export function TicketCard({
         {rel && <span className="shrink-0 text-[10px] text-[var(--muted)]">{rel}</span>}
       </div>
 
-      <div className="relative mt-1 line-clamp-2 text-[13px] font-semibold leading-snug text-[var(--ink)]">
+      <div className={`relative mt-1 line-clamp-2 font-semibold leading-snug text-[var(--ink)] ${sub ? 'text-[12px]' : 'text-[13px]'}`}>
         {ticket.title}
       </div>
 
-      <div className="relative mt-1.5 flex max-h-[40px] flex-wrap items-center gap-1 overflow-hidden">
+      <div className={`relative flex flex-wrap items-center gap-1 ${sub ? 'mt-1' : 'mt-1.5'}`}>
         <PriorityGlyph priority={ticket.priority} />
+        {sub && (
+          <span
+            className="min-w-0 truncate font-mono text-[10px] text-[var(--muted)]"
+            title={`Sub-ticket of ${ticket.parentKey}${ticket.parentTitle ? ` — ${ticket.parentTitle}` : ''}`}
+          >
+            ↳ {ticket.parentKey}
+          </span>
+        )}
         {pr && (prKnownState ? <PrBadge state={pr.state} /> : <Pill color="#94a3b8" title="Pull request linked">⊙ PR</Pill>)}
         {pr && !isClosedPr(pr) && <Approvals approvals={pr.approvals} />}
         {prs.length > 1 && (
@@ -210,19 +241,12 @@ export function TicketCard({
         )}
       </div>
 
-      <div className="relative mt-auto flex items-center gap-3 pt-1 text-[10.5px] text-[var(--muted)]">
-        {typeof ticket.commentCount === 'number' && ticket.commentCount > 0 && (
-          <span className="inline-flex items-center gap-1">
-            <CommentIcon size={12} /> {ticket.commentCount}
-          </span>
-        )}
-        {branches[0] && (
-          <span className="ml-auto truncate font-mono text-[10px] opacity-80" title={branches.join('\n')}>
-            {shortBranch(branches[0], 24)}
-            {branches.length > 1 ? ` +${branches.length - 1}` : ''}
-          </span>
-        )}
-      </div>
+      {branches[0] && (
+        <div className="relative mt-auto w-full pt-1 text-[var(--muted)]" title={branches.join('\n')}>
+          <BranchName name={branches[0]} />
+          {branches.length > 1 ? <span className="font-mono text-[10px] opacity-80">{` +${branches.length - 1}`}</span> : null}
+        </div>
+      )}
     </motion.div>
   )
 }

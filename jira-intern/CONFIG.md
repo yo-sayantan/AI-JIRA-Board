@@ -130,8 +130,19 @@ quick ranges.
 capacity and the archive menu.
 
 ## `refresh`
-`onStart` and `intervalSec` control the container's initial and periodic active-ticket fetch.
-Explicit `REFRESH_ON_START` / `REFRESH_INTERVAL` environment values still win.
+`onStart` fetches active tickets once when the container starts. `REFRESH_ON_START` overrides it.
+Repeat runs are `schedule`, not a fixed interval.
+`workers` (1–16, default 8) is how many tickets and sub-tasks the dashboard refresh builds at once.
+Settings → Parallel refresh overrides it; `REFRESH_WORKERS` does too for a direct `daily_fetch.py` run.
+
+## `schedule`
+Defaults for Settings → Jobs. A choice saved in the app wins over this file.
+
+| key | values | meaning |
+|---|---|---|
+| `activeRefresh` | `off`, `daily`, `twice-daily` | Fetch tickets still in flight. |
+| `fullRefresh` | `off`, `daily`, `weekly`, `twice-weekly` | Active tickets, then the Completed archive. |
+| `reportRefresh` | `off`, `daily`, `weekly`, `twice-weekly` | PR reports that are missing, stale, or under 100. |
 
 ## `timeouts` (seconds)
 `dailySec` (default 1800), `weeklySec` (7200, env `TIMEOUT_SEC` overrides), `summarySec` (600),
@@ -146,7 +157,7 @@ Explicit `REFRESH_ON_START` / `REFRESH_INTERVAL` environment values still win.
 | `doneBoardDays` | Days a newly Done ticket remains on the active board. |
 | `polling` | Busy/idle report and AI polling intervals. |
 | `progress` | Header progress phase percentages. |
-| `settingsDefaults` | Appearance and feature defaults before saved browser choices. |
+| `settingsDefaults` | Appearance, notification time and count, and feature defaults before saved browser choices. |
 | `branding.tagline` | Left footer text. |
 | `branding.badgeText` / `badgeUrl` / `badgeTitle` | The footer "made by" badge — put your own name/portfolio here. |
 

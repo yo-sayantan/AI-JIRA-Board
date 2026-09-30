@@ -15,94 +15,13 @@ Bitbucket is still called, but only to enrich a pull request that is still open
 Those calls address the PR by its exact project/repo/id taken from the dev-status
 URL, so there is no repo guessing anywhere in this module.
 """
-import json
-import os
 import re
-import ssl
-import time
-import urllib.error
 import urllib.parse
-import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from _config import endpoints, load_config
-
-INTERN = os.path.dirname(os.path.abspath(__file__))
-# Endpoints come from config.json (see _config.py) — no company hosts baked into the repo.
-JIRA_BASE, _CONFLUENCE_BASE, BITBUCKET_BASE = endpoints(INTERN)
-BB_BASE = f"{BITBUCKET_BASE}/rest/api/1.0" if BITBUCKET_BASE else ""
-
-_ctx = ssl.create_default_context()
-_ctx.check_hostname = False
-_ctx.verify_mode = ssl.CERT_NONE
+from _jira import REQUIRED_APPROVALS, bb_get, iso, jira_get
 
 _PR_URL_RE = re.compile(r"/projects/([^/]+)/repos/([^/]+)/pull-requests/(\d+)")
-
-
-def _config_int(path_keys, default):
-    try:
-        cfg = load_config(INTERN)
-        for k in path_keys:
-            cfg = cfg[k]
-        return int(cfg)
-    except Exception:
-        return default
-
-
-REQUIRED_APPROVALS = _config_int(("app", "requiredApprovals"), 2)
-
-
-def _is_transient_net(exc):
-    if isinstance(exc, urllib.error.HTTPError):
-        return exc.code >= 500
-    if isinstance(exc, urllib.error.URLError):
-        return True
-    return isinstance(exc, (TimeoutError, ConnectionError, OSError))
-
-
-def _get_json(url, headers, timeout, retries=4):
-    last = None
-    for attempt in range(retries + 1):
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, context=_ctx, timeout=timeout) as r:
-                return json.loads(r.read())
-        except Exception as e:
-            last = e
-            if attempt >= retries:
-                break
-            delay = min(30, 2 ** attempt) if _is_transient_net(e) else (1 + attempt)
-            time.sleep(delay)
-    raise last
-
-
-def _jira_get(path, timeout=90):
-    return _get_json(
-        JIRA_BASE + path,
-        {"Authorization": f"Bearer {os.environ['JIRA_PERSONAL_TOKEN']}", "Accept": "application/json"},
-        timeout=timeout,
-    )
-
-
-def _bb_get(path, timeout=30):
-    tok = os.environ.get("BITBUCKET_PAT") or os.environ.get("ATLASSIAN_TOKEN", "")
-    return _get_json(
-        BB_BASE + path,
-        {"Authorization": f"Bearer {tok}", "Accept": "application/json"},
-        timeout=timeout,
-        retries=1,
-    )
-
-
-def _iso(s):
-    if not s:
-        return None
-    if isinstance(s, (int, float)):
-        from datetime import datetime, timezone
-
-        ts = s / 1000 if s > 1e12 else s
-        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return str(s).replace("+0000", "Z").replace(".000+0000", "Z").replace(".000Z", "Z")
 
 
 def resolve_issue_ids(keys):
@@ -115,20 +34,20 @@ def resolve_issue_ids(keys):
             q = urllib.parse.urlencode(
                 {"jql": "key in (" + ",".join(chunk) + ")", "maxResults": 100, "fields": "summary"}
             )
-            for issue in _jira_get("/rest/api/2/search?" + q).get("issues", []):
+            for issue in jira_get("/rest/api/2/search?" + q, timeout=90).get("issues", []):
                 ids[issue["key"]] = issue["id"]
         except Exception:
             continue
     return ids
 
 
-def _pr_comment_stats(proj, slug, pid):
+def pr_comment_stats(proj, slug, pid):
     """Unresolved vs resolved review comments — dev-status reports neither."""
     total, resolved = 0, 0
     try:
         start, pages = 0, 0
         while pages < 3:
-            data = _bb_get(f"/projects/{proj}/repos/{slug}/pull-requests/{pid}/activities?start={start}&limit=100")
+            data = bb_get(f"/projects/{proj}/repos/{slug}/pull-requests/{pid}/activities?start={start}&limit=100", timeout=30)
             for act in data.get("values") or []:
                 if act.get("action") == "COMMENTED":
                     total += 1
@@ -146,7 +65,7 @@ def _pr_comment_stats(proj, slug, pid):
 
 def _needs_work(proj, slug, pid):
     try:
-        data = _bb_get(f"/projects/{proj}/repos/{slug}/pull-requests/{pid}")
+        data = bb_get(f"/projects/{proj}/repos/{slug}/pull-requests/{pid}", timeout=30)
         return any(r.get("status") == "NEEDS_WORK" for r in data.get("reviewers") or [])
     except Exception:
         return False
@@ -167,7 +86,7 @@ def _to_pr(raw, enrich_open=True):
     m = _PR_URL_RE.search(url or "")
     if m and enrich_open and not (merged or declined):
         proj, slug, pid = m.groups()
-        total, resolved, open_c = _pr_comment_stats(proj, slug, pid)
+        total, resolved, open_c = pr_comment_stats(proj, slug, pid)
         needs_work = _needs_work(proj, slug, pid)
 
     if merged:
@@ -199,8 +118,8 @@ def _to_pr(raw, enrich_open=True):
         "repo": (src.get("repository") or {}).get("name") or (m.group(2) if m else None),
         "author": (raw.get("author") or {}).get("name"),
         "merged": merged,
-        "mergedAt": _iso(raw.get("lastUpdate")) if merged else None,
-        "updatedAt": _iso(raw.get("lastUpdate")),
+        "mergedAt": iso(raw.get("lastUpdate")) if merged else None,
+        "updatedAt": iso(raw.get("lastUpdate")),
     }
 
 
@@ -219,7 +138,7 @@ def fetch_one(issue_id, enrich_open=True):
     """Branches + PRs for one issue id. Returns None when the call fails, so callers can
     tell "Jira says there is no code" apart from "we could not ask"."""
     try:
-        data = _jira_get(
+        data = jira_get(
             f"/rest/dev-status/latest/issue/detail?issueId={issue_id}"
             f"&applicationType=stash&dataType=pullrequest",
             timeout=45,
@@ -241,10 +160,15 @@ def fetch_one(issue_id, enrich_open=True):
     return {"branches": branches, "prs": prs, "branch": branch, "pr": pr}
 
 
-def fetch_many(keys, ids=None, workers=10, enrich_open=True):
+def fetch_many(keys, ids=None, workers=10, enrich_open=True, on_progress=None):
     """Dev info for many issue keys at once. Keys whose lookup failed are omitted, never
-    reported as empty — an empty result would wipe good cached data."""
-    ids = ids or resolve_issue_ids(keys)
+    reported as empty — an empty result would wipe good cached data. `on_progress`, when
+    supplied, receives (completed_count, total_count, key) as each lookup finishes.
+    Pass `ids` (key → issue id) when the caller already has the issues, to skip a search."""
+    ids = dict(ids or {})
+    missing = [k for k in keys if k not in ids]
+    if missing:
+        ids.update(resolve_issue_ids(missing))
     todo = [(k, ids[k]) for k in keys if k in ids]
     out = {}
     if not todo:
@@ -255,7 +179,11 @@ def fetch_many(keys, ids=None, workers=10, enrich_open=True):
         return key, fetch_one(issue_id, enrich_open)
 
     with ThreadPoolExecutor(max_workers=min(workers, len(todo))) as ex:
-        for key, info in ex.map(one, todo):
+        futures = {ex.submit(one, pair): pair[0] for pair in todo}
+        for completed, future in enumerate(as_completed(futures), start=1):
+            key, info = future.result()
             if info is not None:
                 out[key] = info
+            if on_progress:
+                on_progress(completed, len(todo), key)
     return out

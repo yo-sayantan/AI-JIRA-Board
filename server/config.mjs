@@ -1,0 +1,36 @@
+import { join } from 'node:path'
+import { cfg } from '../jira-intern/local-runner/config.mjs'
+
+export const PROJECT_CONFIG = cfg
+
+export const ROOT = join(import.meta.dirname, '..')
+export const INTERN = join(ROOT, 'jira-intern')
+const RUNNER = join(INTERN, 'local-runner')
+
+export const PATHS = {
+  data: join(INTERN, 'data.json'),
+  progress: join(INTERN, '.progress.json'),
+  settings: join(INTERN, '.settings.json'),
+  schedule: join(INTERN, '.schedule.json'),
+  internLock: join(INTERN, '.intern.lock'),
+  completedLock: join(INTERN, '.completed.lock'),
+  aiQueue: join(INTERN, '.ai-queue'),
+  aiCancelReport: join(INTERN, '.ai-cancel-report'),
+  reportsDir: join(INTERN, 'reports'),
+  reportsStatus: join(INTERN, 'reports', '.status.json'),
+  reportPy: join(INTERN, 'pr_report.py'),
+  dailyScript: join(RUNNER, 'run-intern.sh'),
+  archiveScript: join(RUNNER, 'update-completed.sh'),
+  refreshScript: join(RUNNER, 'refresh-ticket.sh'),
+  modelCatalog: join(ROOT, 'ai-intern', 'models.json'),
+}
+
+export const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/i
+export const YEAR_RE = /^\d{4}$/
+export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+export const AI_INTERN_URL = process.env.AI_INTERN_URL || 'http://127.0.0.1:4322'
+export const PORT = Number(process.env.PORT) || Number(cfg.app?.servePort) || 4321
+// Loopback by default so a laptop run stays private; the Docker image sets BIND_HOST=0.0.0.0.
+export const HOST = process.env.BIND_HOST || '127.0.0.1'
+export const BOARD_PATH = '/dist/index.html'

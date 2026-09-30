@@ -61,11 +61,6 @@ def sprint_fields(raw):
     }
 
 
-def parse_sprint(raw):
-    """Back-compat: the current/latest sprint string only."""
-    return sprint_fields(raw)["sprint"]
-
-
 def apply_sprint(ticket, raw):
     ticket.update(sprint_fields(raw))
     return ticket

@@ -5,14 +5,12 @@ export interface ToastItem {
   id: number
   msg: string
   kind?: ToastKind
-  /** Stays until dismissed. A long job must not be pushed off by a burst of short notices. */
-  sticky?: boolean
 }
 
 const ICON: Record<ToastKind, string> = { info: 'ⓘ', success: '✓', error: '⚠️', loading: '◌' }
 const COLOR: Record<ToastKind, string> = { info: '#8b9cff', success: '#22c55e', error: '#ef4444', loading: '#8b9cff' }
 
-export function Toasts({ toasts }: { toasts: ToastItem[] }) {
+export function Toasts({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: number) => void }) {
   return (
     <div className="pointer-events-none fixed bottom-12 right-4 z-[60] flex flex-col items-end gap-2">
       <AnimatePresence>
@@ -31,7 +29,16 @@ export function Toasts({ toasts }: { toasts: ToastItem[] }) {
               <span className={kind === 'loading' ? 'animate-spin' : ''} style={{ color: COLOR[kind] }}>
                 {ICON[kind]}
               </span>
-              {t.msg}
+              <span className="min-w-0">{t.msg}</span>
+              <button
+                type="button"
+                onClick={() => onDismiss(t.id)}
+                className="-mr-1 grid h-5 w-5 shrink-0 place-items-center rounded-md text-[14px] leading-none text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
+                aria-label="Dismiss notification"
+                title="Dismiss"
+              >
+                ×
+              </button>
             </motion.div>
           )
         })}

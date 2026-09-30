@@ -16,28 +16,11 @@ export type RunProgress = {
   phase?: string
 }
 
-/**
- * Overall completion 0–100 for the button fill. Prep phases (search → devinfo) take the bar
- * to ~24%; the rest fills linearly as tickets are built, so the fill reflects real progress.
- */
+/** Overall completion 0–100. Prefer the worker's measured, weighted progress. */
 function displayPct(p: RunProgress | null | undefined): number {
-  if (!p) return 6
-  const PREP = APP_CONFIG.progress?.prepPercent ?? 24
-  const BUILD_MAX = APP_CONFIG.progress?.buildMaxPercent ?? 96
-  const floor: Record<string, number> = {
-    starting: 4,
-    searching: 10,
-    subtasks: 16,
-    parents: 16,
-    devinfo: PREP,
-    writing: 97,
-    done: 100,
-  }
-  if (p.phase === 'building' || p.phase === 'assembling') {
-    if (p.total > 0) return PREP + (BUILD_MAX - PREP) * (p.done / p.total)
-    return PREP
-  }
-  return floor[p.phase || ''] ?? 6
+  if (!p) return 0
+  if (Number.isFinite(p.pct)) return p.pct
+  return p.total > 0 ? (100 * p.done) / p.total : 0
 }
 
 /** True once we have a real ticket count to show as x/y. */
@@ -73,7 +56,7 @@ function ProgressButton({
   shadow: string
   idleIcon: ReactNode
 }) {
-  const pctNum = busy ? Math.max(4, Math.min(100, displayPct(progress))) : 0
+  const pctNum = busy ? Math.max(0, Math.min(100, displayPct(progress))) : 0
   const pct = Math.round(pctNum)
   const label = busy ? (hasCount(progress) ? `${progress!.done}/${progress!.total} · ${pct}%` : `${pct}%`) : idleLabel
 
@@ -151,9 +134,11 @@ export function Header({
   toggleTheme,
   refreshing,
   archiveRefreshing,
+  archiveParallel,
   runProgress,
   served,
   onRefresh,
+  shortcuts = true,
   onArchiveRefresh,
   onStopArchive,
   reports,
@@ -167,10 +152,13 @@ export function Header({
   toggleTheme: () => void
   refreshing: boolean
   archiveRefreshing: boolean
+  archiveParallel: number
   /** Live done/total from the running fetch — fills the active button. */
   runProgress?: RunProgress | null
   served: boolean
   onRefresh: () => void
+  /** When off, / and r do nothing and their hints stay off the controls. */
+  shortcuts?: boolean
   onArchiveRefresh: (target: ArchiveScope) => void
   onStopArchive: () => void
   /** Bulk PR Readiness Report controls — grouped so the header keeps one prop, not five. */
@@ -264,7 +252,7 @@ export function Header({
             </div>
           )}
 
-          <label className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] px-3 py-1.5 card-shadow focus-within:border-[var(--muted)]">
+          <label className="jb-search flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] px-3 py-1.5 card-shadow focus-within:border-[var(--muted)]">
             <span className="text-[var(--muted)]">
               <SearchIcon size={14} />
             </span>
@@ -273,7 +261,7 @@ export function Header({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               type="search"
-              placeholder="Search…  ( / )"
+              placeholder={shortcuts ? 'Search…  ( / )' : 'Search…'}
               className="w-36 bg-transparent text-[13px] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] md:w-60"
             />
             {query && (
@@ -291,8 +279,8 @@ export function Header({
             ariaLabel={served ? 'Refresh the board (active tickets only)' : 'Reload latest data'}
             title={
               served
-                ? 'QUICK refresh — re-fetches only your ACTIVE tickets (seconds). The Completed archive is not touched.  (r)'
-                : 'Reload the latest data dump from disk  (r)'
+                ? `QUICK refresh — re-fetches only your ACTIVE tickets (seconds). The Completed archive is not touched.${shortcuts ? '  (r)' : ''}`
+                : `Reload the latest data dump from disk${shortcuts ? '  (r)' : ''}`
             }
             idleLabel={served ? 'Refresh board' : 'Reload'}
             gradient="linear-gradient(135deg, #7c5cff, #2684ff)"
@@ -308,7 +296,8 @@ export function Header({
               done={archiveProgress?.done ?? 0}
               total={archiveProgress?.total ?? 0}
               pct={archiveRefreshing ? Math.round(displayPct(archiveProgress)) : 0}
-              current={archiveProgress?.current}
+              parallel={archiveParallel}
+              phase={archiveProgress?.phase}
               onRun={onArchiveRefresh}
               onStop={onStopArchive}
             />

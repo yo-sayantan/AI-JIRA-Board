@@ -16,16 +16,12 @@
 # (PR ids + states + approvals + comments + updatedAt) changed since the last report.
 # Single instance: .report.lock (dead-PID safe). Exit 3 if another backfill is running.
 set -o pipefail
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INTERN_DIR="$(cd "$HERE/.." && pwd)"
-LOG_DIR="$INTERN_DIR/logs"; mkdir -p "$LOG_DIR"
-LOG="$LOG_DIR/reports-backfill-$(date +%Y%m%d-%H%M%S).log"
-PY="$INTERN_DIR/pr_report.py"
 
 REPORTS_AUTO=1; REPORTS_YEAR=2026; REPORTS_MAX_PER_RUN=5
-command -v node >/dev/null 2>&1 && eval "$(node "$HERE/config.mjs" shellenv 2>/dev/null)"
+# shellcheck source=runner-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/runner-env.sh"
+LOG="$LOG_DIR/reports-backfill-$(date +%Y%m%d-%H%M%S).log"
+PY="$INTERN_DIR/pr_report.py"
 
 AUTO=0; FORCE=0; NEEDS_AI=0; YEAR="$REPORTS_YEAR"; MAX=""; EXTRA=()
 while [ $# -gt 0 ]; do
@@ -46,15 +42,9 @@ if [ "$AUTO" = "1" ]; then
 fi
 [ -f "$INTERN_DIR/data.json" ] || { echo "$(date): no data.json yet" | tee -a "$LOG"; exit 0; }
 
-# One backfill at a time (the reports share the agent + the status file). Stale lock = dead PID.
+# One backfill at a time (the reports share the agent + the status file).
 LOCK="$INTERN_DIR/.report.lock"
-if [ -f "$LOCK" ]; then
-  OLD="$(awk '{print $1}' "$LOCK" 2>/dev/null)"
-  if [ -n "$OLD" ] && kill -0 "$OLD" 2>/dev/null; then
-    echo "$(date): another backfill (pid $OLD) is running — skipping" | tee -a "$LOG"; exit 3
-  fi
-  rm -f "$LOCK"
-fi
+refuse_if_locked "this backfill" "$LOCK"
 echo "$$ $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$LOCK"
 trap 'rm -f "$LOCK"' EXIT INT TERM
 

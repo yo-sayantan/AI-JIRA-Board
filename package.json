@@ -8,6 +8,7 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
+    "test": "python3 -m unittest discover -s tests -p 'test_*.py'",
     "test:config": "python3 tests/test_config.py",
     "config:validate": "node jira-intern/local-runner/config.mjs validate",
     "preview": "vite preview",
