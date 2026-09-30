@@ -82,6 +82,11 @@ def enqueue(job):
         payload["backend"] = "local"
     if payload["level"] not in VALID_LEVELS:
         payload["level"] = "moderate"
+    same = ("type", "key", "modelTag")
+    for queued in list_jobs():
+        if all(queued.get(f) == payload[f] for f in same):
+            queued.pop("_path", None)
+            return queued
     path = os.path.join(QUEUE_DIR, f"{payload['id']}.json")
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:

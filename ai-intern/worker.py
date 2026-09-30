@@ -1885,15 +1885,24 @@ def next_job():
 def worker_loop(slot):
     name = threading.current_thread().name
     while not STOP.is_set():
-        # Slots above the configured width idle, so a lower setting takes effect without a restart.
-        if slot >= parallel_workers():
-            time.sleep(3)
+        try:
+            # Slots above the configured width idle, so a lower setting takes effect without a restart.
+            if slot >= parallel_workers():
+                time.sleep(3)
+                continue
+            job, path = next_job()
+        except Exception as e:
+            # A config file caught mid-edit must not kill the slot for good.
+            log(f"{name} queue check failed: {e}")
+            time.sleep(10)
             continue
-        job, path = next_job()
         if not job:
             time.sleep(IDLE_POLL_SEC)
             continue
-        job = apply_saved_model(job)
+        try:
+            job = apply_saved_model(job)
+        except Exception as e:
+            log(f"{name} could not read Settings, keeping the queued model: {e}")
         typ = job.get("type")
         _JOB.type = typ
         cur = {"type": typ, "key": job.get("key"), "model": job.get("model"), "effort": job.get("cloudEffort")}
