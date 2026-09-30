@@ -5,6 +5,7 @@ import { ACTIVE_CADENCE, AI_LEVELS, BOARD_CADENCE, FEATURES, LIMITS, clampSettin
 import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice } from '../../lib/runner'
 import fallbackCatalog from '../../../ai-intern/models.json'
 import { hexToRgba } from '../../lib/format'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { CalendarIcon, DocIcon, DownloadIcon, MoonIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from '../common/Icons'
 
 const AI = '#a855f7'
@@ -64,6 +65,30 @@ function segmentStyle(active: boolean): React.CSSProperties {
 const SEGMENT_BUTTON =
   'inline-flex h-full w-full min-w-0 items-center justify-center gap-1 rounded-md px-1.5 text-[11.5px] font-semibold transition-colors hover:text-[var(--ink)]'
 
+/** Arrow / Home / End move the choice inside a radiogroup, as keyboard users expect. */
+function onRadioKeys<T extends string>(e: React.KeyboardEvent<HTMLElement>, keys: readonly T[], value: T, onChange: (v: T) => void) {
+  const i = Math.max(0, keys.indexOf(value))
+  const next =
+    e.key === 'ArrowRight' || e.key === 'ArrowDown'
+      ? (i + 1) % keys.length
+      : e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+        ? (i - 1 + keys.length) % keys.length
+        : e.key === 'Home'
+          ? 0
+          : e.key === 'End'
+            ? keys.length - 1
+            : -1
+  if (next < 0) return
+  e.preventDefault()
+  onChange(keys[next])
+  const group = e.currentTarget
+  requestAnimationFrame(() => group.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus())
+}
+
+/** Only the chosen option is a tab stop; arrows move between the rest. */
+const radioTabIndex = <T extends string>(keys: readonly T[], value: T, key: T) =>
+  key === value || (!keys.includes(value) && key === keys[0]) ? 0 : -1
+
 /** Equal-width single-choice control; it never changes size when the choice changes. */
 function Segmented<T extends string>({
   label,
@@ -76,10 +101,12 @@ function Segmented<T extends string>({
   value: T
   onChange: (v: T) => void
 }) {
+  const keys = options.map((o) => o.key)
   return (
     <div
       role="radiogroup"
       aria-label={label}
+      onKeyDown={(e) => onRadioKeys(e, keys, value, onChange)}
       className="grid h-8 min-w-0 gap-0.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-0.5"
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     >
@@ -89,6 +116,7 @@ function Segmented<T extends string>({
           type="button"
           role="radio"
           aria-checked={o.key === value}
+          tabIndex={radioTabIndex(keys, value, o.key)}
           title={o.hint}
           onClick={() => onChange(o.key)}
           className={SEGMENT_BUTTON}
@@ -102,11 +130,18 @@ function Segmented<T extends string>({
   )
 }
 
+const LEVEL_KEYS = AI_LEVELS.map((l) => l.key)
+
 /** AI usage as a segmented control; hovering a level shows its pros and cons. */
 function AiLevelPicker({ value, onChange }: { value: Settings['aiLevel']; onChange: (v: Settings['aiLevel']) => void }) {
   const [tip, setTip] = useState<string | null>(null)
   return (
-    <div role="radiogroup" aria-label="AI usage" className="grid h-8 grid-cols-4 gap-0.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-0.5">
+    <div
+      role="radiogroup"
+      aria-label="AI usage"
+      onKeyDown={(e) => onRadioKeys(e, LEVEL_KEYS, value, onChange)}
+      className="grid h-8 grid-cols-4 gap-0.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-0.5"
+    >
       {AI_LEVELS.map((level, i) => {
         const active = value === level.key
         return (
@@ -115,6 +150,7 @@ function AiLevelPicker({ value, onChange }: { value: Settings['aiLevel']; onChan
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={radioTabIndex(LEVEL_KEYS, value, level.key)}
               aria-describedby={tip === level.key ? `ai-level-${level.key}-tip` : undefined}
               onClick={() => onChange(level.key)}
               onFocus={() => setTip(level.key)}
@@ -196,6 +232,7 @@ export function SettingsPanel({
   const wasOpen = useRef(false)
   const panelRef = useRef<HTMLElement>(null)
   const [pricesOpen, setPricesOpen] = useState(false)
+  useDialogFocus(open, panelRef)
   useEffect(() => {
     if (open && !wasOpen.current) setDraft(saved)
     wasOpen.current = open
@@ -241,7 +278,8 @@ export function SettingsPanel({
         >
           <motion.section
             ref={panelRef}
-            className="flex max-h-[calc(100dvh-24px)] w-full max-w-[960px] flex-col overflow-visible rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
+            tabIndex={-1}
+            className="jb-dialog-panel flex max-h-[calc(100dvh-24px)] w-full max-w-[960px] flex-col overflow-visible rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
             initial={{ y: 20, scale: 0.98 }}
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 12, scale: 0.98 }}
@@ -498,7 +536,7 @@ function CadenceSelect<T extends string>({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as T)}
-      className="h-8 w-full min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-1.5 text-[11.5px] text-[var(--ink)] outline-none focus:border-[var(--muted)]"
+      className="jb-field h-8 w-full min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-1.5 text-[11.5px] text-[var(--ink)]"
       aria-label={label}
     >
       {options.map((option) => (
@@ -552,7 +590,7 @@ function NumberBox({
         onKeyDown={(e) => {
           if (e.key === 'Enter') commit((e.target as HTMLInputElement).value)
         }}
-        className="h-8 w-full min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] pl-2 pr-9 text-[12px] font-semibold tabular-nums text-[var(--ink)] outline-none [appearance:textfield] focus:border-[var(--muted)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="jb-field h-8 w-full min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] pl-2 pr-9 text-[12px] font-semibold tabular-nums text-[var(--ink)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         aria-label={`${label}, ${min} to ${max}`}
       />
       <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] tabular-nums text-[var(--muted)]">
@@ -568,7 +606,7 @@ function HourSelect({ value, onChange, disabled }: { value: number; onChange: (v
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(Number(e.target.value))}
-      className="h-8 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-1.5 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--muted)] disabled:opacity-60"
+      className="jb-field h-8 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-1.5 text-[12px] text-[var(--ink)] disabled:opacity-60"
     >
       {HOURS.map((h) => (
         <option key={h} value={h}>
@@ -879,7 +917,7 @@ function CloudModelPicker({
           onChange={(e) => onChange({ ...settings, aiCloudModel: e.target.value })}
           aria-label={`${info.label} model`}
           disabled={!models.length}
-          className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--muted)] disabled:opacity-60"
+          className="jb-field h-8 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] disabled:opacity-60"
         >
           {!models.length && <option value="">{!ready ? 'Loading models…' : hasKey ? 'No cheaper models on this key' : 'No key yet'}</option>}
           {models.map((m) => (
@@ -894,7 +932,7 @@ function CloudModelPicker({
             onChange={(e) => onChange({ ...settings, aiCloudEffort: e.target.value as Settings['aiCloudEffort'] })}
             aria-label="Cursor effort"
             title="Effort — Low uses fewer tokens than Medium"
-            className="h-8 w-[5.75rem] shrink-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--muted)]"
+            className="jb-field h-8 w-[5.75rem] shrink-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)]"
           >
             {CLOUD_EFFORTS.filter((e) => efforts.includes(e.id)).map((e) => (
               <option key={e.id} value={e.id}>
@@ -963,7 +1001,7 @@ function LocalModelPicker({
           value={selected?.id ?? ''}
           onChange={(e) => onSelect(e.target.value)}
           aria-label="Local AI model"
-          className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--muted)]"
+          className="jb-field h-8 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)]"
         >
           {options.map((m) => {
             const ready = modelInstalled(installed, m.id)

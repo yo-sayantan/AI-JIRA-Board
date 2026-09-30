@@ -707,50 +707,40 @@ def fetch_issue(key):
 
 
 def _find_prior(data, key):
-    """Locate an existing ticket object by key in tickets[] / nested subtasks / completed[]."""
-    for t in data.get("tickets") or []:
-        if t.get("key") == key:
-            return t, "tickets"
-        for s in t.get("subtasks") or []:
-            if s.get("key") == key:
-                return s, "subtask"
-    for t in data.get("completed") or []:
-        if t.get("key") == key:
-            return t, "completed"
-        for s in t.get("subtasks") or []:
-            if s.get("key") == key:
-                return s, "subtask"
+    """Locate an existing ticket object by key. A sub-task of mine is stored twice — as its own
+    card and under its parent — so top-level rows are searched before any nested copy."""
+    for section, where in (("tickets", "tickets"), ("completed", "completed")):
+        for t in data.get(section) or []:
+            if t.get("key") == key:
+                return t, where
+    for section in ("tickets", "completed"):
+        for t in data.get(section) or []:
+            for s in t.get("subtasks") or []:
+                if s.get("key") == key:
+                    return s, "subtask"
     return None, None
 
 
-def _merge_ticket(data, ticket, prior_where):
-    """Replace the matching entry in place, or append when the key is new to the dump."""
+def _merge_ticket(data, ticket):
+    """Replace EVERY copy of the ticket (its own card and any copy nested under a parent), or
+    append when the key is new to the dump. Updating one copy left the other showing stale data."""
     key = ticket["key"]
-    if prior_where == "tickets":
-        for i, t in enumerate(data["tickets"]):
-            if t.get("key") == key:
-                data["tickets"][i] = ticket
-                return "tickets"
-    if prior_where == "subtask":
-        for t in data.get("tickets") or []:
-            subs = t.get("subtasks") or []
+    hits = set()
+    for section in ("tickets", "completed"):
+        rows = data.get(section) or []
+        for i, row in enumerate(rows):
+            if row.get("key") == key:
+                rows[i] = ticket
+                hits.add(section)
+                continue
+            subs = row.get("subtasks") or []
             for j, s in enumerate(subs):
                 if s.get("key") == key:
                     subs[j] = ticket
-                    t["subtasks"] = subs
-                    return "subtask"
-        for t in data.get("completed") or []:
-            subs = t.get("subtasks") or []
-            for j, s in enumerate(subs):
-                if s.get("key") == key:
-                    subs[j] = ticket
-                    t["subtasks"] = subs
-                    return "subtask"
-    if prior_where == "completed":
-        for i, t in enumerate(data.get("completed") or []):
-            if t.get("key") == key:
-                data["completed"][i] = ticket
-                return "completed"
+                    hits.add("subtask")
+    for where in ("tickets", "completed", "subtask"):
+        if where in hits:
+            return where
     # New to the dump — active board first; done tickets still land in tickets[] so the
     # "recent win" column can show them (same as the daily fetch window).
     data.setdefault("tickets", []).append(ticket)
@@ -839,7 +829,7 @@ def refresh_one(key):
     if parent and parent.get("key") and not ticket.get("parentKey"):
         ticket["parentKey"] = parent["key"]
 
-    where = _merge_ticket(data, ticket, prior_where)
+    where = _merge_ticket(data, ticket)
     data["generatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Touch notes so the dump is visibly fresh even when fields look identical.
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")

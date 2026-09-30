@@ -109,6 +109,40 @@ a {
   display: none;
 }
 
+/* Modal panels take focus when they open so Tab starts inside them; the panel itself is not a
+   control, so no ring — and the ring's 4px radius must not square off its corners. */
+.jb-dialog-panel:focus,
+.jb-dialog-panel:focus-visible {
+  outline: none;
+  border-radius: revert-layer;
+}
+
+/* Settings selects and number boxes. Browsers treat a clicked field as :focus-visible, so the
+   global ring above would outline them in blue on every click; a tinted border is the cue. */
+.jb-field {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.jb-field:focus,
+.jb-field:focus-visible {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.6);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.14);
+}
+/* The native arrow sits at a different inset in every browser; draw one centred in the box. */
+select.jb-field {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 26px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 12px 12px;
+  text-overflow: ellipsis;
+}
+select.jb-field:disabled {
+  cursor: default;
+}
+
 /* ── Reusable surfaces ──────────────────────────────────────────────── */
 .glass {
   background: var(--surface);

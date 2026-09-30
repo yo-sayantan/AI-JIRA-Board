@@ -1,5 +1,5 @@
 import type { CompletedTicket, JiraData, Ticket } from './types'
-import { mapStatusToColumn } from './lib/columns'
+import { COLUMN_META, mapStatusToColumn } from './lib/columns'
 import { projectOf } from './lib/format'
 import { fixture } from './fixtures'
 import { DONE_BOARD_DAYS } from './lib/appConfig'
@@ -13,11 +13,13 @@ export function injectedDump(): JiraData | null {
 }
 
 function normalizeTicket(t: Ticket): Ticket {
+  // An unknown column would match no board column and the card would silently vanish.
+  const column = t.column && t.column in COLUMN_META ? t.column : mapStatusToColumn(t.status)
   return {
     ...t,
-    column: t.column || mapStatusToColumn(t.status),
-    done: t.done ?? t.column === 'done',
-    onHold: t.onHold ?? t.column === 'hold',
+    column,
+    done: t.done ?? column === 'done',
+    onHold: t.onHold ?? column === 'hold',
   }
 }
 

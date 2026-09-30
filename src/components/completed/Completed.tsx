@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { CompletedTicket, Ticket } from '../../types'
 import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, releaseEnvOf, yearOf, hexToRgba, branchesOf, branchStatusOf, prListOf, isMergedPr, isClosedPr, shortBranch, cycleTime, fmtDays } from '../../lib/format'
 import { matchRow, parseQuery } from '../../lib/search'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { Pill, PrBadge, BranchStatusPill, PointsTag } from '../common/ui'
 import { BranchIcon, ChevronIcon, CommentIcon, ExpandAllIcon, PersonIcon, PrStateIcon, SearchIcon, SparkleIcon, TrophyIcon, TypeIcon } from '../common/Icons'
 
@@ -104,6 +105,8 @@ export function CompletedOverlay({
   }, [open])
 
   const pauseRef = useRef(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(open, panelRef)
   pauseRef.current = !!pauseEsc
   useEffect(() => {
     if (!open) return
@@ -211,7 +214,9 @@ export function CompletedOverlay({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -30, scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 300, damping: 32 }}
-            className="relative flex max-h-full w-full max-w-[1540px] flex-col overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
+            ref={panelRef}
+            tabIndex={-1}
+            className="jb-dialog-panel relative flex max-h-full w-full max-w-[1540px] flex-col overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
             role="dialog"
             aria-modal="true"
           >
