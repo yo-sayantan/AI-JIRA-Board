@@ -1594,7 +1594,7 @@ def summarize_active(job):
         return
     data_path = INTERN / "data.json"
     data = json.loads(data_path.read_text(encoding="utf-8"))
-    changed = 0
+    briefs = {}
     for t in data.get("tickets") or []:
         last = t.get("lastUpdate") or ""
         at = t.get("aiSummaryAt") or ""
@@ -1622,21 +1622,41 @@ def summarize_active(job):
             html = re.sub(r"^```(?:html)?", "", html).strip().rstrip("`")
         if "<" not in html:
             html = f"<p>{_esc(html)}</p>"
-        t["aiSummary"] = html
-        t["aiSummaryAt"] = now_iso()
-        changed += 1
-        if changed >= 8:
+        briefs[key] = {"aiSummary": html, "aiSummaryAt": now_iso(), "lastUpdate": last}
+        if len(briefs) >= 8:
             break
-    if changed:
+    log(f"summarize-active wrote {write_briefs(briefs)} brief(s)")
+
+
+def write_briefs(briefs):
+    """Merge briefs into the CURRENT data.json. Inference takes minutes, so the copy read at the
+    start may be stale; writing it back would undo any fetch that finished meanwhile. A brief
+    is dropped when its ticket moved on since (the next pass writes a fresh one)."""
+    if not briefs:
+        return 0
+    waited = 0
+    while data_writers_busy() and waited < 120:
+        time.sleep(2)
+        waited += 2
+    data_path = INTERN / "data.json"
+    data = json.loads(data_path.read_text(encoding="utf-8"))
+    applied = 0
+    for t in data.get("tickets") or []:
+        b = briefs.get(t.get("key") or "")
+        if b and (t.get("lastUpdate") or "") == b["lastUpdate"]:
+            t["aiSummary"] = b["aiSummary"]
+            t["aiSummaryAt"] = b["aiSummaryAt"]
+            applied += 1
+    if not applied:
+        return 0
+    try:
+        from datafile import write_outputs  # data.json + data.js together; this image has no node
+        write_outputs(data)
+    except ImportError:
         tmp = data_path.with_suffix(".json.ai-tmp")
         tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         tmp.replace(data_path)
-        sync = INTERN / "local-runner" / "sync-datajs.mjs"
-        if sync.is_file():
-            import subprocess
-
-            subprocess.run(["node", str(sync), str(INTERN)], cwd=str(INTERN.parent), capture_output=True)
-    log(f"summarize-active wrote {changed} brief(s)")
+    return applied
 
 
 def pull_model(job):

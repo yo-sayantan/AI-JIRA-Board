@@ -145,7 +145,11 @@ def pr_to_obj(pr, bb_proj=None):
     reviewers = [((r.get("user") or {}).get("displayName")) for r in reviewers_raw if (r.get("user") or {}).get("displayName")]
     # Activity pages are only needed while a PR is still reviewable — merged/declined PRs
     # get fixed stats (saves 1-3 Bitbucket calls per closed PR).
-    ct, cr, open_c = devinfo.pr_comment_stats(project, slug, pid) if slug and pid and not (merged or declined) else (0, 0, 0)
+    if slug and pid and not (merged or declined):
+        with _BB_SLOTS:  # devinfo calls Bitbucket directly, outside bb_get's cap
+            ct, cr, open_c = devinfo.pr_comment_stats(project, slug, pid)
+    else:
+        ct, cr, open_c = 0, 0, 0
     if merged:
         pstate = "merged"
         open_c = 0
@@ -172,9 +176,19 @@ def pr_to_obj(pr, bb_proj=None):
         "reviewers": reviewers,
         "sourceBranch": from_ref.get("displayId"),
         "destinationBranch": to_ref.get("displayId"),
+        "repo": slug or None,
         "merged": merged,
         "mergedAt": iso(pr.get("closedDate")) if merged else None,
     }
+
+
+def _pr_identity(p):
+    """PR numbers are per repository, so the same number in two repos is two different PRs."""
+    m = devinfo._PR_URL_RE.search(p.get("url") or "")
+    if m:
+        proj, slug, pid = m.groups()
+        return (proj.upper(), slug.lower(), pid)
+    return (None, (p.get("repo") or "").lower(), str(p.get("id")))
 
 
 def bb_search_all_prs(key):
@@ -196,23 +210,23 @@ def bb_search_all_prs(key):
         except Exception:
             return []
 
-    found, seen_ids = [], set()
+    found, seen = [], set()
     with ThreadPoolExecutor(max_workers=min(8, len(combos))) as ex:
-        for values in ex.map(list_prs, combos):
+        for (slug, _state), values in zip(combos, ex.map(list_prs, combos)):
             for pr in values:
                 title = (pr.get("title") or "").upper()
                 src = ((pr.get("fromRef") or {}).get("displayId") or "").upper()
                 if key_u in title or key_u in src or key_src in src:
-                    pid = pr.get("id")
-                    if pid not in seen_ids:
-                        seen_ids.add(pid)
+                    ident = (slug, pr.get("id"))
+                    if ident not in seen:
+                        seen.add(ident)
                         obj = pr_to_obj(pr, bb_proj)
                         if obj:
                             found.append(obj)
     return found
 
 
-def code_for(key):
+def code_for(key, prior=None):
     """Branches + PRs for one ticket, or None when nothing could be looked up.
 
     Jira's dev-status index is authoritative and repo-agnostic, so it leads. The Bitbucket
@@ -224,20 +238,26 @@ def code_for(key):
 
     if BB_OK and not prs:
         try:
-            seen = {p.get("id") for p in prs}
             for extra in bb_search_all_prs(key):
-                if extra.get("id") not in seen:
-                    seen.add(extra.get("id"))
-                    prs.append(extra)
-                    if extra.get("sourceBranch"):
-                        branches.append(extra["sourceBranch"])
+                prs.append(extra)
+                if extra.get("sourceBranch"):
+                    branches.append(extra["sourceBranch"])
         except Exception:
             pass
     elif dev is None:
         return None
 
-    if dev is None and not prs:
-        return None
+    if dev is None:
+        if not prs:
+            return None
+        # Without dev-status the key-scan only covered this project's hinted repos, so PRs
+        # seen earlier anywhere else are kept rather than wiped.
+        have = {_pr_identity(p) for p in prs}
+        for old in (prior or {}).get("prs") or []:
+            if _pr_identity(old) not in have:
+                have.add(_pr_identity(old))
+                prs.append(copy.deepcopy(old))
+        branches += (prior or {}).get("branches") or []
 
     branches = list(dict.fromkeys(b for b in branches if b))
     pr = devinfo.pick_primary_pr(prs)
@@ -249,12 +269,21 @@ def code_for(key):
     }
 
 
-def apply_code(ticket, key):
-    """Overwrite a ticket's branch/PR fields from the live lookup; leave them untouched
-    (carried forward from the previous dump) when the lookup could not be made."""
-    info = code_for(key)
+def apply_code(ticket, key, prior=None):
+    """Overwrite a ticket's branch/PR fields from the live lookup. When the lookup could not
+    be made, keep what `prior` had — by default the ticket itself, carried forward from the
+    previous dump."""
+    prior = ticket if prior is None else prior
+    info = code_for(key, prior)
     if info is None:
-        return ticket
+        if prior is ticket:
+            return ticket
+        info = copy.deepcopy({
+            "branches": prior.get("branches") or [],
+            "prs": prior.get("prs") or [],
+            "pr": prior.get("pr") or {"state": "none"},
+            "branch": prior.get("branch"),
+        })
     ticket["branches"] = info["branches"]
     ticket["prs"] = info["prs"]
     ticket["pr"] = info["pr"]
@@ -307,7 +336,7 @@ def extract_links(*texts, prior_conf=None, prior_ext=None):
     return conf, ext
 
 
-def build_basic_subtask(si, parent_key):
+def build_basic_subtask(si, parent_key, prior=None):
     """Sub-task owned by someone else. Deliberately not a full brief (no comments/description),
     but it carries everything needed to judge the work from the board: who owns it, where it
     stands, and its real branches, pull requests and review state. A master ticket is usually
@@ -340,7 +369,7 @@ def build_basic_subtask(si, parent_key):
         "prs": [],
     }
     apply_sprint(sub, sf.get("customfield_10404"))
-    return apply_code(sub, sk)
+    return apply_code(sub, sk, prior or {})
 
 
 def refresh_prs_only(ticket, key):
@@ -400,7 +429,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
     )
 
     # Branches/PRs from Jira dev-status (+ Bitbucket supplement); carry forward on failure.
-    info = code_for(key)
+    info = code_for(key, prior)
     if info is None:
         prs = copy.deepcopy((prior or {}).get("prs") or [])
         branches = copy.deepcopy((prior or {}).get("branches") or [])
@@ -483,13 +512,16 @@ def build_subtasks(parent_key, sub_issues, prior_map, state, pool=None):
     """Sub-tasks from the single batched `parent in (…)` search — the issues already carry
     full FIELDS + changelog, so no per-subtask GETs. Mine → full brief; others → basic.
     With `pool`, sub-tasks build concurrently; order is kept either way."""
+    prior_subs = {s.get("key"): s for s in (prior_map.get(parent_key) or {}).get("subtasks") or []}
+
     def one(si):
         sk = si["key"]
+        prior = prior_map.get(sk) or prior_subs.get(sk)
         if is_mine(si["fields"].get("assignee")):
-            full = build_ticket(si, prior_map.get(sk), state.get(sk))
+            full = build_ticket(si, prior, state.get(sk))
             full["parentKey"] = parent_key
             return full
-        return build_basic_subtask(si, parent_key)
+        return build_basic_subtask(si, parent_key, prior)
 
     if pool is None or len(sub_issues) < 2:
         return [one(si) for si in sub_issues]
@@ -707,50 +739,40 @@ def fetch_issue(key):
 
 
 def _find_prior(data, key):
-    """Locate an existing ticket object by key in tickets[] / nested subtasks / completed[]."""
-    for t in data.get("tickets") or []:
-        if t.get("key") == key:
-            return t, "tickets"
-        for s in t.get("subtasks") or []:
-            if s.get("key") == key:
-                return s, "subtask"
-    for t in data.get("completed") or []:
-        if t.get("key") == key:
-            return t, "completed"
-        for s in t.get("subtasks") or []:
-            if s.get("key") == key:
-                return s, "subtask"
+    """Locate an existing ticket object by key. A sub-task of mine is stored twice — as its own
+    card and under its parent — so top-level rows are searched before any nested copy."""
+    for section, where in (("tickets", "tickets"), ("completed", "completed")):
+        for t in data.get(section) or []:
+            if t.get("key") == key:
+                return t, where
+    for section in ("tickets", "completed"):
+        for t in data.get(section) or []:
+            for s in t.get("subtasks") or []:
+                if s.get("key") == key:
+                    return s, "subtask"
     return None, None
 
 
-def _merge_ticket(data, ticket, prior_where):
-    """Replace the matching entry in place, or append when the key is new to the dump."""
+def _merge_ticket(data, ticket):
+    """Replace EVERY copy of the ticket (its own card and any copy nested under a parent), or
+    append when the key is new to the dump. Updating one copy left the other showing stale data."""
     key = ticket["key"]
-    if prior_where == "tickets":
-        for i, t in enumerate(data["tickets"]):
-            if t.get("key") == key:
-                data["tickets"][i] = ticket
-                return "tickets"
-    if prior_where == "subtask":
-        for t in data.get("tickets") or []:
-            subs = t.get("subtasks") or []
+    hits = set()
+    for section in ("tickets", "completed"):
+        rows = data.get(section) or []
+        for i, row in enumerate(rows):
+            if row.get("key") == key:
+                rows[i] = ticket
+                hits.add(section)
+                continue
+            subs = row.get("subtasks") or []
             for j, s in enumerate(subs):
                 if s.get("key") == key:
                     subs[j] = ticket
-                    t["subtasks"] = subs
-                    return "subtask"
-        for t in data.get("completed") or []:
-            subs = t.get("subtasks") or []
-            for j, s in enumerate(subs):
-                if s.get("key") == key:
-                    subs[j] = ticket
-                    t["subtasks"] = subs
-                    return "subtask"
-    if prior_where == "completed":
-        for i, t in enumerate(data.get("completed") or []):
-            if t.get("key") == key:
-                data["completed"][i] = ticket
-                return "completed"
+                    hits.add("subtask")
+    for where in ("tickets", "completed", "subtask"):
+        if where in hits:
+            return where
     # New to the dump — active board first; done tickets still land in tickets[] so the
     # "recent win" column can show them (same as the daily fetch window).
     data.setdefault("tickets", []).append(ticket)
@@ -839,7 +861,7 @@ def refresh_one(key):
     if parent and parent.get("key") and not ticket.get("parentKey"):
         ticket["parentKey"] = parent["key"]
 
-    where = _merge_ticket(data, ticket, prior_where)
+    where = _merge_ticket(data, ticket)
     data["generatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Touch notes so the dump is visibly fresh even when fields look identical.
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")

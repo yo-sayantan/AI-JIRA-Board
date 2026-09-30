@@ -149,7 +149,15 @@ def iso(value):
     if isinstance(value, (int, float)):
         ts = value / 1000 if value > 1e12 else value
         return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return str(value).replace("+0000", "Z").replace(".000+0000", "Z").replace(".000Z", "Z")
+    # Staleness checks compare these as strings, so every timestamp must share one shape:
+    # UTC, second precision, trailing Z — whatever offset or milliseconds Jira sent.
+    s = str(value).strip()
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z"):
+        try:
+            return datetime.strptime(s, fmt).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            continue
+    return s
 
 
 _STATUS_COLUMNS = (

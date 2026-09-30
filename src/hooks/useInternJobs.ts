@@ -92,8 +92,12 @@ export function useInternJobs({
         if (s?.running) sawRunning = true
         if (s) setProgress((prev) => progressOf(s, prev))
         const timedOut = Date.now() - startedAt > CEILING_MS[job]
-        const sameRun = !runAt || s?.lastRunAt === runAt
-        const done = s && !s.running && sawRunning && sameRun && (s.dataModified !== before || s.lastExit != null)
+        // A run pinned by its own stamp is over once it has an exit code, even when it ended
+        // between two polls and no poll ever saw it running (e.g. refused because a lock was held).
+        const finished = runAt
+          ? s?.lastRunAt === runAt && (s.lastExit != null || (sawRunning && s.dataModified !== before))
+          : sawRunning && (s?.dataModified !== before || s?.lastExit != null)
+        const done = s && !s.running && finished
         if (done) {
           endRun()
           if (s.lastExit != null && s.lastExit !== 0) return void toast(exitMessage(s.lastExit), 'error')

@@ -47,6 +47,8 @@ def _app_config():
             "reports": cfg.get("reports") or {},
             "archive": cfg.get("archive") or {},
             "ai": cfg.get("ai") or {},
+            "schedule": cfg.get("schedule") or {},
+            "refresh": cfg.get("refresh") or {},
         }
     except Exception:
         return None

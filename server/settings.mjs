@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rename, writeFile } from 'node:fs/promises'
 import { PATHS, PROJECT_CONFIG } from './config.mjs'
 
 export const AI_LEVELS = ['none', 'low', 'moderate', 'full']
@@ -30,7 +30,13 @@ const SCHEMA = {
 }
 
 async function readSaved() {
-  return readFile(PATHS.settings, 'utf8').then(JSON.parse, () => ({}))
+  const text = await readFile(PATHS.settings, 'utf8').catch(() => null)
+  if (!text) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    return {}
+  }
 }
 
 /** Central project defaults overlaid by jira-intern/.settings.json. */
@@ -56,11 +62,21 @@ export async function readBoardSettings() {
   return { ...defaults, ...(await readSaved()) }
 }
 
+let pending = Promise.resolve()
+
 /**
  * Validate and persist a partial update. Written to jira-intern/.settings.json rather than the
  * config, which may resolve to the user's personal ~/.ai/config.json.
  */
-export async function updateBoardSettings(patch) {
+export function updateBoardSettings(patch) {
+  // One read-modify-write at a time: overlapping saves would each start from the same file and
+  // the slower one would undo the other.
+  const run = pending.then(() => applyPatch(patch))
+  pending = run.catch(() => {})
+  return run
+}
+
+async function applyPatch(patch) {
   const next = await readSaved()
   for (const [key, value] of Object.entries(patch ?? {})) {
     const check = SCHEMA[key]
@@ -69,6 +85,9 @@ export async function updateBoardSettings(patch) {
     if (!ok) return { error: `bad ${key}` }
     next[key] = ok.value
   }
-  await writeFile(PATHS.settings, JSON.stringify(next, null, 2) + '\n')
+  // Temp file + rename, so the scheduler and the runners never read a half-written file.
+  const tmp = `${PATHS.settings}.${process.pid}.tmp`
+  await writeFile(tmp, JSON.stringify(next, null, 2) + '\n')
+  await rename(tmp, PATHS.settings)
   return { settings: next }
 }

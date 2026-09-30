@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import type {
@@ -17,6 +17,7 @@ import { PrReportPrintDoc } from './PrReportPrint'
 import { ReportHtml } from './ReportHtml'
 import type { AiInternStatus } from '../../lib/runner'
 import { hrefForKey, shareableLinks } from '../../lib/reportLinks'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 
 /**
  * PR Readiness Report overlay — renders a report GENERICALLY from its block kinds, so the
@@ -38,6 +39,8 @@ export function PrReportOverlay({
   internStatus?: AiInternStatus | null
 }) {
   const [tabId, setTabId] = useState<string | null>(null)
+  const panelRef = useRef<HTMLElement>(null)
+  useDialogFocus(!!report, panelRef)
   // Reset to the first tab whenever a different report opens.
   useEffect(() => {
     setTabId(report?.tabs?.[0]?.id ?? null)
@@ -119,7 +122,9 @@ export function PrReportOverlay({
           <PrReportPrintDoc report={report} tabs={tabs} />
 
           <motion.section
-            className="jb-report-screen w-full max-w-[1600px] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
+            ref={panelRef}
+            tabIndex={-1}
+            className="jb-dialog-panel jb-report-screen w-full max-w-[1600px] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
             initial={{ y: 24, scale: 0.98 }}
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 16, scale: 0.98 }}
