@@ -660,6 +660,7 @@ function AiInternControls({
   const [catalog, setCatalog] = useState<AiCatalogModel[]>(aiStatus?.catalog?.models?.length ? aiStatus.catalog.models : fallback)
   const [installed, setInstalled] = useState<string[]>(aiStatus?.installedModels ?? [])
   const [pulling, setPulling] = useState<string | null>(aiStatus?.pulling ?? null)
+  const [pullFailed, setPullFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -724,6 +725,7 @@ function AiInternControls({
 
           <CloudModelPicker settings={settings} onChange={onChange} pricesOpen={pricesOpen} onTogglePrices={onTogglePrices} panelRef={panelRef} />
         ) : (
+          <>
           <LocalModelPicker
             catalog={catalog}
             installed={installed}
@@ -733,13 +735,21 @@ function AiInternControls({
             onSelect={(id) => set('aiLocalModel', id)}
           onDownload={async (m) => {
             setPulling(m.id)
+            setPullFailed(false)
             const ok = await pullAiModel(m.pull, settings.aiUseHostOllama || m.fits === 'host')
             if (!ok) {
               console.error('[jira-ai] pull enqueue failed', m.pull)
               setPulling(null)
+              setPullFailed(true)
             }
           }}
           />
+          {pullFailed && (
+            <p className="mt-1 text-[11px] font-semibold text-red-500" role="alert">
+              Download failed — see AI intern logs
+            </p>
+          )}
+          </>
       )}
     </div>
   )
@@ -904,8 +914,11 @@ function CloudModelPicker({
   const selected = models.find((m) => m.id === settings.aiCloudModel) ?? null
   const efforts = selected?.efforts ?? []
 
+  // Only pre-fill an EMPTY draft (nothing ever saved, or the provider was just switched — both
+  // cases where the user is already choosing). Overwriting a saved model that merely isn't in this
+  // provider's list made the panel show "Unsaved changes" the moment it opened.
   useEffect(() => {
-    if (!models.length || models.some((m) => m.id === settings.aiCloudModel)) return
+    if (!models.length || settings.aiCloudModel !== '') return
     onChange({ ...settings, aiCloudModel: info.prefer(models).id })
   }, [models, info, settings, onChange])
 

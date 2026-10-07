@@ -14,9 +14,16 @@ updates:
         update-types: [minor, patch]
     labels: [dependencies]
 
-  # Docker — the base image in the Dockerfile
+  # Docker — the base image in the board's Dockerfile
   - package-ecosystem: docker
     directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies, docker]
+
+  # Docker — the base image in the AI intern's Dockerfile
+  - package-ecosystem: docker
+    directory: /ai-intern
     schedule:
       interval: weekly
     labels: [dependencies, docker]

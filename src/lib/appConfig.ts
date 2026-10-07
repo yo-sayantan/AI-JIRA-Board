@@ -1,7 +1,7 @@
 // Runtime app config, injected by jira-intern/local-runner/sync-datajs.mjs as
-// window.__JIRA_CONFIG__ (sourced from jira-intern/config.json → "app" section).
+// window.__JIRA_CONFIG__ (sourced from config/jira-board.config.json → "app" section).
 // Everything here has a safe default so the app works with no config at all —
-// changing config.json + re-running any intern job re-themes the app without a rebuild.
+// changing config/jira-board.config.json + re-running any intern job re-themes the app without a rebuild.
 
 export interface AppRuntimeConfig {
   servePort?: number

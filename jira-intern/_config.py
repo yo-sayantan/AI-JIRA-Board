@@ -223,7 +223,11 @@ def identity(intern_dir):
 
 
 def time_zone(intern_dir):
-    """Configured IANA timezone, e.g. Asia/Kolkata. Missing uses TZ, then IST."""
+    """Configured IANA timezone name (app.timeZone, e.g. Asia/Kolkata).
+
+    load_config() has already normalised the legacy "IST" alias to Asia/Kolkata and replaced an
+    unknown zone with UTC, so this only falls back to $TZ, then Asia/Kolkata, when the key is
+    empty — and returns "UTC" if even that is not a zone this host knows."""
     name = str(
         (load_config(intern_dir).get("app") or {}).get("timeZone")
         or os.environ.get("TZ")
@@ -236,8 +240,90 @@ def time_zone(intern_dir):
         return "UTC"
 
 
+def _zone(intern_dir):
+    name = time_zone(intern_dir)
+    return ZoneInfo(name) if name != "UTC" else timezone.utc
+
+
 def now_iso(intern_dir):
     """ISO-8601 now in the configured timezone, including its UTC offset."""
-    name = time_zone(intern_dir)
-    zone = ZoneInfo(name) if name != "UTC" else timezone.utc
-    return datetime.now(zone).isoformat(timespec="seconds")
+    return datetime.now(_zone(intern_dir)).isoformat(timespec="seconds")
+
+
+def today_str(intern_dir):
+    """YYYY-MM-DD in the configured timezone — the day stamp for notes and updateLog entries.
+    (A UTC date flips at 05:30 in Kolkata, so a late-evening fetch used to log tomorrow's date.)"""
+    return datetime.now(_zone(intern_dir)).strftime("%Y-%m-%d")
+
+
+def bitbucket_hints(intern_dir):
+    """Bitbucket key-scan hints from config → bitbucket, keyed by UPPER-CASED Jira project key:
+      {"projectMap": {JIRA_PROJECT: BITBUCKET_PROJECT}, "repoHints": {JIRA_PROJECT: [repo slug, ...]}}
+    Both default to {} — the daily fetch only scans Bitbucket for a ticket whose project appears
+    in BOTH maps; there is no built-in project or repository name anywhere in the code."""
+    bb = load_config(intern_dir).get("bitbucket") or {}
+    project_map = {}
+    for key, value in (bb.get("projectMap") or {}).items():
+        k, v = str(key).strip().upper(), str(value or "").strip()
+        if k and v:
+            project_map[k] = v
+    repo_hints = {}
+    for key, repos in (bb.get("repoHints") or {}).items():
+        k = str(key).strip().upper()
+        slugs = [str(r).strip() for r in (repos or []) if str(r or "").strip()]
+        if k and slugs:
+            repo_hints[k] = list(dict.fromkeys(slugs))
+    return {"projectMap": project_map, "repoHints": repo_hints}
+
+
+def _parse_tenants(raw):
+    """Dynatrace tenants from config ({env: id}) or from the DYNATRACE_TENANTS env var, which
+    may be a JSON object or the shorthand "prod=abc12345,uat=def67890". Empty ids are dropped."""
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return {}
+        if text.startswith("{"):
+            try:
+                raw = json.loads(text)
+            except ValueError:
+                return {}
+        else:
+            raw = dict(
+                (part.split("=", 1) + [""])[:2] for part in text.split(",") if part.strip()
+            )
+    tenants = {}
+    for env_name, tenant in (raw or {}).items():
+        k, v = str(env_name).strip(), str(tenant or "").strip()
+        if k and v:
+            tenants[k] = v
+    return tenants
+
+
+def proof_endpoints(intern_dir):
+    """Optional evidence sources the AI worker may consult — each disabled when empty.
+      checkmarxBase     Checkmarx One tenant base URL — endpoints.checkmarxBase; env
+                        CHECKMARX_BASE_URL (canonical) or CHECKMARX_URL wins
+      checkmarxAuthUrl  full token endpoint when the IAM host differs from the API host —
+                        endpoints.checkmarxAuthUrl; env CHECKMARX_AUTH_URL wins; "" = derive
+      dynatraceTenants  {env name: tenant id} — endpoints.dynatraceTenants; env
+                        DYNATRACE_TENANTS (JSON object or "prod=id,uat=id") wins"""
+    ep = load_config(intern_dir).get("endpoints") or {}
+    env_tenants = os.environ.get("DYNATRACE_TENANTS")
+    return {
+        "checkmarxBase": _strip(
+            os.environ.get("CHECKMARX_BASE_URL") or os.environ.get("CHECKMARX_URL") or ep.get("checkmarxBase")
+        ),
+        "checkmarxAuthUrl": _strip(os.environ.get("CHECKMARX_AUTH_URL") or ep.get("checkmarxAuthUrl")),
+        "dynatraceTenants": _parse_tenants(env_tenants if env_tenants is not None else ep.get("dynatraceTenants")),
+    }
+
+
+def checkmarx_base(intern_dir):
+    """Checkmarx One tenant base URL, or "" when the lookup is disabled."""
+    return proof_endpoints(intern_dir)["checkmarxBase"]
+
+
+def dynatrace_tenants(intern_dir):
+    """{env name: Dynatrace tenant id}; {} when the lookup is disabled."""
+    return proof_endpoints(intern_dir)["dynatraceTenants"]

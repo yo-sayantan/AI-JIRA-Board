@@ -18,6 +18,7 @@ import { fmtDate, fmtDateTime, fmtReportMetadata } from '../../lib/format'
 import { APP_CONFIG } from '../../lib/appConfig'
 import { hrefForKey, shareableLinks } from '../../lib/reportLinks'
 import { ReportHtml } from './ReportHtml'
+import { safeHref } from '../common/ui'
 
 /**
  * The report as a widescreen slide deck — a separate render from the on-screen overlay.
@@ -100,7 +101,7 @@ function planSlides(report: PrReport, tabs: ReportTab[]): Slide[] {
   const used = new Set<ReportBlock>()
   const take = <T extends ReportBlock>(match: (b: ReportBlock, tab: ReportTab) => boolean): T | null => {
     for (const tab of tabs) {
-      for (const b of tab.blocks) {
+      for (const b of tab.blocks ?? []) {
         if (!used.has(b) && match(b, tab)) {
           used.add(b)
           return b as T
@@ -318,7 +319,7 @@ function planSlides(report: PrReport, tabs: ReportTab[]): Slide[] {
     }
   }
 
-  const leftovers = tabs.flatMap((t) => t.blocks.filter((b) => !used.has(b)).map((b) => ({ tab: t, block: b })))
+  const leftovers = tabs.flatMap((t) => (t.blocks ?? []).filter((b) => !used.has(b)).map((b) => ({ tab: t, block: b })))
   for (const group of chunk(leftovers, 2)) {
     add({
       section: 'Additional detail',
@@ -354,7 +355,7 @@ function CoverSlide({ report, agenda = [] }: { report: PrReport; agenda?: Slide[
   const tone = v?.tone ?? 'neutral'
   const c = toneColor(tone)
   const zone = report.timeZone ?? APP_CONFIG.timeZone
-  const ticketHref = hrefForKey(report, report.key)
+  const ticketHref = safeHref(hrefForKey(report, report.key))
   const sections = dedupeSections(agenda)
   return (
     <div className="jb-cover">
@@ -502,7 +503,7 @@ function SummarySlide({
             {facts.map((f) => (
               <div key={f.label}>
                 <dt>{f.label}</dt>
-                <dd>{f.href ? <a href={f.href}>{f.value}</a> : <ReportHtml html={f.value} report={report} inline />}</dd>
+                <dd>{safeHref(f.href) ? <a href={safeHref(f.href)}>{f.value}</a> : <ReportHtml html={f.value} report={report} inline />}</dd>
               </div>
             ))}
           </dl>
@@ -526,7 +527,7 @@ function AppendixSlide({ report, links, runMeta }: { report: PrReport; links: Re
       <div>
         <h3 className="jb-h3">Links</h3>
         <ul className="jb-links">
-          {uniq.map((l) => (
+          {uniq.filter((l) => safeHref(l.href)).map((l) => (
             <li key={l.href}>
               <a href={l.href}>
                 <b>{l.label}</b>
@@ -741,7 +742,7 @@ function KvCard({ block, report }: { block: ReportKvBlock; report: PrReport }) {
           <div key={i}>
             <dt>{kv.label}</dt>
             <dd style={kv.tone && kv.tone !== 'neutral' ? { color: toneColor(kv.tone) } : undefined}>
-              {kv.href ? <a href={kv.href}>{kv.value}</a> : <ReportHtml html={fmtReportMetadata(kv.label, kv.value, zone)} report={report} inline />}
+              {safeHref(kv.href) ? <a href={safeHref(kv.href)}>{kv.value}</a> : <ReportHtml html={fmtReportMetadata(kv.label, kv.value, zone)} report={report} inline />}
             </dd>
           </div>
         ))}
@@ -772,8 +773,9 @@ function Card({ card, report, compact }: { card: ReportCard; report: PrReport; c
       )}
     </>
   )
-  return card.href ? (
-    <a href={card.href} className="jb-card" style={{ borderTopColor: c }}>
+  const cardHref = safeHref(card.href)
+  return cardHref ? (
+    <a href={cardHref} className="jb-card" style={{ borderTopColor: c }}>
       {inner}
     </a>
   ) : (
@@ -852,7 +854,7 @@ function GenericBlock({ block, report }: { block: ReportBlock; report: PrReport 
         <section>
           <h3 className="jb-h3">{block.title ?? 'Links'}</h3>
           <ul className="jb-links">
-            {block.items.map((l) => (
+            {block.items.filter((l) => safeHref(l.href)).map((l) => (
               <li key={l.href}>
                 <a href={l.href}>
                   <b>{l.label}</b>

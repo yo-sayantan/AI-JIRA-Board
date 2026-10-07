@@ -36,8 +36,9 @@ body:
       options:
         - The board UI (rendering, filters, drawer)
         - The fetch / data (jira-intern, empty or wrong tickets)
+        - PR Readiness Reports / AI intern (AI-Intern, AI-Ollama, cloud AI)
         - Setup / secrets / config
-        - Deployment (Docker, ports)
+        - Deployment (Docker, ports, TLS)
     validations:
       required: true
 
@@ -54,7 +55,7 @@ body:
     id: logs
     attributes:
       label: Relevant logs
-      description: e.g. `docker compose logs`, the browser console, or a fetch error. Redact tokens.
+      description: e.g. `docker compose logs`, the newest file in `jira-intern/logs/`, the browser console, or a fetch error. Redact tokens and hostnames.
       render: shell
 
   - type: input

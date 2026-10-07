@@ -1,22 +1,62 @@
-import { open } from 'node:fs/promises'
+import { open, readFile } from 'node:fs/promises'
 import { extname, join, normalize } from 'node:path'
 import { promisify } from 'node:util'
 import { gzip } from 'node:zlib'
 
 const gzipAsync = promisify(gzip)
 
+/** On every response: no MIME sniffing of what we serve, and no Referer leaking out of the board. */
+export const SECURITY_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }
+
 export function json(res, code, obj) {
-  res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(obj))
+  res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...SECURITY_HEADERS }).end(JSON.stringify(obj))
 }
 
-/** Read a request body as text; null when it exceeds `limit` bytes. */
-export async function readBody(req, limit) {
-  let body = ''
-  for await (const chunk of req) {
-    body += chunk
-    if (body.length > limit) return null
+// How far past `limit` readBody keeps draining before it gives up on the connection instead.
+const DRAIN_SLACK = 1024 * 1024
+
+/**
+ * Read a request body as UTF-8 text.
+ *   string    → the complete body
+ *   null      → more than `limit` bytes (declared or received); the surplus is drained, within
+ *               reason, so the caller's 413 still reaches the client instead of a reset
+ *   undefined → the client went away before the body was complete
+ */
+export function readBody(req, limit) {
+  const declared = Number(req.headers['content-length'])
+  if (declared > limit) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const chunks = []
+    let size = 0
+    let settled = false
+    const settle = (value) => {
+      if (settled) return
+      settled = true
+      resolve(value)
+    }
+    req.on('data', (chunk) => {
+      size += chunk.length
+      if (size > limit) {
+        chunks.length = 0
+        settle(null)
+        if (size > limit + DRAIN_SLACK) req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => settle(req.complete ? Buffer.concat(chunks).toString('utf8') : undefined))
+    req.on('error', () => settle(undefined))
+    req.on('close', () => settle(undefined))
+  })
+}
+
+/** Parse a JSON file; `fallback` when it is missing, unreadable, or not valid JSON. */
+export async function readJson(path, fallback = null) {
+  try {
+    return JSON.parse(await readFile(path, 'utf8'))
+  } catch {
+    return fallback
   }
-  return body
 }
 
 const MIME = {
@@ -42,12 +82,18 @@ const MIME = {
 const COMPRESSIBLE = /^(text\/|application\/json|image\/svg)/
 const MAX_CACHED_BYTES = 8 * 1024 * 1024
 
+function notFound(res) {
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', ...SECURITY_HEADERS }).end('Not found')
+}
+
 /**
  * Static files under `root`, limited to the `allow` patterns. The board bundle and data.js are
  * ~0.7 MB each and re-requested on every reload, so each file is kept in memory (plain + gzip)
- * until its mtime changes, and revalidated with an ETag instead of being re-sent.
+ * until its mtime changes, and revalidated with an ETag instead of being re-sent. Paths matching
+ * `noStore` (the Jira data) are sent with Cache-Control: no-store so the browser never writes them
+ * to its disk cache; the ETag still answers a conditional request with a 304.
  */
-export function createStaticHandler(root, allow) {
+export function createStaticHandler(root, allow, { noStore = [] } = {}) {
   const cache = new Map()
 
   async function load(file) {
@@ -75,23 +121,26 @@ export function createStaticHandler(root, allow) {
   }
 
   return async function serveStatic(req, res, path) {
+    // `path` is already percent-decoded. The allow-list is the guard: only paths matching one of
+    // its patterns are ever opened. normalize() has collapsed any `..` segments by the time the
+    // patterns run, so the leading-`..` strip and the root check below are defence in depth only.
     const safe = normalize(path).replace(/^(\.\.([/\\]|$))+/, '')
     const file = join(root, safe)
-    if (!file.startsWith(root) || !allow.some((re) => re.test(safe))) {
-      res.writeHead(404).end('Not found')
-      return
-    }
+    if (!file.startsWith(root) || !allow.some((re) => re.test(safe))) return notFound(res)
     let entry
     try {
       entry = await load(file)
     } catch {
       entry = null
     }
-    if (!entry) {
-      res.writeHead(404).end('Not found')
-      return
+    if (!entry) return notFound(res)
+    const headers = {
+      'Content-Type': entry.type,
+      'Cache-Control': noStore.some((re) => re.test(safe)) ? 'no-store' : 'no-cache',
+      ETag: entry.etag,
+      Vary: 'Accept-Encoding',
+      ...SECURITY_HEADERS,
     }
-    const headers = { 'Content-Type': entry.type, 'Cache-Control': 'no-cache', ETag: entry.etag, Vary: 'Accept-Encoding' }
     if (req.headers['if-none-match'] === entry.etag) {
       res.writeHead(304, headers).end()
       return

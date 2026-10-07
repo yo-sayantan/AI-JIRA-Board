@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import type { Ticket } from '../../types'
 import { COLUMN_META } from '../../lib/columns'
@@ -23,7 +23,7 @@ const celebratedDone = new Set<string>()
 /** dataTransfer type carrying the dragged ticket key; columns accept only this. */
 export const DRAG_MIME = 'application/x-jira-board-ticket'
 
-/** Full branch name, wrapping only after / or _ so a key like FRAUDBUSTE-267 stays intact. */
+/** Full branch name, wrapping only after / or _ so a key like PROJ-267 stays intact. */
 function BranchName({ name }: { name: string }) {
   const parts = name.split(/([/_])/)
   return (
@@ -111,12 +111,12 @@ export const TicketCard = memo(function TicketCard({
       el.removeEventListener('dragend', end)
     }
   }, [draggable, ticket.key])
-  const burst = useMemo(() => {
-    if (ticket.column !== 'done' || quiet) return false
-    if (celebratedDone.has(ticket.key)) return false
-    celebratedDone.add(ticket.key)
-    return true
-  }, [ticket.key, ticket.column, quiet])
+  // Decided once per card instance, then recorded in an effect: StrictMode double-invokes
+  // useMemo (and the second pass would see its own first-pass mutation and skip the burst).
+  const [burst] = useState(() => ticket.column === 'done' && !quiet && !celebratedDone.has(ticket.key))
+  useEffect(() => {
+    if (burst) celebratedDone.add(ticket.key)
+  }, [burst, ticket.key])
 
   const ring = [
     urgent ? `0 0 0 1px ${hexToRgba(prio.color, 0.3)}` : '',

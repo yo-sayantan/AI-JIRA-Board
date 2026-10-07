@@ -52,13 +52,45 @@ validation loudly. An invalid timezone falls back to UTC; legacy `IST` normalize
 ## `user` — who you are
 | key | meaning |
 |---|---|
-| `name` | Your display name exactly as Jira shows it (used to match "assigned to me"). |
-| `accountId` | Your corporate user id (e.g. `ABC1234`). Matched case-insensitively against assignee strings. |
-| `email` | Informational. |
+| `name` | Your display name exactly as Jira shows it. Used for prompt tokens and attribution only — "assigned to me" is resolved by Jira itself (`currentUser()` in JQL), not by matching this string. |
+| `accountId` | Your corporate user id (e.g. `ABC1234`). Decides which sub-tasks are *mine*: compared case-insensitively and **exactly** with the assignee's `name` / `key` / `accountId`; the display name only counts when it contains the id as a whole word. |
+| `email` | Informational, plus an exact match against the assignee's `emailAddress`. |
 
 ## `endpoints` — your company's servers
 `jiraBase`, `confluenceBase`, `bitbucketBase` — base URLs, no trailing slash. Injected into
 every prompt (`{{JIRA_BASE}}` etc.), so ticket/PR links and JQL all point at YOUR instances.
+Env `JIRA_URL` / `CONFLUENCE_URL` / `BITBUCKET_URL` override them for one run or one container.
+
+Optional evidence sources for the AI worker's PR-readiness proof (each disabled while empty):
+
+| key | meaning |
+|---|---|
+| `checkmarxBase` | Checkmarx One tenant base URL, e.g. `https://<tenant>.cxone.cloud`; leave empty to disable the Checkmarx lookup. Env `CHECKMARX_BASE_URL` (canonical; `CHECKMARX_URL` also accepted) overrides. |
+| `checkmarxAuthUrl` | Full Checkmarx One token endpoint; leave empty to derive from `checkmarxBase`. Only needed when the IAM host differs from the API host. Env `CHECKMARX_AUTH_URL` overrides. |
+| `dynatraceTenants` | Dynatrace tenant ids per environment, e.g. `{"prod": "abc12345", "uat": "", "dev": ""}`; leave empty to disable the Dynatrace proof lookup. Env `DYNATRACE_TENANTS` overrides — a JSON object or the shorthand `prod=abc12345,uat=def67890`. |
+
+Python reads these through `_config.proof_endpoints(intern_dir)` →
+`{"checkmarxBase", "checkmarxAuthUrl", "dynatraceTenants"}` (empty ids are dropped).
+
+## `excludeProjects`
+Project keys to DROP from the board AND the completed archive entirely — even if a ticket was
+once assigned to you. The daily fetch and the weekly archive both honour this list.
+
+## `bitbucket` — key-scan hints (optional)
+Jira's dev-status index is the source of truth for branches and PRs in any repository. When
+the Jira↔Bitbucket link is down, the daily fetch can fall back to scanning Bitbucket pull
+requests for the ticket key — but only for projects you list here. Both maps are keyed by
+**Jira project key**:
+
+```json
+"bitbucket": {
+  "projectMap": { "PROJ": "BBPROJ" },
+  "repoHints":  { "PROJ": ["service-api", "service-ui"] }
+}
+```
+`projectMap` → the Bitbucket project that holds the repos; `repoHints` → which repos to scan
+(up to repos × 3 listings per ticket). A project missing from either map is never scanned.
+Both default to `{}` — there is no built-in project or repository name anywhere in the code.
 
 ## `connector` — which agent CLI provides the MCP servers
 `active` selects the profile: `"cursor"` (default), `"codex"`, or `"claude"` — add your own
@@ -119,7 +151,7 @@ in `jira-intern/.settings.json` override these defaults. The local model catalog
 
 Models: `models.report` picks the connector-agent model (`"auto"` = connector default; env
 `REPORT_MODEL=` overrides). `timeouts.reportSec` (default 600) bounds one enrichment run.
-Settings AI usage **None** skips report AI; otherwise enrichment is queued for JIRA-AI-Intern.
+Settings AI usage **None** skips report AI; otherwise enrichment is queued for the AI-Intern container.
 Reports are written to `jira-intern/reports/` — git-ignored; they contain real ticket and PR content.
 
 `defaultWindowDays` and `presetWindowDays` control the report menu's custom-date default and
@@ -148,13 +180,38 @@ Defaults for Settings → Jobs. A choice saved in the app wins over this file.
 `dailySec` (default 1800), `weeklySec` (7200, env `TIMEOUT_SEC` overrides), `summarySec` (600),
 `refreshSec` (600).
 
+## Environment variables read by the Python fetch scripts
+Set these in the shell, the Docker environment, or the connector's secrets file (loaded by
+`load_env()` before the first request). Config keys they override are in brackets.
+
+| variable | meaning |
+|---|---|
+| `JIRA_PERSONAL_TOKEN` | Jira PAT (required). `BITBUCKET_PAT` (or `ATLASSIAN_TOKEN`) for Bitbucket. |
+| `JIRA_CA_BUNDLE` | Path to your corporate root-CA bundle (PEM). TLS verification is **on** by default; an on-prem Jira/Bitbucket behind a private CA fails with a certificate error until this points at the CA that signed it (export it from your browser/keychain, or ask IT for the PEM). |
+| `JIRA_INSECURE_TLS` | `1` disables TLS verification for Jira and Bitbucket — **last resort only**: the bearer PAT then travels over an unverified channel. Every run announces it with `WARN: TLS verification disabled (JIRA_INSECURE_TLS=1)` on stderr. Prefer `JIRA_CA_BUNDLE`. |
+| `JIRA_URL` / `CONFLUENCE_URL` / `BITBUCKET_URL` | Override `endpoints.*Base` for one run or container. |
+| `CHECKMARX_BASE_URL` (or `CHECKMARX_URL`), `CHECKMARX_AUTH_URL`, `DYNATRACE_TENANTS` | Override the optional proof endpoints — see `endpoints` above. |
+| `AI_CONFIG_FILE` | Path of the personal override instead of `~/.ai/config.json`. |
+| `AGENT_SECRETS` | Path of the secrets env file instead of `connector.<active>.secretsFile`. |
+| `REFRESH_WORKERS` | Parallel ticket builds in `daily_fetch.py` (1–16) [`refresh.workers`, Settings → Parallel refresh]. |
+| `COMPLETED_WORKERS` | Parallel ticket builds in `completed_archive.py` [`archive.workers`, Settings]. |
+| `COMPLETED_MAX_FETCH` | Max tickets rebuilt per archive run; the rest stay as cached [`archive.maxFetch`]. |
+| `ARCHIVE_SCOPE` | `all` (default) rebuilds the whole archive; `year`, `since` or `key` rebuild a slice and leave other rows untouched. |
+| `ARCHIVE_YEAR` / `ARCHIVE_SINCE` / `ARCHIVE_KEY` | The slice for `ARCHIVE_SCOPE`: a `YYYY` year, a `YYYY-MM-DD` lower bound, or one issue key (`PROJ-123`). An invalid value falls back to `all`. |
+| `REFRESH_ON_START` | Fetch active tickets when the container starts [`refresh.onStart`]. |
+| `TIMEOUT_SEC` | Ceiling for the weekly archive run [`timeouts.weeklySec`]. |
+
+Writers of `data.json` / `data.js` (`daily_fetch.py`, `completed_archive.py`, single-ticket
+refresh) also take an advisory `flock` on `jira-intern/.data.lock`, so runs started from
+different containers or launchers never interleave a read-modify-write.
+
 ## `app` — UI/runtime settings (picked up without a rebuild)
 | key | meaning |
 |---|---|
 | `servePort` | Port for `npm run serve` (env `PORT` overrides). |
 | `requiredApprovals` | How many PR approvals count as "approved" (badge + pips). |
-| `timeZone` | IANA timezone used for report generation, enrichment, UI, and PDF timestamps. |
-| `doneBoardDays` | Days a newly Done ticket remains on the active board. |
+| `timeZone` | IANA timezone used for report generation, enrichment, UI, PDF timestamps and the day stamps in `notes[]` / `updateLog`. |
+| `doneBoardDays` | Days a newly Done ticket remains on the active board (default 5; the fetch keeps done tickets for 10 days so none drops out before the archive has it). |
 | `polling` | Status poll intervals: `aiIdleMs` idle, `reportsBusyMs` while work is in flight, `aiBusyMs` during a model download. |
 | `progress` | Header progress phase percentages. |
 | `settingsDefaults` | Appearance, notification time and count, and feature defaults before saved browser choices. |

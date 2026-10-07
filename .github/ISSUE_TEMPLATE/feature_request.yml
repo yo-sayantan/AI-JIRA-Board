@@ -23,6 +23,7 @@ body:
       options:
         - The board UI
         - The fetch / data pipeline (jira-intern)
+        - PR Readiness Reports / AI intern
         - Setup / config / docs
         - Deployment
         - Not sure

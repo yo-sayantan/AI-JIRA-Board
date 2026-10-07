@@ -68,7 +68,8 @@ export function releaseEnvOf(t: { title?: string | null }): { label: string; col
   if (/\bprod(?:uction)?\b/i.test(s)) return { label: 'Prod', color: '#ef4444' }
   if (/\bdemo\b/i.test(s)) return { label: 'Demo', color: '#f59e0b' }
   // "Stage", not "Staging" — the label sits in a fixed-width column next to Prod and Demo.
-  if (/\bsta?g(?:e|ing)?\b/i.test(s)) return { label: 'Stage', color: '#0ea5e9' }
+  // Only the real spellings count: the old `sta?g` form also matched the word "SG".
+  if (/\b(?:stg|stage|staging)\b/i.test(s)) return { label: 'Stage', color: '#0ea5e9' }
   return null
 }
 
@@ -180,16 +181,18 @@ export function branchStatusMeta(state: PrState): { label: string; color: string
 }
 
 // ── Dates / relative time ──────────────────────────────────────────────────
-/** Is `assignee` me? Matches the dump's user by accountId (preferred) or name. */
+/**
+ * Is `assignee` me? An exact, case-insensitive, trimmed match on the dump's user by accountId,
+ * name or email. Exact on purpose: a substring test let a colleague called "Ann" match "Joanne".
+ */
 export function isAssignedToMe(
   assignee?: string | null,
-  user?: { name?: string | null; accountId?: string | null } | null,
+  user?: { name?: string | null; accountId?: string | null; email?: string | null } | null,
 ): boolean {
-  if (!assignee) return false
-  const a = assignee.toLowerCase()
-  const id = user?.accountId?.toLowerCase()
-  const name = user?.name?.toLowerCase()
-  return (!!id && a.includes(id)) || (!!name && a.includes(name))
+  const a = assignee?.trim().toLowerCase()
+  if (!a || !user) return false
+  const same = (v?: string | null) => !!v && v.trim().toLowerCase() === a
+  return same(user.accountId) || same(user.name) || same(user.email)
 }
 
 export function projectOf(key?: string | null): string {
@@ -214,38 +217,33 @@ function parseDate(v?: string | null): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
+/**
+ * Intl.DateTimeFormat for the configured zone, falling back to the browser's zone when the
+ * configured one is not an IANA name (config.json is hand-edited; "PST" or a typo must not take
+ * the whole board down). Every zone-aware formatter below goes through here.
+ */
+export function dtf(locale: string | undefined, options: Intl.DateTimeFormatOptions, timeZone?: string | null): Intl.DateTimeFormat {
+  const zone = timeZone ?? APP_CONFIG.timeZone
+  if (zone) {
+    try {
+      return new Intl.DateTimeFormat(locale, { ...options, timeZone: zone })
+    } catch {
+      /* unknown zone — fall through to the local one */
+    }
+  }
+  return new Intl.DateTimeFormat(locale, options)
+}
+
 export function fmtDate(v?: string | null, timeZone?: string | null): string {
   const d = parseDate(v)
   if (!d) return v ?? '—'
-  const zone = timeZone ?? APP_CONFIG.timeZone
-  try {
-    return d.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      ...(zone ? { timeZone: zone } : {}),
-    })
-  } catch {
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-  }
+  return dtf(undefined, { year: 'numeric', month: 'short', day: 'numeric' }, timeZone).format(d)
 }
 
 export function fmtDateTime(v?: string | null, timeZone?: string | null): string {
   const d = parseDate(v)
   if (!d) return v ?? '—'
-  const zone = timeZone ?? APP_CONFIG.timeZone
-  try {
-    return d.toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      ...(zone ? { timeZone: zone } : {}),
-    })
-  } catch {
-    return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  }
+  return dtf(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }, timeZone).format(d)
 }
 
 /** Humanise the two ISO timestamps stored in the report's Run metadata block. */
@@ -259,26 +257,18 @@ export function fmtReportMetadata(label: string, value: string, timeZone?: strin
 }
 
 /** YYYY-MM-DD for N calendar days ago in the configured timezone. */
-export function dateInputDaysAgo(days: number, timeZone?: string | null): string {
-  const zone = timeZone ?? APP_CONFIG.timeZone
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: zone || undefined,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  const parts = Object.fromEntries(formatter.formatToParts(new Date()).map((p) => [p.type, p.value]))
+export function dateInputDaysAgo(days: number, timeZone?: string | null, now: Date = new Date()): string {
+  const formatter = dtf('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }, timeZone)
+  const parts = Object.fromEntries(formatter.formatToParts(now).map((p) => [p.type, p.value]))
   const utc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day) - days)
   return new Date(utc).toISOString().slice(0, 10)
 }
 
-export function currentYear(timeZone?: string | null): number {
-  const zone = timeZone ?? APP_CONFIG.timeZone
-  return Number(
-    new Intl.DateTimeFormat('en-US', { timeZone: zone || undefined, year: 'numeric' })
-      .formatToParts(new Date())
-      .find((p) => p.type === 'year')?.value ?? new Date().getFullYear(),
-  )
+export function currentYear(timeZone?: string | null, now: Date = new Date()): number {
+  const year = dtf('en-US', { year: 'numeric' }, timeZone)
+    .formatToParts(now)
+    .find((p) => p.type === 'year')?.value
+  return Number(year ?? now.getFullYear())
 }
 
 /** "3d ago", "2h ago", "just now". `now` is injected so it stays deterministic per render. */
@@ -302,7 +292,15 @@ export function relTime(v?: string | null, now: number = Date.now()): string {
 export function yearOf(v?: string | null): string {
   const d = parseDate(v)
   if (!d) return 'Undated'
-  return new Intl.DateTimeFormat('en-US', { timeZone: APP_CONFIG.timeZone || undefined, year: 'numeric' }).format(d)
+  return dtf('en-US', { year: 'numeric' }).format(d)
+}
+
+/** Full month name ("November") in the same configured zone `yearOf` uses, so a ticket closed late on
+ *  the 30th never lands under one year and the next month. Empty when the date is unusable. */
+export function monthOf(v?: string | null): string {
+  const d = parseDate(v)
+  if (!d) return ''
+  return dtf(undefined, { month: 'long' }).format(d)
 }
 
 /**
@@ -483,7 +481,7 @@ export function sprintStatus(
 
 /**
  * The ticket's sprint IF that sprint hasn't started yet — work that is *queued* (next
- * sprint, or a grooming bucket like "FraudBus READY"), not committed to the current one.
+ * sprint, or a grooming bucket like "Team READY"), not committed to the current one.
  *
  * Jira's own `state` is authoritative: a sprint nobody has clicked "Start" on stays
  * `future` even once its planned start date has slipped by, and a READY bucket carries

@@ -20,6 +20,7 @@ an enriched file that changed anything derived. Nothing here touches the network
   pr_report.py fingerprint <KEY>
 """
 import hashlib
+import html
 import json
 import os
 import re
@@ -51,7 +52,9 @@ def now_iso():
 
 
 def esc(s):
-    return str(s if s is not None else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    """HTML-escape for text AND attribute values — this lands inside href="…" too, so quotes
+    must be escaped as well."""
+    return html.escape(str(s if s is not None else ""), quote=True)
 
 
 def load_data():
@@ -145,10 +148,13 @@ def write_json_atomic(path, obj):
 
 
 def parse_iso(s):
+    """Aware datetime (UTC assumed for a naive stamp) so subtracting from an aware `now`
+    never raises; None for anything unparsable."""
     try:
-        return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
     except Exception:
         return None
+    return d if d.tzinfo is not None else d.replace(tzinfo=timezone.utc)
 
 
 def days_since(iso, now=None):

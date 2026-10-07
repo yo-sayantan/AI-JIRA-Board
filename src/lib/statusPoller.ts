@@ -22,13 +22,27 @@ function schedule(): void {
 
 /** Fetch now (joining a request already in flight) and notify every subscriber. */
 export function pollNow(): Promise<InternStatus | null> {
-  inflight ??= getInternStatus().then((status) => {
-    inflight = null
-    lastAt = Date.now()
-    for (const listener of [...rates.keys()]) if (rates.has(listener)) listener(status)
-    schedule()
-    return status
-  })
+  inflight ??= getInternStatus()
+    .catch(() => null)
+    .then((status) => {
+      inflight = null
+      lastAt = Date.now()
+      // One listener throwing must not starve the others or stop the poll loop — the next tick is
+      // scheduled no matter what happened in between.
+      try {
+        for (const listener of [...rates.keys()]) {
+          if (!rates.has(listener)) continue
+          try {
+            listener(status)
+          } catch (err) {
+            console.error('[jira-board] status listener failed', err)
+          }
+        }
+      } finally {
+        schedule()
+      }
+      return status
+    })
   return inflight
 }
 

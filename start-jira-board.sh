@@ -8,6 +8,7 @@
 # Usage:
 #   ./start-jira-board.sh
 #   PORT=4321 ./start-jira-board.sh
+#   PULL=1 ./start-jira-board.sh          # also re-pull the base images (slow on a throttled link)
 # Or double-click the Desktop shortcut (Start My Jira Board.command).
 set -euo pipefail
 
@@ -81,15 +82,25 @@ free_port() {
     ok "Stopped other container(s) publishing port ${PORT}"
   fi
 
-  # Host-side process (e.g. a leftover `node serve.mjs`) must not steal the port either.
+  # Host-side process (e.g. a leftover `node serve.mjs`) must not steal the port either —
+  # but only OUR server is fair game. Anything else on the port is the user's; stop and say so.
   if command -v lsof >/dev/null 2>&1; then
-    local pids
-    pids="$(lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN -t 2>/dev/null || true)"
-    if [ -n "$pids" ]; then
-      # shellcheck disable=SC2086
-      kill $pids 2>/dev/null || true
+    local pid args killed=0
+    for pid in $(lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN -t 2>/dev/null || true); do
+      args="$(ps -o args= -p "$pid" 2>/dev/null || true)"
+      case "$args" in
+        *serve.mjs*)
+          kill "$pid" 2>/dev/null || true
+          killed=1
+          ;;
+        *)
+          die "Port ${PORT} is in use by PID ${pid} (${args:-unknown process}), which is not this board's server. Stop it or run with another PORT."
+          ;;
+      esac
+    done
+    if [ "$killed" = "1" ]; then
       sleep 1
-      ok "Freed host process(es) listening on ${PORT}"
+      ok "Stopped a leftover host 'node serve.mjs' on ${PORT}"
     fi
   fi
 }
@@ -122,7 +133,10 @@ deploy() {
   # No --pull: Docker Hub is painfully slow from this VM and the base image is cached.
   export PORT
   docker compose -p jira-board down --remove-orphans >/dev/null 2>&1 || true
-  docker compose build --build-arg DIST_SOURCE="$DIST_SOURCE" 2>&1 | tail -n 20
+  # No --pull by default: Docker Hub is slow from here and the cached base image is fine.
+  # PULL=1 forces a re-pull of the base images.
+  # shellcheck disable=SC2086
+  docker compose build ${PULL:+--pull} --build-arg DIST_SOURCE="$DIST_SOURCE" 2>&1 | tail -n 20
   ok "Image built (dist: ${DIST_SOURCE})"
 
   log "Deploying container '${CONTAINER_NAME}' on port ${PORT}…"

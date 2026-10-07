@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # JIRA Intern — PR READINESS REPORT for ONE ticket.
 #
 #   bash pr-report.sh <KEY> [--if-needed] [--no-ai]
@@ -44,7 +44,9 @@ fi
 # sync-reports.mjs). Always cleared on exit.
 python3 "$PY" status-add "$KEY" "$$" >/dev/null 2>&1 || true
 cleanup() { python3 "$PY" status-remove "$KEY" >/dev/null 2>&1 || true; node "$HERE/sync-reports.mjs" "$INTERN_DIR" >>"$LOG" 2>&1 || true; }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # ── 1. Deterministic base ─────────────────────────────────────────────────────
 echo "$(date): building deterministic base report for $KEY" | tee -a "$LOG"
@@ -64,6 +66,6 @@ echo "$(date): enqueueing $KEY for JIRA-AI-Intern (level=${REPORTS_AI_LEVEL:-mod
 python3 "$INTERN_DIR/ai_queue.py" enqueue --type enrich-report --key "$KEY" --level "${REPORTS_AI_LEVEL:-moderate}" >>"$LOG" 2>&1 || {
   echo "$(date): could not enqueue AI job — deterministic report kept" | tee -a "$LOG"; exit 0
 }
-ls -1t "$LOG_DIR"/report-*.log 2>/dev/null | tail -n +61 | xargs rm -f 2>/dev/null || true
+rotate_logs report 60
 echo "$(date): report for $KEY base written; AI intern will enrich it — log: $LOG" | tee -a "$LOG"
 exit 0

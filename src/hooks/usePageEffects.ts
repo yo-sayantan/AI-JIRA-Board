@@ -17,8 +17,8 @@ export function useShortcuts(enabled: boolean, onRefresh: () => void): void {
   useEffect(() => {
     if (!enabled) return
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.repeat || e.isComposing) return
+      if ((e.target as HTMLElement | null)?.closest?.('input,textarea,select,[contenteditable="true"],[role="dialog"]')) return
       if (e.key === '/') {
         e.preventDefault()
         document.getElementById('jb-search')?.focus()

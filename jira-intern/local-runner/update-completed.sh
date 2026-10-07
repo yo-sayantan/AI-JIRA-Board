@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Weekly "Completed archive" agent — the SLOW job: fetches EVERY closed ticket I've ever owned, with real
 # Bitbucket branches + all PRs, caches each, and MERGES them into data.json's completed[] (leaving the active
 # tickets[] alone). Keep it SEPARATE from the daily run-intern.sh and schedule it weekly.
@@ -18,12 +18,15 @@ mkdir -p "$INTERN_DIR/cache"
 
 # This long job reads data.json and writes it back; starting it while the daily run or a ticket
 # refresh is mid-flight would revert their fresh tickets[] (lost update).
-refuse_if_locked "this archive run" "$INTERN_DIR/.intern.lock" "$INTERN_DIR/.refresh.lock"
-
 # Its own lock (so the board/served mode can tell the archive job is running, distinct from the daily run).
 LOCK="$INTERN_DIR/.completed.lock"
-echo "$$ $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$LOCK"
-trap 'rm -f "$LOCK"' EXIT INT TERM
+refuse_if_locked "this archive run" "$LOCK" "$INTERN_DIR/.intern.lock" "$INTERN_DIR/.refresh.lock"
+acquire_lock_or_exit "this archive run" "$LOCK"
+# INT/TERM exit explicitly (130/143) so an interrupted fast path never falls through to the
+# LLM fallback; the EXIT trap then removes the lock.
+trap 'rm -f "$LOCK"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 if [ -n "$FRESH" ]; then
   rm -f "$INTERN_DIR/cache/"*.json 2>/dev/null
@@ -38,6 +41,7 @@ SECS="${TIMEOUT_SEC:-$TIMEOUT_WEEKLY}"
 # (per-ticket cache + merge completed[] only) in a fraction of the agent's time.
 # The LLM agent below is the fallback. Debug the agent path with FORCE_AGENT=1.
 FAST_OK=""
+PARTIAL=""
 if [ -z "$FORCE_AGENT" ] && command -v python3 >/dev/null 2>&1 && [ -f "$INTERN_DIR/completed_archive.py" ]; then
   echo "$(date): fast path — deterministic completed_archive.py (LLM agent is the fallback)…" | tee -a "$LOG"
   run_with_timeout "$SECS" python3 "$INTERN_DIR/completed_archive.py" >> "$LOG" 2>&1
@@ -46,6 +50,18 @@ if [ -z "$FORCE_AGENT" ] && command -v python3 >/dev/null 2>&1 && [ -f "$INTERN_
     FAST_OK=1
     code=0
     echo "$(date): fast path OK — skipping the agent run" | tee -a "$LOG"
+  elif [ "$fast_code" = "4" ]; then
+    # Partial: some tickets failed to rebuild but their previous rows were kept and the rest
+    # were merged. Nothing for the agent to add — log it and finish normally.
+    FAST_OK=1
+    PARTIAL=1
+    code=0
+    echo "$(date): WARN fast path finished with failed tickets (see the JSON summary above) — previous rows kept, no agent fallback" | tee -a "$LOG"
+  elif [ "$fast_code" = "2" ]; then
+    # Configuration error (no Jira token). The agent would hit the same wall.
+    FAST_OK=1
+    code=2
+    echo "$(date): fast path refused (exit 2: configuration — no Jira token?) — not falling back" | tee -a "$LOG"
   else
     echo "$(date): fast path failed (exit $fast_code) — falling back to the $AGENT_CONNECTOR agent" | tee -a "$LOG"
   fi
@@ -72,7 +88,8 @@ sync_datajs
 
 # One-line result for a Mac Shortcut notification (must be the last stdout line).
 case "$code" in
-  0)   RESULT="✅ Completed archive updated" ;;
+  0)   if [ "${PARTIAL:-}" = "1" ]; then RESULT="⚠️ Completed archive updated — some tickets kept their previous row (see log)"; else RESULT="✅ Completed archive updated"; fi ;;
+  2)   RESULT="⚠️ Completed archive skipped: no Jira token configured" ;;
   124) RESULT="⏱️ Completed archive timed out (resumes next run)" ;;
   127) RESULT="⚠️ Completed archive: agent CLI not found" ;;
   *)   RESULT="❌ Completed archive failed (exit $code)" ;;

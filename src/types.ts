@@ -147,7 +147,7 @@ export interface CompletedTicket {
   title: string
   type?: string | null
   priority?: string | null
-  /** Project key prefix, e.g. "FIDM". Derived from key if absent. */
+  /** Project key prefix, e.g. "PROJ". Derived from key if absent. */
   project?: string | null
   status?: string | null // current status: Done / Closed / Resolved
   /** Set when this row is a sub-task archived standalone (its parent may belong to someone else). */

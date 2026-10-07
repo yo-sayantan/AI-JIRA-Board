@@ -59,7 +59,9 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
     label: 'Done',
     accent: '#22c55e',
     emoji: '✅',
-    statuses: ['done', 'completed', 'closed', 'resolved', 'shipped', 'released'],
+    // Mirrors jira-intern/_jira.py `_STATUS_COLUMNS`: a ticket closed as won't-fix or cancelled is
+    // finished work, not a card stuck in progress.
+    statuses: ['done', 'completed', 'closed', 'resolved', 'shipped', 'released', "won't fix", 'wont fix', 'won’t fix', 'cancelled', 'canceled', 'rejected'],
   },
 ]
 
@@ -105,8 +107,12 @@ export function mapStatusToColumn(status: string | null | undefined): ColumnKey 
   for (const col of BOARD_COLUMNS) {
     if (col.statuses.some((x) => s === x)) return col.key
   }
-  for (const col of BOARD_COLUMNS) {
-    if (col.statuses.some((x) => hasWord(x))) return col.key
+  // Word fallback in the SAME order as the Python intern (qa → review → progress), so "QA In
+  // Progress" lands in QA on both sides instead of matching "in progress" first here.
+  for (const key of WORD_FALLBACK_ORDER) {
+    if (COLUMN_META[key].statuses.some((x) => hasWord(x))) return key
   }
   return 'todo'
 }
+
+const WORD_FALLBACK_ORDER: ColumnKey[] = ['qa', 'rev', 'prog', 'todo', 'done']

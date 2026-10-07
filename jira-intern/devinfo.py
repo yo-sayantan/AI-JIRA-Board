@@ -16,6 +16,7 @@ Those calls address the PR by its exact project/repo/id taken from the dev-statu
 URL, so there is no repo guessing anywhere in this module.
 """
 import re
+import sys
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -36,7 +37,9 @@ def resolve_issue_ids(keys):
             )
             for issue in jira_get("/rest/api/2/search?" + q, timeout=90).get("issues", []):
                 ids[issue["key"]] = issue["id"]
-        except Exception:
+        except Exception as e:
+            # Degrade: these keys get no dev info this run (callers keep their cached PRs).
+            sys.stderr.write(f"WARN dev-status id lookup ({len(chunk)} keys): {e}\n")
             continue
     return ids
 
@@ -58,8 +61,8 @@ def pr_comment_stats(proj, slug, pid):
             if data.get("isLastPage", True):
                 break
             start += data.get("size", 100)
-    except Exception:
-        pass
+    except Exception as e:
+        sys.stderr.write(f"WARN bitbucket PR comments {proj}/{slug}#{pid}: {e}\n")
     return total, resolved, max(0, total - resolved)
 
 
@@ -67,7 +70,8 @@ def _needs_work(proj, slug, pid):
     try:
         data = bb_get(f"/projects/{proj}/repos/{slug}/pull-requests/{pid}", timeout=30)
         return any(r.get("status") == "NEEDS_WORK" for r in data.get("reviewers") or [])
-    except Exception:
+    except Exception as e:
+        sys.stderr.write(f"WARN bitbucket PR reviewers {proj}/{slug}#{pid}: {e}\n")
         return False
 
 
@@ -135,29 +139,31 @@ def pick_primary_pr(prs):
 
 
 def fetch_one(issue_id, enrich_open=True):
-    """Branches + PRs for one issue id. Returns None when the call fails, so callers can
-    tell "Jira says there is no code" apart from "we could not ask"."""
+    """Branches + PRs for one issue id. Returns None when the call fails OR the payload cannot
+    be read, so callers can tell "Jira says there is no code" apart from "we could not ask" —
+    and one malformed dev-status answer never takes down a whole batch in fetch_many."""
     try:
         data = jira_get(
             f"/rest/dev-status/latest/issue/detail?issueId={issue_id}"
             f"&applicationType=stash&dataType=pullrequest",
             timeout=45,
         )
-    except Exception:
+        detail = (data.get("detail") or [{}])[0] or {}
+        prs = [_to_pr(p, enrich_open) for p in detail.get("pullRequests") or [] if isinstance(p, dict)]
+        prs.sort(key=lambda p: (p.get("updatedAt") or ""), reverse=True)
+
+        branches = [b.get("name") for b in detail.get("branches") or [] if isinstance(b, dict) and b.get("name")]
+        for p in prs:
+            if p.get("sourceBranch"):
+                branches.append(p["sourceBranch"])
+        branches = list(dict.fromkeys(branches))
+
+        pr = pick_primary_pr(prs)
+        branch = pr.get("sourceBranch") or (branches[0] if branches else None)
+        return {"branches": branches, "prs": prs, "branch": branch, "pr": pr}
+    except Exception as e:
+        sys.stderr.write(f"WARN dev-status issue {issue_id}: {e}\n")
         return None
-    detail = (data.get("detail") or [{}])[0]
-    prs = [_to_pr(p, enrich_open) for p in detail.get("pullRequests") or []]
-    prs.sort(key=lambda p: (p.get("updatedAt") or ""), reverse=True)
-
-    branches = [b.get("name") for b in detail.get("branches") or [] if b.get("name")]
-    for p in prs:
-        if p.get("sourceBranch"):
-            branches.append(p["sourceBranch"])
-    branches = list(dict.fromkeys(branches))
-
-    pr = pick_primary_pr(prs)
-    branch = pr.get("sourceBranch") or (branches[0] if branches else None)
-    return {"branches": branches, "prs": prs, "branch": branch, "pr": pr}
 
 
 def fetch_many(keys, ids=None, workers=10, enrich_open=True, on_progress=None):

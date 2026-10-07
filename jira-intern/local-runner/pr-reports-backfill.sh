@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # JIRA Intern — PR READINESS REPORTS for EVERY ticket that has a pull request.
 #
 #   bash pr-reports-backfill.sh                 # all tickets of config.reports.year (default 2026)
@@ -45,8 +45,10 @@ fi
 # One backfill at a time (the reports share the agent + the status file).
 LOCK="$INTERN_DIR/.report.lock"
 refuse_if_locked "this backfill" "$LOCK"
-echo "$$ $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$LOCK"
-trap 'rm -f "$LOCK"' EXIT INT TERM
+acquire_lock_or_exit "this backfill" "$LOCK"
+trap 'rm -f "$LOCK"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 ARGS=(needs-report)
 [ -n "$YEAR" ] && ARGS+=(--year "$YEAR")
@@ -54,6 +56,11 @@ ARGS=(needs-report)
 [ "$NEEDS_AI" = "1" ] && ARGS+=(--needs-ai)
 [ -n "$MAX" ] && ARGS+=(--max "$MAX")
 KEYS="$(python3 "$PY" "${ARGS[@]}" 2>>"$LOG")"
+needs_code=$?
+if [ "$needs_code" != "0" ]; then
+  echo "$(date): ERROR pr_report.py needs-report failed (exit $needs_code) — see $LOG; not generating anything" | tee -a "$LOG"
+  exit 1
+fi
 if [ -z "$KEYS" ]; then
   echo "$(date): every ${YEAR:-any-year} ticket with a PR already has a current report" | tee -a "$LOG"; exit 0
 fi
@@ -69,6 +76,6 @@ while IFS= read -r KEY; do
 done <<< "$KEYS"
 
 node "$HERE/sync-reports.mjs" "$INTERN_DIR" >>"$LOG" 2>&1 || true
-ls -1t "$LOG_DIR"/reports-backfill-*.log 2>/dev/null | tail -n +21 | xargs rm -f 2>/dev/null || true
+rotate_logs reports-backfill 20
 echo "$(date): backfill done — $OK ok, $FAIL failed — log: $LOG" | tee -a "$LOG"
 [ "$FAIL" = "0" ]
