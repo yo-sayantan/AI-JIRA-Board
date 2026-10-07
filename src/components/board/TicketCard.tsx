@@ -101,7 +101,10 @@ export const TicketCard = memo(function TicketCard({
       e.dataTransfer.setData(DRAG_MIME, ticket.key)
       e.dataTransfer.setData('text/plain', ticket.key)
       e.dataTransfer.effectAllowed = 'move'
-      el.classList.add('ticket-card-dragging')
+      // The browser snapshots the card for the drag image first; then the card itself leaves
+      // its column, so the drag reads as picking the whole card up. Removing it from the DOM
+      // would cancel the drag, so it only turns invisible.
+      requestAnimationFrame(() => el.classList.add('ticket-card-dragging'))
     }
     const end = () => el.classList.remove('ticket-card-dragging')
     el.addEventListener('dragstart', start)
@@ -138,6 +141,7 @@ export const TicketCard = memo(function TicketCard({
     // are valid (a <button> may not contain interactive descendants). Enter/Space open it.
     <motion.div
       ref={cardRef}
+      layout="position"
       draggable={draggable || undefined}
       role="button"
       tabIndex={0}
@@ -156,6 +160,7 @@ export const TicketCard = memo(function TicketCard({
       transition={{
         opacity: { duration: 0.28, ease: 'easeOut' },
         y: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+        layout: { type: 'spring', stiffness: 380, damping: 34 },
         boxShadow: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
         scale: { duration: 0.16, ease: 'easeOut' },
       }}

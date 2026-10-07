@@ -42,7 +42,7 @@ export default function App() {
   const { toasts, toast, dismiss } = useToasts(settings.toastSeconds, settings.toastMax)
   const { data, source, userArchived, reload, archive, restoreArchived } = useBoardData(served, (m) => toast(m, 'error'))
   const jobs = useInternJobs({ served, toast, dismiss, reload })
-  const moves = useTicketMoves({ served, toast, reload })
+  const moves = useTicketMoves({ served, toast, refreshTicket: jobs.refreshTicket })
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [completedOpen, setCompletedOpen] = useState(false)
@@ -218,6 +218,7 @@ export default function App() {
           refreshingKeys={jobs.refreshingKeys}
           onMove={features.dragMove ? moveTicket : undefined}
           movingKeys={moves.movingKeys}
+          bottomOrder={moves.bottomOrder}
         />
       )}
 

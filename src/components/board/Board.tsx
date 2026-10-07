@@ -22,6 +22,7 @@ export const Board = memo(function Board({
   refreshingKeys,
   onMove,
   movingKeys,
+  bottomOrder,
 }: {
   tickets: Ticket[]
   now: number
@@ -33,13 +34,19 @@ export const Board = memo(function Board({
   /** Drag-and-drop status change, written through to Jira. */
   onMove?: (key: string, to: ColumnKey) => void
   movingKeys?: ReadonlySet<string>
+  /** Cards dropped by hand sit at the bottom of their column, in drop order, below the sorted rest. */
+  bottomOrder?: ReadonlyMap<string, number>
 }) {
   const byColumn = useMemo(() => {
     const groups = new Map<ColumnKey, Ticket[]>(BOARD_COLUMNS.map((c) => [c.key, []]))
     for (const t of tickets) groups.get(t.column)?.push(t)
-    for (const [key, list] of groups) list.sort(key === 'done' ? byRecency : byUrgency)
+    const pin = (t: Ticket) => bottomOrder?.get(t.key) ?? 0
+    for (const [key, list] of groups) {
+      const natural = key === 'done' ? byRecency : byUrgency
+      list.sort((a, b) => pin(a) - pin(b) || natural(a, b))
+    }
     return groups
-  }, [tickets])
+  }, [tickets, bottomOrder])
   const cols = focus ? BOARD_COLUMNS.filter((c) => c.key === focus) : BOARD_COLUMNS
   return (
     <div className="flex gap-3 overflow-x-auto pb-3">
