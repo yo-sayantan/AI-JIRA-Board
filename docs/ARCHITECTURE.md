@@ -1,5 +1,13 @@
 # Architecture — how it works
 
+> **The full documentation suite** — this file is the overview; the deep dives live beside it:
+> [`AGENTS.md`](AGENTS.md) (onboarding for engineers & AI agents — start there),
+> [`FEATURES.md`](FEATURES.md) (every feature + where its code lives),
+> [`DATA-FLOW.md`](DATA-FLOW.md) (every file, writer, lock and lifecycle),
+> [`AI-PIPELINE.md`](AI-PIPELINE.md) (briefs, report enrichment, models),
+> [`INTEGRATIONS.md`](INTEGRATIONS.md) (Jira/Bitbucket, the HTTP API, config chain),
+> [`RUNTIME.md`](RUNTIME.md) (containers, agents, queues, runbook).
+
 ## The one idea
 
 The board **never talks to Jira**. A separate pipeline (`jira-intern/`) fetches your tickets on
@@ -30,8 +38,9 @@ Key scripts:
 
 | File | Role |
 |---|---|
-| `daily_fetch.py` | Pull active tickets assigned to you → `data.json` / `data.js`. Also refreshes one ticket in place. |
-| `completed_archive.py` | Build the full historical "Completed" archive. |
+| `daily_fetch.py` | Pull active tickets assigned to you → `data.json` / `data.js`. Also refreshes one ticket in place (`--key`) or only the raised list (`--raised`). |
+| `completed_archive.py` | Build the full historical "Completed" archive (also re-fetches `raised[]`). |
+| `raised.py` | Raised-by-me fetch (every non-sub-task ticket you REPORTED): one parallel-paged JQL, assignee hand-off log from the changelog, issue links. Shared by the daily fetch, the archive and the view's own refresh. |
 | `_jira.py` · `devinfo.py` | Shared Jira/Bitbucket HTTP, field formatting, and branch/PR dev-info used by both fetches. |
 | `local-runner/*.sh` | Thin wrappers: daily, weekly, per-ticket refresh, PR reports. All source `runner-env.sh` for locks, timeouts and agent lookup. |
 | `local-runner/config.mjs` | Deep-merges the project config + personal override into shell vars, rendered prompts, MCP policy, and UI defaults. |
@@ -118,6 +127,9 @@ One user, one tab, mostly idle with bursts of background work. So:
   a grooming bucket like `… READY`) are pulled out of To Do into their own collapsible bar, so a
   cleared current-sprint To Do doesn't look full. See `src/lib/format.ts` → `isNextSprint`.
 - **Completed:** the full historical archive, collapsed by default.
+- **Raised by me:** every non-sub-task ticket you REPORTED (bugs filed for later), with status,
+  current assignee and the full hand-off trail — its own overlay behind the indigo chip, fed by
+  `raised[]` in the dump. Sub-tickets you cut under your own work are excluded by design.
 - **Done retirement:** a Done ticket stays on the board a few days as a "recent win", then retires
   to Completed automatically (`app.doneBoardDays`, enforced in `src/data.ts`).
 

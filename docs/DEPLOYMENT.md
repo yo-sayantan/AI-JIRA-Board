@@ -38,6 +38,23 @@ docker compose down               # stop
 docker compose up -d --build      # rebuild + redeploy after a code change
 ```
 
+### Deploy pitfalls (read once, save hours)
+
+- **Prefer `./start-jira-board.sh` over raw compose.** It builds `dist/` on the HOST and passes
+  `--build-arg DIST_SOURCE=prebuilt`. Building inside the image needs `npm ci` over the Docker
+  VM's network, which can silently skip optional native packages — TypeScript 7's platform
+  binaries among them — and the build then dies with
+  `Unable to resolve @typescript/typescript-linux-arm64`. The script falls back to the in-image
+  build only when the host has no Node toolchain.
+- **Never add `--pull`** to the image build: Docker Hub pulls can crawl from the VM, and the base
+  image is already cached. If BuildKit hides a build error, rerun with
+  `docker build --progress=plain .` to see the real message.
+- **The data mount follows the deploy directory.** Compose bind-mounts `./jira-intern`, so your
+  tickets live in whatever checkout you last deployed from. Before deploying from a NEW folder,
+  copy `data.json`, `data.js`, `.state.json`, `cache/`, `reports/` (and the dot-settings files)
+  across — `docker inspect JIRA-Board --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}'`
+  shows where the current data is. Otherwise the board comes up empty until a full re-fetch.
+
 > **After changing any code in `src/`** you must rebuild (`--build`) — the app is baked into the
 > image at build time. Changing only *data* does not need a rebuild; the container refetches.
 
