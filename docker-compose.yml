@@ -1,14 +1,28 @@
 # My Jira Board — one-command local deploy.
 #
-#   docker compose up -d --build      # build + start in the background
-#   docker compose logs -f            # watch fetch + server logs
-#   docker compose down               # stop
+#   docker compose up -d --build                 # board + AI-Intern + AI-Ollama (all three)
+#   docker compose up -d --build jira-board      # board only — the AI pair is optional
+#   docker compose logs -f                       # watch fetch + server logs
+#   docker compose down                          # stop everything
+#
+# Without the AI pair the board still works: Settings shows "AI intern offline" and PR
+# reports stay deterministic. The board's dependency on jira-ai is marked optional, so
+# `up jira-board` never pulls the Ollama image.
 #
 # `restart: unless-stopped` means it comes back automatically whenever Docker starts,
 # so once it's up you never have to touch the command line again.
 # Published host port is fixed via PORT (default 4321). The desktop launcher and
 # start-jira-board.sh always set the same PORT so every redeploy lands on one
 # dedicated port — never auto-incremented.
+#
+# Network exposure: the board is published on 127.0.0.1 only (this machine). To reach
+# it from another device set BIND_IP=0.0.0.0 AND list the Host names the server may
+# answer to, e.g.   BIND_IP=0.0.0.0 ALLOWED_HOSTS=my-mac.local,192.168.1.20 docker compose up -d
+# (the API rejects unknown Host headers so a web page cannot DNS-rebind onto it).
+#
+# The board image runs as the unprivileged `node` user (uid 1000, HOME=/home/node — see
+# Dockerfile). Its bind mounts must be writable by uid 1000: transparent on Docker Desktop
+# (macOS/Windows); on a Linux host run  sudo chown -R 1000:1000 ./jira-intern  once.
 #
 # Docker Desktop stack / Compose project: JIRA-Project
 # (Compose requires a lowercase project name, so it is stored as jira-project.)
@@ -20,11 +34,23 @@ services:
     image: jira-board:latest
     container_name: JIRA-Board
     ports:
-      - "${PORT:-4321}:4321"
+      # host-ip:host-port:container-port — loopback unless you opt in with BIND_IP.
+      - "${BIND_IP:-127.0.0.1}:${PORT:-4321}:4321"
     environment:
-      BIND_HOST: 0.0.0.0
-      PORT: "4321"
-      AI_INTERN_URL: http://jira-ai:4322
+      # Inside the container the server listens on all interfaces; BIND_IP above decides
+      # what the host publishes.
+      - BIND_HOST=0.0.0.0
+      - PORT=4321
+      - AI_INTERN_URL=http://jira-ai:4322
+      # Bare names are pass-throughs: set in your shell or .env → set in the container,
+      # otherwise absent (an empty string would mask the value in mcp-secrets.env).
+      # Extra Host headers the API accepts (comma-separated) when BIND_IP is not loopback.
+      - ALLOWED_HOSTS
+      # TLS to Jira/Bitbucket is verified by default. Private corporate CA: mount the PEM
+      # (volume below) and set JIRA_CA_BUNDLE=/etc/ssl/private-ca.pem. JIRA_INSECURE_TLS=1
+      # switches verification off entirely — last resort only.
+      - JIRA_CA_BUNDLE
+      - JIRA_INSECURE_TLS
     volumes:
       # Tokens: reuse your existing connector secrets, read-only. The file needs
       # JIRA_PERSONAL_TOKEN (and optionally BITBUCKET_PAT / ATLASSIAN_TOKEN, plus
@@ -32,15 +58,21 @@ services:
       # Mount the directory, not the file. A single-file bind stays pointed at the
       # old inode after an editor replaces mcp-secrets.env, and open() then fails
       # with ENOENT even though the host file is fine.
-      - ${HOME}/.cursor:/root/.cursor:ro
+      # The board runs as `node`, so its home is /home/node (the AI intern below is root).
+      - ${HOME:?HOME must be set}/.cursor:/home/node/.cursor:ro
       # Sparse personal overrides; project defaults live in config/jira-board.config.json.
-      - ${HOME}/.ai:/root/.ai:ro
+      - ${HOME:?HOME must be set}/.ai:/home/node/.ai:ro
       - ./config:/app/config:ro
       # Persist fetched data on the host (and reuse your current dump). Remove this
       # line for a fully self-contained, ephemeral container that uses the baked data.
       - ./jira-intern:/app/jira-intern
+      # If your Jira uses a private CA, either mount the CA and set
+      # JIRA_CA_BUNDLE=/etc/ssl/private-ca.pem, or set JIRA_INSECURE_TLS=1 as a last resort.
+      # - ${JIRA_CA_BUNDLE_HOST:-/dev/null}:/etc/ssl/private-ca.pem:ro
     depends_on:
-      - jira-ai
+      jira-ai:
+        condition: service_started
+        required: false # the AI pair is optional (`up jira-board`); the board degrades to "AI offline"
     restart: unless-stopped
     # If auto-refresh / archive logs show "Name or service not known" for
     # your Jira host, Docker's DNS proxy is flapping (common with VPN).
@@ -69,23 +101,38 @@ services:
     image: ai-intern:latest
     container_name: AI-Intern
     environment:
-      INTERN_DIR: /app/jira-intern
-      PORT: "4322"
-      OLLAMA_HOST: http://ollama:11434
-      HOST_OLLAMA_URL: http://host.docker.internal:11434
-      AGENT_SECRETS: /root/.cursor/mcp-secrets.env
+      - INTERN_DIR=/app/jira-intern
+      - PORT=4322
+      - OLLAMA_HOST=http://ollama:11434
+      - HOST_OLLAMA_URL=http://host.docker.internal:11434
+      # This image runs as root, so its mounts live under /root (unlike the board).
+      - AGENT_SECRETS=/root/.cursor/mcp-secrets.env
+      # Pass-throughs (see jira-board above for what they mean).
+      - JIRA_CA_BUNDLE
+      - JIRA_INSECURE_TLS
+      # Optional scanner / observability endpoints the intern can read; these may instead
+      # live in config/jira-board.config.json under endpoints.*.
+      - CHECKMARX_BASE_URL
+      - CHECKMARX_AUTH_URL
+      - DYNATRACE_TENANTS
     volumes:
       - ./jira-intern:/app/jira-intern
-      - ${HOME}/.ai:/root/.ai:ro
-      - ${HOME}/.cursor:/root/.cursor:ro
+      - ${HOME:?HOME must be set}/.ai:/root/.ai:ro
+      - ${HOME:?HOME must be set}/.cursor:/root/.cursor:ro
       - ./config:/app/config:ro
+      # Model catalogue: edit it, then `docker compose restart jira-ai` — no rebuild.
+      - ./ai-intern/models.json:/app/models.json:ro
+      # Private CA — same as the board (uncomment both or neither).
+      # - ${JIRA_CA_BUNDLE_HOST:-/dev/null}:/etc/ssl/private-ca.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy # ollama defines a healthcheck; wait for it to answer
     restart: unless-stopped
 
 volumes:
   jira-ai-models:
+    # Fixed name so downloaded models survive `docker compose down` and a project rename.
+    # Not `external`: compose creates it on a fresh machine instead of refusing to start.
     name: jira-board_jira-ai-models
-    external: true

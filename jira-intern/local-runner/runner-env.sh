@@ -3,11 +3,11 @@
 #   . "$(dirname "${BASH_SOURCE[0]}")/runner-env.sh"
 #
 # Launchd, Mac Shortcuts and the Docker entrypoint start with a minimal environment, so this
-# restores PATH and the shell profile, then loads the central config (config.mjs shellenv).
+# restores a complete PATH, then loads the central config (config.mjs shellenv). The user's
+# zsh profile is deliberately NOT sourced: it is zsh syntax, may be slow or interactive, and
+# everything the runners need is on the PATH below.
 
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-[ -f "$HOME/.zprofile" ] && . "$HOME/.zprofile" 2>/dev/null
-[ -f "$HOME/.zshrc" ]    && . "$HOME/.zshrc"    2>/dev/null
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERN_DIR="$(cd "$HERE/.." && pwd)"
@@ -22,18 +22,59 @@ AGENT_INSTALL_HINT='curl https://cursor.com/install -fsS | bash'
 MODEL_MAIN=auto; TIMEOUT_DAILY=1800; TIMEOUT_WEEKLY=7200; TIMEOUT_REFRESH=600; REQUIRED_APPROVALS=2
 command -v node >/dev/null 2>&1 && eval "$(node "$HERE/config.mjs" shellenv 2>/dev/null)"
 
-TIMEOUT_BIN="$(command -v timeout || command -v gtimeout)"
+# coreutils timeout (Linux) or Homebrew gtimeout; empty on a stock Mac — see run_with_timeout.
+TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
 
 # shellcheck source=lock-util.sh
 . "$HERE/lock-util.sh"
 
-# Jira / Bitbucket / connector tokens, exported to child processes.
+# Read KEY=VALUE lines from a secrets file WITHOUT executing it, exporting only the named
+# keys. Mirrors jira-intern/_config.py load_secrets(): blank lines and #-comments are
+# skipped, a leading "export " and a trailing CR are dropped, one layer of surrounding
+# quotes is removed. Values are taken literally — $(…), backticks and $VARS never expand,
+# so a hostile or merely odd line in ~/.cursor/mcp-secrets.env cannot run code here.
+#   export_secrets_from_file FILE KEY...
+export_secrets_from_file() {
+  local file="$1" line key value k
+  shift
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    case "$line" in ''|'#'*) continue ;; esac
+    case "$line" in *=*) ;; *) continue ;; esac
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key%"${key##*[![:space:]]}"}"
+    [[ "$key" =~ ^export[[:space:]]+(.*)$ ]] && key="${BASH_REMATCH[1]}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    case "$value" in
+      \"*\") value="${value#\"}"; value="${value%\"}" ;;
+      \'*\') value="${value#\'}"; value="${value%\'}" ;;
+    esac
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    for k in "$@"; do
+      if [ "$k" = "$key" ]; then export "$key=$value"; break; fi
+    done
+  done < "$file"
+}
+
+# Jira / Bitbucket / connector tokens, exported to child processes. Only the variables the
+# fetch scripts and the agent CLI actually read leave the file (same list as the AI intern);
+# whatever else the user keeps in mcp-secrets.env for other tools stays there.
 load_agent_secrets() {
-  if [ -f "$AGENT_SECRETS" ]; then set -a; . "$AGENT_SECRETS"; set +a; fi
+  export_secrets_from_file "$AGENT_SECRETS" \
+    JIRA_URL CONFLUENCE_URL BITBUCKET_URL \
+    JIRA_PERSONAL_TOKEN CONFLUENCE_PERSONAL_TOKEN BITBUCKET_PAT ATLASSIAN_TOKEN \
+    JIRA_CA_BUNDLE JIRA_INSECURE_TLS \
+    ${AGENT_API_KEY_ENV:+"$AGENT_API_KEY_ENV"}
 }
 
 # Every data.json writer refuses to start while another one holds its lock (exit 3), so two
 # jobs never interleave writes. Stale locks (dead PID, Docker recreate) are cleared first.
+# Each runner lists its OWN lock here too, then takes it with acquire_lock_or_exit.
 refuse_if_locked() {
   local what="$1" lock
   shift
@@ -46,10 +87,53 @@ refuse_if_locked() {
   done
 }
 
+# Take our own lock atomically (noclobber); exit 3 if a concurrent start beat us to it.
+# The caller installs the EXIT trap that removes it.
+acquire_lock_or_exit() {
+  local what="$1" lock="$2"
+  if ! lock_acquire "$lock"; then
+    echo "$(date): $(basename "$lock") taken by a concurrent intern job — skipping $what" | tee -a "$LOG"
+    exit 3
+  fi
+}
+
+# `timeout SECS cmd…` with coreutils when present; on a stock Mac (no coreutils) perl's
+# alarm stands in, keeping the exit codes the runners test for (124 on timeout). With
+# neither, the command runs unbounded and we warn once.
 run_with_timeout() {
   local secs="$1"
   shift
-  if [ -n "$TIMEOUT_BIN" ]; then "$TIMEOUT_BIN" "$secs" "$@"; else "$@"; fi
+  if [ -n "$TIMEOUT_BIN" ]; then
+    "$TIMEOUT_BIN" "$secs" "$@"
+  elif command -v perl >/dev/null 2>&1; then
+    perl -e '
+      my $secs = shift @ARGV;
+      my $pid = fork; defined $pid or exit 125;
+      if (!$pid) { exec @ARGV; exit 127 }
+      my $stop = sub { my $code = shift; kill "TERM", $pid; sleep 2; kill "KILL", $pid; waitpid($pid, 0); exit $code };
+      $SIG{ALRM} = sub { $stop->(124) };
+      $SIG{TERM} = sub { $stop->(143) };
+      $SIG{INT}  = sub { $stop->(130) };
+      alarm $secs;
+      waitpid($pid, 0);
+      my $st = $?;
+      exit(($st & 127) ? 128 + ($st & 127) : ($st >> 8));
+    ' "$secs" "$@"
+  else
+    if [ -z "${_TIMEOUT_WARNED:-}" ]; then
+      echo "$(date): WARNING neither timeout/gtimeout nor perl found — running without a time limit" | tee -a "${LOG:-/dev/null}" >&2
+      _TIMEOUT_WARNED=1
+    fi
+    "$@"
+  fi
+}
+
+# Keep the newest <keep> logs matching logs/<prefix>-*.log; handles spaces in paths.
+rotate_logs() {
+  local prefix="$1" keep="$2" f
+  ls -1t "$LOG_DIR/$prefix"-*.log 2>/dev/null | tail -n +"$((keep + 1))" | while IFS= read -r f; do
+    rm -f -- "$f"
+  done
 }
 
 # Sets AGENT to the connector CLI; returns 1 when it is not installed.

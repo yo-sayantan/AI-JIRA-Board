@@ -9,17 +9,25 @@
 #   docker compose up -d --build          # easiest (see docker-compose.yml)
 # or:
 #   docker build -t jira-board .
-#   docker run -d --name JIRA-Board -p 4321:4321 \
-#     -v "$HOME/.cursor/mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro" \
+#   docker run -d --name JIRA-Board -p 127.0.0.1:4321:4321 \
+#     -v "$HOME/.cursor:/home/node/.cursor:ro" \
 #     jira-board
+#   (mount the DIRECTORY holding mcp-secrets.env, not the file: a single-file bind keeps
+#    pointing at the old inode after an editor rewrites it — see docker-compose.yml.)
 # Then open http://localhost:4321
+#
+# The runtime stage runs as the image's built-in unprivileged `node` user (uid 1000,
+# HOME=/home/node). Anything bind-mounted read-write (./jira-intern) must be writable by
+# uid 1000 — transparent on Docker Desktop; on a Linux host chown it once.
 
 # ── Stage 1: build the board ───────────────────────────────────────────────────
 FROM node:26-bookworm-slim AS build
 WORKDIR /app
 # Install deps first so this layer is cached until the lockfile changes.
+# --ignore-scripts: no dependency needs a lifecycle script (the only one in the lockfile is
+# fsevents, an optional macOS-only package that is skipped on Linux anyway).
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 # Bring in the source and produce dist/index.html (tsc --noEmit && vite build).
 COPY . .
 RUN npm run build
@@ -29,7 +37,8 @@ FROM node:26-bookworm-slim AS runtime
 # Container-friendly defaults; override any of these at `docker run`/compose time.
 ENV NODE_ENV=production \
     BIND_HOST=0.0.0.0 \
-    PORT=4321
+    PORT=4321 \
+    HOME=/home/node
 # python3 = the deterministic fetch; tini = clean PID 1 (reaps the Python children
 # that the Refresh button spawns); ca-certificates for TLS. bash + coreutils(timeout)
 # already ship in the base image and cover the runner scripts.
@@ -38,20 +47,31 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 # App server + built board + the whole intern pipeline (scripts, config, baked data).
-COPY --from=build /app/dist ./dist
-COPY serve.mjs package.json ./
-COPY server ./server
-COPY jira-intern ./jira-intern
-COPY config ./config
+# --chown on every COPY (instead of a trailing chown -R) so no layer is duplicated.
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --chown=node:node serve.mjs package.json ./
+COPY --chown=node:node server ./server
+COPY --chown=node:node jira-intern ./jira-intern
+COPY --chown=node:node config ./config
 # The Setup & Deployment guide, served at /docs/index.html — this is what the board's
 # help (?) button opens, so it must exist inside the image, not just in the repo.
-COPY docs ./docs
-COPY ai-intern/models.json ./ai-intern/models.json
-COPY docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --chown=node:node docs ./docs
+# serve.mjs serves /setup/* (templates only, no real values) — the guide links to them.
+COPY --chown=node:node setup ./setup
+COPY --chown=node:node ai-intern/models.json ./ai-intern/models.json
+COPY --chown=node:node docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh \
  # Pristine copy used to seed an empty mounted volume on first boot.
- && cp -a jira-intern /opt/jira-intern-seed
+ && cp -a jira-intern /opt/jira-intern-seed \
+ && chown -R node:node /opt/jira-intern-seed \
+ # WORKDIR created /app as root; hand the directory itself to node (contents already are).
+ && chown node:node /app
+USER node
 EXPOSE 4321
+# Docker marks the container unhealthy when the status API stops answering (the same probe
+# start-jira-board.sh waits on). start-period covers the seed + data.js sync at boot.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
+  CMD node -e "fetch('http://127.0.0.1:4321/api/intern-status').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 # tini as PID 1 so `docker stop` / Ctrl+C shut down cleanly.
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/app/docker-entrypoint.sh"]

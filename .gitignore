@@ -9,6 +9,8 @@ __pycache__/
 # Real secrets live OUTSIDE this repo (~/.cursor/mcp-secrets.env). These rules are
 # a backstop in case a filled-in copy ever lands inside the repo. The safe, empty
 # setup/*.template files are NOT matched (they don't end in .env) and stay tracked.
+.env
+.env.*
 *.env
 *.env.local
 secrets.env
@@ -30,10 +32,13 @@ jira-intern/data.js
 jira-intern/reports/
 # Written by the board's Settings panel (AI usage level) — per-machine, not project config.
 jira-intern/.settings.json
+jira-intern/.settings.json.*.tmp
 jira-intern/.schedule.json
 jira-intern/.ai-queue/
 jira-intern/.ai-status.json
+jira-intern/.ai-cancel-report
 jira-intern/.report.lock
+jira-intern/.data.lock
 jira-intern/cache/
 jira-intern/logs/
 jira-intern/.state.json
@@ -57,6 +62,6 @@ jira-intern/assets/
 # Jira XML exports dropped in for import-jira-xml.mjs
 my_dashboard.xml
 
-# NOTE: jira-intern/config.json IS tracked — it's the single portability file.
-# It holds your name/id/endpoints (no secrets; API keys live in the connector's
-# secretsFile under ~). Swap its values before sharing the repo publicly.
+# NOTE: project defaults live in config/jira-board.config.json (tracked, no secrets);
+# your personal name/id/endpoint overrides go in ~/.ai/config.json, outside the repo.
+# API keys live only in the connector's secretsFile under ~ (see setup/).
