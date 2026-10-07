@@ -4,12 +4,13 @@
 The board (serve.mjs) and the intern worker share jira-intern/.ai-queue/*.json.
 Jobs are one JSON object per file; the intern claims by renaming to .running.
 
-  python3 ai_queue.py enqueue --type enrich-report --key FIDM-1
+  python3 ai_queue.py enqueue --type enrich-report --key PROJ-123
   python3 ai_queue.py keys
   python3 ai_queue.py status
 """
 import json
 import os
+import re
 import sys
 import time
 import uuid
@@ -23,6 +24,10 @@ SETTINGS_FILE = os.path.join(HERE, ".settings.json")
 VALID_TYPES = ("enrich-report", "summarize-active", "pull-model")
 VALID_BACKENDS = ("local", "cloud")
 VALID_LEVELS = ("none", "low", "moderate", "full")
+# A job file name / model tag reaches shell-adjacent code in the worker, so both are
+# validated here — the one place every enqueue path (CLI, serve.mjs) goes through.
+KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+MODEL_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$")
 
 
 def now_iso():
@@ -56,12 +61,19 @@ def enqueue(job):
     jtype = job.get("type")
     if jtype not in VALID_TYPES:
         raise ValueError(f"bad type {jtype}")
+    key = str(job.get("key") or "").strip().upper() or None
+    if key and not KEY_RE.match(key):
+        raise ValueError(f"bad key {key!r} — expected a Jira key like PROJ-123")
+    for field in ("model", "modelTag"):
+        value = str(job.get(field) or "").strip()
+        if value and not MODEL_RE.match(value):
+            raise ValueError(f"bad {field} {value!r} — lower-case letters, digits, . _ - and an optional :tag")
     settings = load_settings()
     backend = job.get("backend") or settings.get("aiBackend") or "local"
     payload = {
         "id": job.get("id") or f"{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}",
         "type": jtype,
-        "key": (job.get("key") or "").upper() or None,
+        "key": key,
         "modelTag": job.get("modelTag") or job.get("model"),
         "level": job.get("level") or settings.get("aiLevel") or "moderate",
         "backend": backend,
@@ -82,8 +94,10 @@ def enqueue(job):
         payload["backend"] = "local"
     if payload["level"] not in VALID_LEVELS:
         payload["level"] = "moderate"
+    # Dedup against pending AND claimed (.running) jobs — a key the intern is enriching right
+    # now used to be re-queued and enriched twice.
     same = ("type", "key", "modelTag")
-    for queued in list_jobs():
+    for queued in list_jobs(include_running=True):
         if all(queued.get(f) == payload[f] for f in same):
             queued.pop("_path", None)
             return queued
@@ -96,11 +110,14 @@ def enqueue(job):
     return payload
 
 
-def list_jobs():
+def list_jobs(include_running=False):
+    """Pending jobs (oldest first); with include_running, jobs the intern has claimed too."""
     _ensure_queue()
     out = []
     for name in sorted(os.listdir(QUEUE_DIR)):
-        if not name.endswith(".json") or name.startswith("."):
+        if name.startswith("."):
+            continue
+        if not (name.endswith(".json") or (include_running and name.endswith(".json.running"))):
             continue
         path = os.path.join(QUEUE_DIR, name)
         try:
@@ -199,7 +216,11 @@ def main(argv):
                 i += 1
                 continue
             i += 1
-        payload = enqueue(job)
+        try:
+            payload = enqueue(job)
+        except ValueError as e:
+            print(f"ai_queue: {e}", file=sys.stderr)
+            return 2
         print(payload["id"])
         return 0
     if cmd == "keys":

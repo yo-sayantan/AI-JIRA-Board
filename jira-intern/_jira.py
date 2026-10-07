@@ -7,6 +7,7 @@ import json
 import os
 import re
 import ssl
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -26,10 +27,33 @@ FIELDS = (
     "customfield_10402,customfield_57402,customfield_10404,customfield_10405,customfield_10700"
 )
 
-# On-prem Jira and Bitbucket sit behind a private CA the container does not trust.
-SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
+# Jira issue key, e.g. PROJ-123 — shared by every entry point that accepts a key from outside.
+ISSUE_KEY_RE = re.compile(r"[A-Z][A-Z0-9]+-\d+")
+
+# TLS for every Jira/Bitbucket call. Verification is ON by default; an on-prem instance behind a
+# private CA needs JIRA_CA_BUNDLE=<root CA .pem>. JIRA_INSECURE_TLS=1 is the last resort — the
+# bearer PAT then travels over an unverified channel, so it is announced on stderr once.
+# Built lazily so values from the secrets file (load_env) are honoured, not just the shell's.
+_SSL_CTX = None
+
+
+def ssl_context():
+    global _SSL_CTX
+    if _SSL_CTX is not None:
+        return _SSL_CTX
+    if os.environ.get("JIRA_INSECURE_TLS") == "1":
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        sys.stderr.write("WARN: TLS verification disabled (JIRA_INSECURE_TLS=1)\n")
+    else:
+        bundle = (os.environ.get("JIRA_CA_BUNDLE") or "").strip() or None
+        try:
+            ctx = ssl.create_default_context(cafile=bundle)
+        except (OSError, ssl.SSLError) as e:
+            raise RuntimeError(f"JIRA_CA_BUNDLE is not a readable PEM bundle: {bundle} ({e})") from e
+    _SSL_CTX = ctx
+    return ctx
 
 
 def config_int(path_keys, default):
@@ -57,7 +81,8 @@ EXCLUDE_PROJECTS = _excluded_projects()
 
 
 def is_excluded(key):
-    """True when a key belongs to a project in config.json → excludeProjects."""
+    """True when a key belongs to a project listed in config → excludeProjects
+    (config/jira-board.config.json, or the personal override merged over it)."""
     return bool(key) and key.split("-")[0].upper() in EXCLUDE_PROJECTS
 
 
@@ -70,22 +95,47 @@ def load_env():
 
 
 def _is_transient_net(exc):
-    """DNS blips, timeouts and 5xx are worth retrying; 4xx is not."""
+    """DNS blips, timeouts and 5xx are worth retrying; other 4xx is not."""
     if isinstance(exc, urllib.error.HTTPError):
-        return exc.code >= 500
+        return exc.code >= 500 or exc.code == 429
     if isinstance(exc, urllib.error.URLError):
         return True
     return isinstance(exc, (TimeoutError, ConnectionError, OSError))
 
 
+def _retry_after(err, attempt):
+    """Seconds to wait after a 429: the server's Retry-After when it sent one, else backoff."""
+    try:
+        wait = int(str(err.headers.get("Retry-After") or "").strip() or 0)
+    except (AttributeError, ValueError):
+        wait = 0
+    return min(60, wait or 2 ** attempt)
+
+
 def get_json(url, headers, timeout, retries=4):
-    """GET with backoff — Docker DNS and corporate VPN flaps are common here."""
+    """GET with backoff — Docker DNS and corporate VPN flaps are common here.
+
+    Retry policy: 429 waits Retry-After (capped at 60 s) and retries; any other 4xx (expired PAT,
+    bad JQL, missing issue) raises at once — retrying cannot fix it and only hides the real
+    error behind a timeout; 5xx and network errors back off and retry."""
     last = None
     for attempt in range(retries + 1):
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, context=SSL_CTX, timeout=timeout) as r:
+            with urllib.request.urlopen(req, context=ssl_context(), timeout=timeout) as r:
                 return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code == 429:
+                if attempt >= retries:
+                    break
+                time.sleep(_retry_after(e, attempt))
+                continue
+            if e.code < 500:
+                raise
+            if attempt >= retries:
+                break
+            time.sleep(min(30, 2 ** attempt))
         except Exception as e:
             last = e
             if attempt >= retries:
@@ -94,7 +144,8 @@ def get_json(url, headers, timeout, retries=4):
     raise last
 
 
-def jira_get(path, timeout=120):
+# The shell runners kill a fetch at 300 s, so one hung Jira call must not eat the whole budget.
+def jira_get(path, timeout=60):
     return get_json(
         JIRA_BASE + path,
         {"Authorization": f"Bearer {os.environ['JIRA_PERSONAL_TOKEN']}", "Accept": "application/json"},
@@ -107,8 +158,17 @@ def bb_get(path, timeout=45):
     return get_json(BB_BASE + path, {"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=timeout, retries=1)
 
 
+def _legacy_status_jql(jql):
+    """Older Jira builds reject statusCategory in JQL — rewrite both the = and != forms."""
+    return (
+        jql.replace("statusCategory != Done", "status not in (Done, Closed, Resolved)")
+        .replace("statusCategory = Done", "status in (Done, Closed, Resolved)")
+    )
+
+
 def search_jira(jql, fields=FIELDS, expand=None):
-    issues, start = [], 0
+    """Every issue matching `jql`, paginated and de-duplicated by key."""
+    issues, seen, start = [], set(), 0
     while True:
         params = {"jql": jql, "startAt": start, "maxResults": 100, "fields": fields}
         if expand:
@@ -116,17 +176,26 @@ def search_jira(jql, fields=FIELDS, expand=None):
         try:
             data = jira_get("/rest/api/2/search?" + urllib.parse.urlencode(params))
         except urllib.error.HTTPError as e:
-            # Older Jira builds reject statusCategory in JQL.
-            if "statusCategory = Done" in jql and e.code == 400:
-                return search_jira(jql.replace("statusCategory = Done", "status in (Done, Closed, Resolved)"), fields, expand)
+            if e.code == 400 and "statusCategory" in jql:
+                alt = _legacy_status_jql(jql)
+                if alt != jql:
+                    return search_jira(alt, fields, expand)
             raise
-        batch = data.get("issues", [])
-        issues.extend(batch)
-        # Permission-filtered results can leave total > returned — never spin.
-        if not batch:
+        batch = data.get("issues") or []
+        fresh = 0
+        for issue in batch:
+            key = issue.get("key")
+            if key in seen:
+                continue
+            seen.add(key)
+            issues.append(issue)
+            fresh += 1
+        # Permission-filtered results can leave total > returned, and a server that ignores
+        # startAt returns the same page forever — never spin on either.
+        if not batch or not fresh:
             break
         start += len(batch)
-        if start >= data.get("total", 0):
+        if start >= int(data.get("total") or 0):
             break
     return issues
 
@@ -157,17 +226,25 @@ def iso(value):
             return datetime.strptime(s, fmt).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         except ValueError:
             continue
-    return s
+    try:
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None  # not a timestamp — never leak the raw string into a field compared as one
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return d.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# Keep in step with src/lib/columns.ts (the board's own safety-net mapping).
 _STATUS_COLUMNS = (
-    (("to do", "open", "backlog", "reopened", "selected for development"), "todo"),
-    (("in progress", "dev in progress", "work in progress", "in development"), "prog"),
-    (("in review", "code review", "ready4review", "ready for review", "review"), "rev"),
+    (("to do", "todo", "open", "backlog", "reopened", "selected for development", "new"), "todo"),
+    (("in progress", "dev in progress", "work in progress", "in development", "development", "implementing"), "prog"),
+    (("in review", "code review", "ready4review", "ready for review", "review", "peer review", "pr review"), "rev"),
     (("qa", "in qa", "under qa", "ready for qa", "ready4qa", "awaiting qa",
-      "testing", "in test", "in testing", "verification", "verify"), "qa"),
-    (("done", "completed", "closed", "resolved", "released"), "done"),
-    (("on hold", "hold", "blocked", "waiting", "parked", "impeded"), "hold"),
+      "testing", "in test", "in testing", "test", "verification", "verify"), "qa"),
+    (("done", "completed", "closed", "resolved", "released", "shipped",
+      "won't fix", "wont fix", "won’t fix", "cancelled", "canceled", "rejected"), "done"),
+    (("on hold", "hold", "blocked", "waiting", "parked", "impeded", "paused", "stalled"), "hold"),
 )
 
 
@@ -199,19 +276,33 @@ def changelog_done_date(changelog):
 
 
 _LIGHT_TAGS = {"p", "b", "ul", "li", "code", "a", "i", "h3"}
+_TAG_RE = re.compile(r"<(/?)([\w]+)([^>]*)>")
+_HREF_RE = re.compile(r"""\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.I)
+_SAFE_HREF_RE = re.compile(r"^(https?://|/)", re.I)
+
+
+def _light_tag(m):
+    closing, tag, attrs = m.group(1), m.group(2).lower(), m.group(3) or ""
+    if tag not in _LIGHT_TAGS:
+        return ""
+    if tag == "a" and not closing:
+        hm = _HREF_RE.search(attrs)
+        href = (hm.group(1) or hm.group(2) or hm.group(3) or "").strip() if hm else ""
+        # Only web and site-relative links survive — javascript:/data: and friends are dropped.
+        if href and _SAFE_HREF_RE.match(href):
+            return f'<a href="{escape(href, quote=True)}">'
+        return "<a>"
+    return f"<{closing}{tag}>"
 
 
 def light_html(html):
+    """Reduce rendered Jira HTML to the handful of tags the board styles. One pass: unknown
+    tags vanish (their text stays), allowed tags lose every attribute except a safe href."""
     if not html:
         return None
     if "<" not in html:
         return f"<p>{escape(html)}</p>"
-    html = re.sub(
-        r"<(/?)([\w]+)[^>]*>",
-        lambda m: f"<{m.group(1)}{m.group(2).lower()}>" if m.group(2).lower() in _LIGHT_TAGS else "",
-        html,
-    )
-    html = re.sub(r'<a[^>]*href=["\']([^"\']+)["\'][^>]*>', r'<a href="\1">', html, flags=re.I)
+    html = _TAG_RE.sub(_light_tag, html)
     return html.strip() or None
 
 
@@ -259,26 +350,38 @@ def person_fmt(user):
 
 
 def issue_links(fields):
+    """Linked issues. A link to an issue I cannot see comes back with no `fields` at all, so
+    summary/status are best-effort — the link itself is still worth showing."""
     related = []
     for link in fields.get("issuelinks") or []:
         for direction, rel_key in (("outwardIssue", "outward"), ("inwardIssue", "inward")):
-            if direction in link:
-                o = link[direction]
-                related.append({
-                    "key": o["key"],
-                    "url": f"{JIRA_BASE}/browse/{o['key']}",
-                    "summary": o["fields"]["summary"],
-                    "status": o["fields"]["status"]["name"],
-                    "relation": link.get("type", {}).get(rel_key, "relates"),
-                })
+            o = link.get(direction)
+            if not isinstance(o, dict) or not o.get("key"):
+                continue
+            of = o.get("fields") or {}
+            related.append({
+                "key": o["key"],
+                "url": f"{JIRA_BASE}/browse/{o['key']}",
+                "summary": of.get("summary"),
+                "status": (of.get("status") or {}).get("name"),
+                "relation": (link.get("type") or {}).get(rel_key, "relates"),
+            })
     return related
 
 
 def story_points(fields):
+    """Story points as a number (int when integral — src/types.ts says `number | null`).
+    Some Jira builds hand the estimate back as a string ("3.0"); garbage becomes None."""
     sp = fields.get("customfield_10402") or fields.get("customfield_57402")
-    if sp is None:
+    if sp is None or sp == "":
         return None
-    return int(sp) if sp == int(sp) else float(sp)
+    try:
+        value = float(sp)
+    except (TypeError, ValueError):
+        return None
+    if value != value or value in (float("inf"), float("-inf")):
+        return None
+    return int(value) if value == int(value) else value
 
 
 # ── Comments ─────────────────────────────────────────────────────────────────

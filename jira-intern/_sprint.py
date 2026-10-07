@@ -14,24 +14,34 @@ def _one(item):
         name = item.get("name") or item.get("sprintName")
         if not name:
             return None
-        st = str(item.get("state") or "").lower()
-        tag = "active" if st == "active" else ("future" if st == "future" else st)
-        start = str(item.get("startDate") or "")[:10]
-        end = str(item.get("endDate") or "")[:10]
-        dates = f" · {start} → {end}" if start and end else ""
-        return f"{name} ({tag}{dates})" if tag else str(name)
+        return _label(
+            str(name), str(item.get("state") or ""),
+            str(item.get("startDate") or ""), str(item.get("endDate") or ""),
+        )
     raw = str(item)
     m = re.search(r"name=([^,\]]+)", raw)
     state_m = re.search(r"state=([^,\]]+)", raw)
     start_m = re.search(r"startDate=([^,\]]+)", raw)
     end_m = re.search(r"endDate=([^,\]]+)", raw)
-    name = m.group(1) if m else raw
-    st = (state_m.group(1) if state_m else "").lower()
-    tag = "active" if st == "active" else ("future" if st == "future" else st)
-    dates = ""
-    if start_m and end_m:
-        dates = f" · {start_m.group(1)[:10]} → {end_m.group(1)[:10]}"
-    return f"{name} ({tag}{dates})"
+    return _label(
+        m.group(1) if m else raw,
+        state_m.group(1) if state_m else "",
+        start_m.group(1) if start_m else "",
+        end_m.group(1) if end_m else "",
+    )
+
+
+def _label(name, state, start, end):
+    """"Name (state · start → end)" — with whatever parts exist; a bare name when neither the
+    state nor the dates are known, never "Name ()"."""
+    parts = []
+    st = state.strip().lower()
+    if st:
+        parts.append(st)
+    start, end = start[:10], end[:10]
+    if start and end:
+        parts.append(f"{start} → {end}")
+    return f"{name} ({' · '.join(parts)})" if parts else name
 
 
 def _name_of(parsed):

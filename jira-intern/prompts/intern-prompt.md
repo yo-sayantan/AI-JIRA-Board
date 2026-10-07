@@ -61,7 +61,7 @@ which is the slow one. This run PRESERVES the existing `completed[]` untouched (
 TIGHT JQL — query only my active set (small — usually a handful):
   assignee = currentUser() AND statusCategory != Done
   UNION  assignee = currentUser() AND statusCategory = Done AND resolved >= -10d
-  (NOTE: the BOARD only shows a Done ticket for 3 days, then auto-retires it to the Completed archive.
+  (NOTE: the BOARD only shows a Done ticket for 5 days (config app.doneBoardDays), then auto-retires it to the Completed archive.
    The fetch window is deliberately WIDER (-10d) than that so a done ticket never falls out of tickets[]
    before the weekly job has archived it into completed[] — otherwise it would vanish from both views.)
 De-dupe by key. That is the WHOLE working set for this run. Do not expand it.
@@ -87,8 +87,8 @@ WHAT TO FETCH
 A) ACTIVE + RECENT — `tickets[]` (rich objects). All issues where assignee = currentUser() that are NOT
    long-closed: every To Do / In Progress / In Review / QA / On Hold issue, PLUS any issue you closed
    recently (column "done", resolved in the last 10 days — the fetch window). The board shows a done
-   ticket as a "recent win" for only 3 days, then retires it to the Completed archive automatically.
-   SCOPE: search ALL projects — do NOT scope to FIDM or any single project — and ALL issue types: stories,
+   ticket as a "recent win" for only 5 days (config app.doneBoardDays), then retires it to the Completed archive automatically.
+   SCOPE: search ALL projects — do NOT scope to one project — and ALL issue types: stories,
    tasks, bugs, sub-tasks, security, spikes, AND support / service-desk / incident / request tickets. Paginate
    through EVERY result (loop startAt += pageSize); never cap at 50/99/100. If a ticket is assigned to me, it belongs here.
    For each, GATHER:
@@ -185,7 +185,7 @@ INCREMENTAL BEHAVIOR (use .state.json memory)
 - Reached Done / Closed / Resolved (statusCategory = Done) -> PREPEND one "Marked DONE — <date>" entry, set
   state.done=true, keep it in `tickets[]` as column "done". ALWAYS set `resolved` (the resolution date) —
   the board uses `resolved` to auto-retire the ticket from the dashboard into the Completed archive after
-  3 days. Keep done tickets in `tickets[]` for the whole -10d fetch window (the app hides the >3d ones);
+  5 days (config app.doneBoardDays). Keep done tickets in `tickets[]` for the whole -10d fetch window (the app hides the >5d ones);
   do NOT add them to `completed[]` yourself — the WEEKLY job owns that archive (with full branch/PR
   enrichment) and will pick them up on its next run.
   Only genuinely-done tickets get column "done" — never tag a QA/In-Review/In-Progress ticket as "done".
@@ -199,31 +199,31 @@ data.json SCHEMA (match git/jira-board/src/types.ts EXACTLY — same keys, same 
   "notes": [],                                  // run notices, e.g. MCP-unavailable; usually empty
   "tickets": [                                  // ACTIVE + recent-done, RICH
     {
-      "key": "FIDM-6048",
+      "key": "PROJ-123",
       "title": "…",
       "status": "Ready4Review",                 // raw Jira status text
       "column": "rev",                           // one of: todo|prog|rev|qa|done|hold
       "type": "Security", "priority": "High", "storyPoints": 5,
-      "branch": "feature/FIDM-6048_…",           // primary real branch
-      "branches": ["feature/FIDM-6048_…", "bugfix/FIDM-6048_…"],  // all real sourceBranches from the PRs
+      "branch": "feature/PROJ-123_…",           // primary real branch
+      "branches": ["feature/PROJ-123_…", "bugfix/PROJ-123_…"],  // all real sourceBranches from the PRs
       "estDays": "1d + vendor wait",
       "pr": { "state": "merged", "id": 362, "url": "{{BITBUCKET_BASE}}/…/pull-requests/362", "title": "…",
-              "repo": "pidclientadm",              // REQUIRED — PRs for one ticket may span repos
+              "repo": "my-service",              // REQUIRED — PRs for one ticket may span repos
               "approvals": 2, "reviewers": ["…"],
               "openComments": 0, "commentsTotal": 4, "commentsResolved": 4,
-              "sourceBranch": "feature/FIDM-6048_…", "destinationBranch": "develop",
+              "sourceBranch": "feature/PROJ-123_…", "destinationBranch": "develop",
               "merged": true, "mergedAt": "<ISO>" },   // the at-a-glance PR (open if any, else merged)
       "prs": [                                     // EVERY PR (merged / declined / open) — same shape as `pr`
         { "state": "merged", "id": 362, "url": "{{BITBUCKET_BASE}}/…/pull-requests/362", "title": "…",
-          "repo": "pidclientadm", "approvals": 2, "reviewers": ["…"],
+          "repo": "my-service", "approvals": 2, "reviewers": ["…"],
           "openComments": 0, "commentsTotal": 4, "commentsResolved": 4,
-          "sourceBranch": "feature/FIDM-6048_…", "destinationBranch": "develop",
+          "sourceBranch": "feature/PROJ-123_…", "destinationBranch": "develop",
           "merged": true, "mergedAt": "<ISO>" }
       ],
       "commentCount": 3, "latestComment": "<ISO>", "lastUpdate": "<ISO>", "created": "<ISO>",
-      "done": false, "onHold": false, "url": "{{JIRA_BASE}}/browse/FIDM-6048",
+      "done": false, "onHold": false, "url": "{{JIRA_BASE}}/browse/PROJ-123",
       "sprint": "…", "sprintOverflow": false, "sprintCount": 1, "reporter": "…", "assignee": "{{USER_NAME}} ({{USER_ID}})",
-      "epic": { "key": "FIDM-5999", "url": "…", "relation": "epic (parent)" },
+      "epic": { "key": "PROJ-100", "url": "…", "relation": "epic (parent)" },
       "labels": ["…"], "components": ["…"], "fixVersions": ["…"],
       "description": "<p>… light HTML …</p>",
       "acceptanceCriteria": ["…", "…"],
@@ -233,15 +233,15 @@ data.json SCHEMA (match git/jira-board/src/types.ts EXACTLY — same keys, same 
       "externalLinks":[ { "title": "…", "url": "…", "reachable": true } ],
       "proposedSolution": "<p>…</p>", "effortEstimate": "<p>…</p>",
       "openQuestions": ["…"],
-      "sources": [ { "title": "Jira FIDM-6048", "url": "…" } ],
+      "sources": [ { "title": "Jira PROJ-123", "url": "…" } ],
       "updateLog": [ { "when": "2026-06-30", "text": "In Review" }, { "when": "2026-06-24", "text": "Opened" } ]
     }
   ],
   "completed": [                                // FULL HISTORY of Done tickets (lighter)
-    { "key":"FIDM-5980","title":"…","type":"Security","priority":"High","project":"FIDM","status":"Done",
-      "created":"2026-05-12","resolved":"2026-05-28","storyPoints":3,"branch":"bugfix/FIDM-5980_…",
+    { "key":"PROJ-98","title":"…","type":"Security","priority":"High","project":"PROJ","status":"Done",
+      "created":"2026-05-12","resolved":"2026-05-28","storyPoints":3,"branch":"bugfix/PROJ-98_…",
       "pr":{ "state":"merged","id":351,"merged":true,"mergedAt":"2026-05-27","approvals":2,"url":"…" },
-      "url":"{{JIRA_BASE}}/browse/FIDM-5980" }
+      "url":"{{JIRA_BASE}}/browse/PROJ-98" }
   ]
 }
 Rules: dates ISO 8601. Use null (not "") for unknown scalars; omit arrays you have nothing for or use [].
