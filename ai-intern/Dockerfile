@@ -10,4 +10,7 @@ ENV PYTHONUNBUFFERED=1 \
 COPY worker.py models.json /app/
 COPY prompts /app/prompts
 EXPOSE 4322
+# /health answers 503 once a queue worker thread has died, so `docker ps` shows it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python3 -c "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PORT', '4322') + '/health', timeout=4).status == 200 else 1)"
 CMD ["python3", "-u", "/app/worker.py"]
