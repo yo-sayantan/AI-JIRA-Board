@@ -23,7 +23,10 @@ if ! command -v python3 >/dev/null 2>&1 || [ ! -f "$INTERN_DIR/daily_fetch.py" ]
   exit 127
 fi
 
-echo "$(date): refreshing raised-by-me tickets (daily_fetch.py --raised)…" | tee -a "$LOG"
+# Same parallelism knob as the board refresh (Settings → Parallel refresh); shellenv
+# assigns it, python reads it from the environment.
+export REFRESH_WORKERS
+echo "$(date): refreshing raised-by-me tickets (daily_fetch.py --raised, workers=${REFRESH_WORKERS:-8})…" | tee -a "$LOG"
 run_with_timeout 300 python3 "$INTERN_DIR/daily_fetch.py" --raised >> "$LOG" 2>&1
 code=$?
 
