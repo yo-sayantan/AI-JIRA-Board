@@ -64,6 +64,22 @@ export function countTicketsWithPr(data: JiraData): number {
   return keys.size
 }
 
+/**
+ * The dashboard's own cards with a pull request: open work (On Hold and Next Sprint included) plus
+ * the Done column's recently completed tickets. The Completed archive and nested sub-tasks of
+ * other people are not on the dashboard, so they are left out.
+ */
+export function dashboardPrTickets(tickets: Ticket[]): { keys: string[]; open: number; done: number } {
+  const keys: string[] = []
+  let done = 0
+  for (const t of tickets) {
+    if (prListOf(t).length === 0 || keys.includes(t.key)) continue
+    keys.push(t.key)
+    if (t.column === 'done') done++
+  }
+  return { keys, open: keys.length - done, done }
+}
+
 export function countMyCompleted(data: JiraData): number {
   return data.completed.filter((c) => c.mine !== false && !c.parentKey).length
 }

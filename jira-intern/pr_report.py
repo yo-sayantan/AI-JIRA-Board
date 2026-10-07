@@ -12,7 +12,7 @@ an enriched file that changed anything derived. Nothing here touches the network
 
   pr_report.py base <KEY>                 write the deterministic report; print fingerprint; exit 2 if no PR
   pr_report.py uptodate <KEY>             exit 0 if reports/<KEY>.json matches the ticket's PR fingerprint
-  pr_report.py needs-report [--year Y] [--since D] [--force] [--max N]   keys missing/stale reports
+  pr_report.py needs-report [--year Y] [--since D] [--keys K1,K2] [--force] [--max N]   keys missing/stale reports
   pr_report.py context <KEY>              ticket + settings the AI pass needs (JSON, stdout)
   pr_report.py validate <KEY> [--base <path>]   exit 0 if well-formed (and derived parts preserved)
   pr_report.py mark-enriched <KEY>        stamp enriched=true / enrichedAt / generator
@@ -714,8 +714,12 @@ def main(argv):
         # staleness check skips it forever and it never gets upgraded. This selects those too,
         # which is what makes an interrupted AI backfill resumable without redoing finished work.
         needs_ai = "--needs-ai" in args
+        # --keys: only these tickets (the board's own cards), still subject to every filter below.
+        only = {k.strip().upper() for k in args[args.index("--keys") + 1].split(",") if k.strip()} if "--keys" in args else None
         out = []
         for t, src in iter_tickets(data):
+            if only is not None and (t.get("key") or "").upper() not in only:
+                continue
             if not prs_of(t) or (year and year_of(t) != year):
                 continue
             if since:

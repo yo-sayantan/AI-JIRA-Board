@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ColumnKey } from './types'
 import { RUN_COMMAND, aiModelLabel, enrichJobsRunning, isServed } from './lib/runner'
-import { countMyCompleted, countRaised, countTicketsWithPr, hasActiveWork, indexByKey, splitBoard } from './lib/boardView'
+import { countMyCompleted, countRaised, countTicketsWithPr, dashboardPrTickets, hasActiveWork, indexByKey, splitBoard } from './lib/boardView'
 import { parseQuery } from './lib/search'
 import { useBoardData } from './hooks/useBoardData'
 import { useBoardSettings } from './hooks/useBoardSettings'
@@ -65,6 +65,7 @@ export default function App() {
   const myCompletedCount = useMemo(() => countMyCompleted(data), [data])
   const raisedCount = useMemo(() => countRaised(data), [data])
   const ticketsWithPr = useMemo(() => countTicketsWithPr(data), [data])
+  const boardWithPr = useMemo(() => dashboardPrTickets(data.tickets), [data.tickets])
   const doneOnBoard = useMemo(() => new Set(data.tickets.filter((t) => t.column === 'done').map((t) => t.key)), [data.tickets])
   const refreshing = jobs.running === 'daily'
   const archiveRefreshing = jobs.running === 'archive'
@@ -119,6 +120,7 @@ export default function App() {
             generating: reports.generating,
             withPrCount: ticketsWithPr,
             reportCount: Object.keys(reports.index?.reports ?? {}).length,
+            board: boardWithPr,
             onBulk: reports.generateBulk,
             onOne: reports.generateOne,
             onStop: reports.stopAll,
@@ -126,7 +128,7 @@ export default function App() {
             modelLabel: aiModelLabel(ai),
           }
         : undefined,
-    [features.prReports, reports.generating, reports.index, reports.generateBulk, reports.generateOne, reports.stopAll, ticketsWithPr, ai],
+    [features.prReports, reports.generating, reports.index, reports.generateBulk, reports.generateOne, reports.stopAll, ticketsWithPr, boardWithPr, ai],
   )
 
   if (source === 'empty') {

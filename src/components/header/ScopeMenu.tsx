@@ -30,6 +30,8 @@ export interface ScopeMenuProps {
     defaultWindowDays: number
     sinceAria: string
     keyAria: string
+    /** Extra one-click scopes listed right under the "all" item. */
+    extra?: { label: string; hint: string; disabled?: boolean; onClick: () => void }[]
   }
   disabled?: boolean
   onPick: (target: MenuScope) => void
@@ -158,6 +160,7 @@ function ScopeOptions({
   defaultWindowDays,
   sinceAria,
   keyAria,
+  extra = [],
 }: ScopeMenuProps['options'] & { color: string; disabled: boolean; onPick: (target: MenuScope) => void }) {
   const [since, setSince] = useState(() => daysAgo(defaultWindowDays))
   const [key, setKey] = useState('')
@@ -174,6 +177,9 @@ function ScopeOptions({
   return (
     <>
       <MenuItem color={color} label={allLabel} hint={allHint} disabled={disabled} onClick={() => pick({ scope: 'all' })} />
+      {extra.map((item) => (
+        <MenuItem key={item.label} color={color} label={item.label} hint={item.hint} disabled={disabled || item.disabled} onClick={() => !disabled && item.onClick()} />
+      ))}
       <MenuItem color={color} label={`This year (${thisYear})`} hint={yearHint} disabled={disabled} onClick={() => pick({ scope: 'year', year: thisYear })} />
       {windows.map((days) => (
         <MenuItem key={days} color={color} label={`Last ${days} days`} hint={sinceHint(daysAgo(days))} disabled={disabled} onClick={() => pick({ scope: 'since', since: daysAgo(days) })} />
