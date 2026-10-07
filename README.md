@@ -72,9 +72,9 @@ AI-JIRA-Board/
 ├── .github/                 ← CI (typecheck + build), Dependabot, issue & PR templates
 ├── open-guide.sh            ← open the guide (macOS/Linux) — no server needed
 ├── open-guide.bat           ← open the guide (Windows) — no server needed
-├── AGENTS.md                ← 🤖 entry point for AI agents → docs/AGENTS.md
 ├── docs/                    ← 📚 documentation
 │   ├── index.html           ←   Setup & Deployment guide (per-OS install, git/Docker commands)
+│   ├── doc.html             ←   styled in-browser viewer for all the .md files below
 │   ├── legal.html           ←   privacy, data, cookies, terms, accessibility, contact
 │   ├── AGENTS.md            ←   onboarding for engineers & AI agents: map, rules, gotchas
 │   ├── FEATURES.md          ←   every feature + where its code lives
