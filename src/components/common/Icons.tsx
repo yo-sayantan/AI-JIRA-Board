@@ -370,6 +370,16 @@ export function PauseIcon({ size = 15, className = '', color = '#f97316' }: IP) 
   )
 }
 
+/** Four-way move arrows — drag-and-drop status changes. */
+export function MoveIcon({ size = 15, className = '', color = '#8b5cf6' }: IP) {
+  return (
+    <svg {...svg(size, className)}>
+      <path d="M12 3v18M3 12h18" {...line(color, 2)} />
+      <path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" {...line(color, 2)} />
+    </svg>
+  )
+}
+
 export function EyeOffIcon({ size = 13, className = '', color = 'currentColor' }: IP) {
   return (
     <svg {...svg(size, className)}>

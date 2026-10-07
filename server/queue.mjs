@@ -92,3 +92,21 @@ export class KeyQueue {
     void this.pump()
   }
 }
+
+/**
+ * Spawn a child and resolve with its stdout (trimmed) plus exit code. For verdict-style
+ * scripts that print one JSON line; stderr is left to the terminal.
+ */
+export function runCapture(cmd, args, opts = {}) {
+  return new Promise((resolve) => {
+    try {
+      const child = spawn(cmd, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'], ...opts })
+      let out = ''
+      child.stdout.on('data', (chunk) => (out += chunk))
+      child.on('exit', (code, signal) => resolve({ out: out.trim(), code: signal ? 1 : (code ?? 1) }))
+      child.on('error', () => resolve({ out, code: 1 }))
+    } catch {
+      resolve({ out: '', code: 1 })
+    }
+  })
+}

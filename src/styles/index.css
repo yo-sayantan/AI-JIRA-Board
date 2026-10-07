@@ -166,6 +166,12 @@ select.jb-field:disabled {
   border-color: color-mix(in srgb, var(--card-accent) 46%, var(--line));
   background-color: color-mix(in srgb, var(--card-accent) 8%, var(--surface-solid));
 }
+/* While its ghost is being dragged the card itself is gone from the column (kept in the DOM,
+   since removing it would cancel the drag); it reappears only if the drop is abandoned. */
+.ticket-card-dragging {
+  opacity: 0 !important;
+  pointer-events: none;
+}
 .ticket-card-wash,
 .ticket-card-glow,
 .ticket-card-edge {

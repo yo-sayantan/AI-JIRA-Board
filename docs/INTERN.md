@@ -42,6 +42,7 @@ Thin shell wrappers the server (and cron / Shortcuts / your terminal) invoke. Al
 |---|---|
 | `run-intern.sh` | Daily fetch. Python fast path first; LLM-agent fallback (`cursor-agent` by default) only if it fails. Holds `.intern.lock`. |
 | `update-completed.sh` | Archive rebuild (scope via `ARCHIVE_SCOPE` / `ARCHIVE_YEAR` / `ARCHIVE_SINCE` / `ARCHIVE_KEY`). Holds `.completed.lock`. |
+| `transition.py <KEY> <column>` | The only Jira **write**: checks PR / QA gates on live Jira, picks a workflow transition into the target column, POSTs it. Prints one JSON verdict line. Uses the REST PAT directly, not MCP. |
 | `refresh-ticket.sh <KEY>` | Single-ticket refresh (Bitbucket skipped; dev-status only). Holds `.refresh.lock`. Auto-triggers a PR report `--if-needed`. |
 | `refresh-raised.sh` | Raised-by-me hard refresh, deterministic only. Holds `.raised.lock`. |
 | `pr-report.sh <KEY>` · `pr-reports-backfill.sh` | Base report(s), then enqueue AI enrichment unless the AI level is None. |

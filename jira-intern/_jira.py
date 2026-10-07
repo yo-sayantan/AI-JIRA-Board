@@ -145,11 +145,12 @@ def get_json(url, headers, timeout, retries=4):
 
 
 # The shell runners kill a fetch at 300 s, so one hung Jira call must not eat the whole budget.
-def jira_get(path, timeout=60):
+def jira_get(path, timeout=60, retries=4):
     return get_json(
         JIRA_BASE + path,
         {"Authorization": f"Bearer {os.environ['JIRA_PERSONAL_TOKEN']}", "Accept": "application/json"},
         timeout=timeout,
+        retries=retries,
     )
 
 
@@ -166,7 +167,7 @@ def jira_post(path, body, timeout=60):
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, context=SSL_CTX, timeout=timeout) as r:
+    with urllib.request.urlopen(req, context=ssl_context(), timeout=timeout) as r:
         raw = r.read()
     return json.loads(raw) if raw else {}
 

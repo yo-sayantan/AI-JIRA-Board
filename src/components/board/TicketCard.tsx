@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import type { Ticket } from '../../types'
 import { COLUMN_META } from '../../lib/columns'
@@ -19,6 +19,9 @@ function archivesInDays(t: Ticket, now: number): number | null {
 }
 
 const celebratedDone = new Set<string>()
+
+/** dataTransfer type carrying the dragged ticket key; columns accept only this. */
+export const DRAG_MIME = 'application/x-jira-board-ticket'
 
 /** Full branch name, wrapping only after / or _ so a key like PROJ-267 stays intact. */
 function BranchName({ name }: { name: string }) {
@@ -57,6 +60,8 @@ export const TicketCard = memo(function TicketCard({
   onArchive,
   onRefreshTicket,
   refreshing,
+  draggable = false,
+  moving = false,
 }: {
   ticket: Ticket
   now: number
@@ -65,6 +70,10 @@ export const TicketCard = memo(function TicketCard({
   onArchive?: (key: string) => void
   onRefreshTicket?: (key: string) => void
   refreshing?: boolean
+  /** Card can be dragged to another column (status change written to Jira). */
+  draggable?: boolean
+  /** Jira is being updated for this card right now. */
+  moving?: boolean
 }) {
   const meta = COLUMN_META[ticket.column]
   const accent = meta?.accent ?? '#64748b'
@@ -81,6 +90,30 @@ export const TicketCard = memo(function TicketCard({
   // Sub-tasks carry little of their own (no points, rarely a PR or branch), so they get a compact card.
   const sub = !!ticket.parentKey
   const quiet = motionOff()
+  // Native HTML5 drag. Bound by hand because motion.div consumes React's onDragStart/onDragEnd
+  // for its own pan gesture and never forwards them to the DOM.
+  const cardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el || !draggable) return
+    const start = (e: DragEvent) => {
+      if (!e.dataTransfer) return
+      e.dataTransfer.setData(DRAG_MIME, ticket.key)
+      e.dataTransfer.setData('text/plain', ticket.key)
+      e.dataTransfer.effectAllowed = 'move'
+      // The browser snapshots the card for the drag image first; then the card itself leaves
+      // its column, so the drag reads as picking the whole card up. Removing it from the DOM
+      // would cancel the drag, so it only turns invisible.
+      requestAnimationFrame(() => el.classList.add('ticket-card-dragging'))
+    }
+    const end = () => el.classList.remove('ticket-card-dragging')
+    el.addEventListener('dragstart', start)
+    el.addEventListener('dragend', end)
+    return () => {
+      el.removeEventListener('dragstart', start)
+      el.removeEventListener('dragend', end)
+    }
+  }, [draggable, ticket.key])
   // Decided once per card instance, then recorded in an effect: StrictMode double-invokes
   // useMemo (and the second pass would see its own first-pass mutation and skip the burst).
   const [burst] = useState(() => ticket.column === 'done' && !quiet && !celebratedDone.has(ticket.key))
@@ -107,10 +140,13 @@ export const TicketCard = memo(function TicketCard({
     // Card shell is a div[role=button], NOT a <button>, so the dismiss/refresh controls inside it
     // are valid (a <button> may not contain interactive descendants). Enter/Space open it.
     <motion.div
+      ref={cardRef}
+      layout="position"
+      draggable={draggable || undefined}
       role="button"
       tabIndex={0}
       aria-label={`Open ${ticket.key}: ${ticket.title}`}
-      title={overflowTitle}
+      title={overflowTitle ?? (draggable ? 'Drag to another column to change its status in Jira' : undefined)}
       onClick={() => onOpen(ticket.key)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -124,12 +160,13 @@ export const TicketCard = memo(function TicketCard({
       transition={{
         opacity: { duration: 0.28, ease: 'easeOut' },
         y: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+        layout: { type: 'spring', stiffness: 380, damping: 34 },
         boxShadow: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
         scale: { duration: 0.16, ease: 'easeOut' },
       }}
       whileHover={quiet ? undefined : { y: -6, zIndex: 3, boxShadow: hoverShadow }}
       whileTap={quiet ? undefined : { y: -2, scale: 0.992 }}
-      className={`ticket-card group relative flex w-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[var(--surface-solid)] text-left ${sub ? 'px-2.5 py-2' : 'min-h-[168px] p-2.5'}`}
+      className={`ticket-card group relative flex w-full flex-col ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} overflow-hidden rounded-xl border bg-[var(--surface-solid)] text-left ${sub ? 'px-2.5 py-2' : 'min-h-[168px] p-2.5'}`}
       style={{
         boxShadow: baseShadow,
         borderColor: overflow ? '#dc2626' : undefined,
@@ -205,7 +242,16 @@ export const TicketCard = memo(function TicketCard({
           {ticket.key}
           <PointsTag points={ticket.storyPoints} />
         </span>
-        {rel && <span className="shrink-0 text-[10px] text-[var(--muted)]">{rel}</span>}
+        {moving ? (
+          <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold" style={{ color: accent }} title="Updating status in Jira…">
+            <motion.span className="inline-flex" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}>
+              <RefreshIcon size={10} color="currentColor" />
+            </motion.span>
+            syncing
+          </span>
+        ) : (
+          rel && <span className="shrink-0 text-[10px] text-[var(--muted)]">{rel}</span>
+        )}
       </div>
 
       <div className={`relative mt-1 line-clamp-2 font-semibold leading-snug text-[var(--ink)] ${sub ? 'text-[12px]' : 'text-[13px]'}`}>

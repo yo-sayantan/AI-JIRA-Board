@@ -455,3 +455,31 @@ export async function stopArchiveRun(): Promise<void> {
 export async function stopReportRun(): Promise<void> {
   await fetchWithTimeout('/api/reports/stop', { method: 'POST' }).catch(() => {})
 }
+
+export type MoveTarget = 'todo' | 'prog' | 'rev' | 'qa' | 'done'
+
+export interface MoveVerdict {
+  ok: boolean
+  /** True when Jira actually changed status; false with ok when it was already there. */
+  moved?: boolean
+  /** The Jira status the ticket landed in. */
+  status?: string | null
+  /** Soft gate misses (no PR for review, no QA ticket) — the move still happened. */
+  warnings?: string[]
+  /** Hard gate: Done refused because a PR is unmerged or QA is open. */
+  blocked?: boolean
+  reason?: string
+  error?: string
+}
+
+/** Move a ticket to another column IN JIRA. Resolves when Jira has answered (a few seconds). */
+export async function moveTicketInJira(key: string, to: MoveTarget): Promise<MoveVerdict> {
+  try {
+    const r = await fetch(`/api/move-ticket?key=${encodeURIComponent(key)}&to=${to}`, { method: 'POST' })
+    const body = (await r.json().catch(() => null)) as MoveVerdict | null
+    if (body) return body
+    return { ok: false, error: `server answered ${r.status}` }
+  } catch {
+    return { ok: false, error: 'lost contact with the local server' }
+  }
+}

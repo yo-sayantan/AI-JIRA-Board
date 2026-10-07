@@ -1,0 +1,108 @@
+import { useCallback, useMemo, useRef, useState } from 'react'
+import type { ColumnKey, Ticket } from '../types'
+import { COLUMN_META } from '../lib/columns'
+import { moveTicketInJira, type MoveTarget } from '../lib/runner'
+import type { ToastFn } from './useToasts'
+
+export const MOVE_TARGETS: ReadonlySet<ColumnKey> = new Set<ColumnKey>(['todo', 'prog', 'rev', 'qa', 'done'])
+
+interface Pin {
+  column: ColumnKey
+  /** Drop order — later drops sit lower in the column. */
+  seq: number
+}
+
+/**
+ * Drag-and-drop status changes. The card lands at the bottom of its new column the moment it is
+ * dropped and Jira is updated in the background; the user keeps working meanwhile. When Jira
+ * refuses (Done with an unmerged PR / open QA), the pin is dropped and the card slides back to
+ * where it was. A successful move keeps the card where it was dropped: the column override lasts
+ * until the follow-up refresh brings the real status through, the bottom-of-column order for the
+ * rest of the session.
+ */
+export function useTicketMoves({
+  served,
+  toast,
+  refreshTicket,
+}: {
+  served: boolean
+  toast: ToastFn
+  /** Watches the server-side refresh queued by the move and swaps the fresh data in. */
+  refreshTicket: (key: string) => Promise<void>
+}) {
+  const [pins, setPins] = useState<ReadonlyMap<string, Pin>>(new Map())
+  const [movingKeys, setMovingKeys] = useState<ReadonlySet<string>>(new Set())
+  const inFlight = useRef(new Set<string>())
+  const seq = useRef(0)
+
+  const setPin = useCallback((key: string, column: ColumnKey | null) => {
+    setPins((prev) => {
+      const next = new Map(prev)
+      if (column) next.set(key, { column, seq: ++seq.current })
+      else next.delete(key)
+      return next
+    })
+  }, [])
+  const markMoving = useCallback((key: string, on: boolean) => {
+    setMovingKeys((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
+
+  const moveTicket = useCallback(
+    async (ticket: Ticket, to: ColumnKey) => {
+      const from = ticket.column
+      if (to === from || !MOVE_TARGETS.has(to)) return
+      if (!served) return void toast('Moving tickets needs the local server — run `npm run serve`.', 'info')
+      if (inFlight.current.has(ticket.key)) return void toast(`${ticket.key} is already being moved.`, 'info')
+      inFlight.current.add(ticket.key)
+      markMoving(ticket.key, true)
+      const previous = pins.get(ticket.key) ?? null
+      setPin(ticket.key, to)
+      const label = COLUMN_META[to].label
+
+      const verdict = await moveTicketInJira(ticket.key, to as MoveTarget)
+      inFlight.current.delete(ticket.key)
+      markMoving(ticket.key, false)
+
+      if (!verdict.ok) {
+        // Bounce back: the card returns to the column (and spot) it came from.
+        setPins((prev) => {
+          const next = new Map(prev)
+          if (previous) next.set(ticket.key, previous)
+          else next.delete(ticket.key)
+          return next
+        })
+        if (verdict.blocked) toast(`${ticket.key} stays in ${COLUMN_META[from].label}. ${verdict.reason ?? ''}`.trim(), 'error')
+        else toast(`Couldn't move ${ticket.key} to ${label}: ${verdict.error ?? 'unknown error'}.`, 'error')
+        return
+      }
+      toast(verdict.moved ? `${ticket.key} → ${verdict.status ?? label} in Jira.` : `${ticket.key} was already in ${label}.`, 'success')
+      for (const w of verdict.warnings ?? []) toast(`${ticket.key}: ${w}`, 'info')
+      // The server queued this ticket's refresh; attach to it so the real status lands on the board.
+      if (verdict.moved) void refreshTicket(ticket.key)
+    },
+    [served, toast, refreshTicket, pins, setPin, markMoving],
+  )
+
+  /** Show pinned tickets in their dropped column until the dump itself agrees. */
+  const applyOverrides = useCallback(
+    (tickets: Ticket[]): Ticket[] => {
+      if (pins.size === 0) return tickets
+      return tickets.map((t) => {
+        const pin = pins.get(t.key)
+        if (!pin || t.column === pin.column) return t
+        return { ...t, column: pin.column, done: pin.column === 'done', onHold: false }
+      })
+    },
+    [pins],
+  )
+
+  /** key → drop order, for the Board to sort dropped cards to the bottom of their column. */
+  const bottomOrder = useMemo(() => new Map([...pins].map(([k, p]) => [k, p.seq] as const)), [pins])
+
+  return useMemo(() => ({ moveTicket, applyOverrides, bottomOrder, movingKeys }), [moveTicket, applyOverrides, bottomOrder, movingKeys])
+}

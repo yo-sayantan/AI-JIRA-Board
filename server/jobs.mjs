@@ -2,7 +2,7 @@ import { unlink } from 'node:fs/promises'
 import { PATHS } from './config.mjs'
 import { readJson } from './http.mjs'
 import { dataLocksHeld, removeLockOwnedBy } from './locks.mjs'
-import { KeyQueue, runProcess } from './queue.mjs'
+import { KeyQueue, runCapture, runProcess } from './queue.mjs'
 
 // The daily fetch and the archive rebuild both rewrite data.json, so at most one runs at a time.
 // Lock files stay the source of truth (they survive a server restart and cover terminal runs);
@@ -28,6 +28,32 @@ export const ticketRefresh = new KeyQueue({
   run: (key) => runProcess('bash', [PATHS.refreshScript, key]),
   isBlocked: dataWriterBusy,
 })
+
+export const MOVE_TARGETS = new Set(['todo', 'prog', 'rev', 'qa', 'done'])
+const moving = new Set()
+
+/**
+ * Drag-and-drop write-through: transition.py checks the PR / QA gates on live Jira and moves the
+ * ticket. It never touches data.json, so it may run while a fetch is busy; on success the usual
+ * single-ticket refresh is queued so the board's own copy catches up.
+ */
+export async function moveTicket(key, target) {
+  if (moving.has(key)) return { ok: false, error: `${key} is already being moved` }
+  moving.add(key)
+  try {
+    const { out, code } = await runCapture('python3', [PATHS.transitionPy, key, target])
+    let verdict
+    try {
+      verdict = JSON.parse(out.split('\n').pop() || '')
+    } catch {
+      verdict = { ok: false, error: code === 127 ? 'python3 is not available' : `transition exited ${code} without a verdict` }
+    }
+    if (verdict.ok && verdict.moved) ticketRefresh.add(key)
+    return verdict
+  } finally {
+    moving.delete(key)
+  }
+}
 
 function markStarted() {
   state.lastExit = null
