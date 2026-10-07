@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { ColumnKey } from './types'
 import { RUN_COMMAND, aiModelLabel, enrichJobsRunning, isServed } from './lib/runner'
 import { countMyCompleted, countRaised, countTicketsWithPr, hasActiveWork, indexByKey, splitBoard } from './lib/boardView'
-import { freshness } from './lib/format'
 import { parseQuery } from './lib/search'
 import { useBoardData } from './hooks/useBoardData'
 import { useBoardSettings } from './hooks/useBoardSettings'
@@ -23,7 +22,6 @@ import { OnHold } from './components/board/OnHold'
 import { NextSprint } from './components/board/NextSprint'
 import { EmptyState } from './components/board/EmptyState'
 import { FunEmptyBoard } from './components/board/FunEmptyBoard'
-import { StaleBanner } from './components/board/StaleBanner'
 import { CompletedOverlay } from './components/completed/Completed'
 import { RaisedOverlay } from './components/raised/Raised'
 import { TicketDetail } from './components/ticket/TicketDetail'
@@ -68,7 +66,6 @@ export default function App() {
   const raisedCount = useMemo(() => countRaised(data), [data])
   const ticketsWithPr = useMemo(() => countTicketsWithPr(data), [data])
   const doneOnBoard = useMemo(() => new Set(data.tickets.filter((t) => t.column === 'done').map((t) => t.key)), [data.tickets])
-  const fr = freshness(data.generatedAt, now)
   const refreshing = jobs.running === 'daily'
   const archiveRefreshing = jobs.running === 'archive'
 
@@ -165,8 +162,6 @@ export default function App() {
       />
 
       <SettingsPanel open={settingsOpen} settings={settings} onChange={setSettings} onClose={closeSettings} aiLevelSynced={served} aiStatus={ai} />
-
-      {fr.stale && <StaleBanner label={fr.label} served={served} refreshing={refreshing} onRefresh={jobs.refreshBoard} />}
 
       {/* Counts follow the search. The Completed chip counts MY tickets only, like the archive's default scope. */}
       <Stats
