@@ -147,29 +147,25 @@ export const Stats = memo(function Stats({
 
       {(completedCount != null || raisedCount != null) && (
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {/* A raised key beside the gold trophy: indigo gradient face, inner bevel, solid
-              ledge — it presses down on tap. open/total because "still needs fixing" is the
-              number this view exists for. */}
+          {/* Deliberately quieter than the gold Completed trophy: the board's flat chip
+              pattern (thin outline, tinted fill) in the view's indigo. open/total because
+              "still needs fixing" is the number this view exists for. */}
           {raisedCount != null && (
             <motion.button
-              whileHover={{ y: -1, scale: 1.02 }}
-              whileTap={{ y: 2, scale: 0.97 }}
+              whileHover={{ scale: 1.03, y: -1 }}
+              whileTap={{ scale: 0.96 }}
               transition={{ type: 'spring', stiffness: 400, damping: 22 }}
               onClick={onOpenRaised}
               title={`Tickets you raised (sub-tickets excluded) — ${raisedCount.open} of ${raisedCount.total} still open. See each one's status, who holds it now, and every hand-off.`}
-              className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-extrabold text-white transition-[filter] hover:brightness-[1.06]"
-              style={{
-                background: 'linear-gradient(180deg, #818cf8, #6366f1 55%, #4f46e5)',
-                boxShadow: `inset 0 1.5px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(0,0,0,0.18), 0 4px 0 #3730a3, 0 10px 18px -8px ${hexToRgba(RAISED, 0.6)}`,
-                textShadow: '0 1px 2px rgba(0,0,0,0.35)',
-              }}
+              className="inline-flex items-center gap-1.5 rounded-full border px-3.5 py-[7.5px] text-[12.5px] font-bold transition-colors"
+              style={{ borderColor: hexToRgba(RAISED, 0.45), color: RAISED, background: hexToRgba(RAISED, 0.07) }}
             >
-              <MegaphoneIcon size={14} color="#fff" />
+              <MegaphoneIcon size={14} color={RAISED} />
               Raised{' '}
               <b className="tabular-nums">
                 <AnimatedNumber value={raisedCount.open} />
               </b>
-              <span className="-ml-0.5 text-[11px] font-bold tabular-nums opacity-75">/ {raisedCount.total}</span>
+              <span className="-ml-0.5 text-[11px] font-semibold tabular-nums opacity-60">/ {raisedCount.total}</span>
             </motion.button>
           )}
 

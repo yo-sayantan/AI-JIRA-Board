@@ -11,19 +11,10 @@ import { ChevronIcon, CheckIcon, ClockIcon, DocIcon, ExpandAllIcon, LinkIcon, Me
 // The Raised view's own palette — indigo identity (deliberately apart from the Completed
 // archive's green/gold, and not a red/alarm family); amber marks what's still open.
 const RAISED = '#6366f1'
-const RAISED_DEEP = '#4f46e5'
-const RAISED_LEDGE = '#3730a3' // the 3D button's bottom edge
 const OPEN = '#f59e0b'
 const HANDOFF = '#0ea5e9' // a ticket that moved between people
 const FIXED = '#22c55e'
 const NOBODY = '#64748b'
-
-/** Raised, modern, pressable — gradient face, inner bevel, solid ledge, soft drop. */
-const BTN_3D = {
-  background: `linear-gradient(180deg, #818cf8, ${RAISED} 55%, ${RAISED_DEEP})`,
-  boxShadow: `inset 0 1.5px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(0,0,0,0.18), 0 4px 0 ${RAISED_LEDGE}, 0 10px 18px -8px rgba(79,70,229,0.6)`,
-  textShadow: '0 1px 2px rgba(0,0,0,0.35)',
-} as const
 
 /**
  * Fixed widths for the right-hand rail, right-to-left: Raised date, Status, Assignee,
@@ -277,22 +268,27 @@ export function RaisedOverlay({
                   {onRefresh && (
                     <div className="flex flex-col items-end gap-1">
                       <motion.button
-                        whileHover={refreshing ? undefined : { y: -1, scale: 1.02 }}
-                        whileTap={refreshing ? undefined : { y: 2, scale: 0.97 }}
+                        whileHover={refreshing ? undefined : { scale: 1.04, y: -1 }}
+                        whileTap={refreshing ? undefined : { scale: 0.95 }}
                         transition={{ type: 'spring', stiffness: 400, damping: 22 }}
                         onClick={onRefresh}
                         disabled={refreshing}
                         aria-busy={refreshing || undefined}
                         title="Hard refresh — re-pulls EVERY ticket you ever reported straight from Jira: rows already listed pick up their updates, and newly raised tickets appear. (The board's normal refresh never covers tickets other people are working.)"
-                        className="inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-extrabold text-white transition-[filter] hover:brightness-[1.06]"
-                        style={{ ...BTN_3D, opacity: refreshing ? 0.85 : 1 }}
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border px-3.5 text-[12px] font-bold transition-colors"
+                        style={{
+                          borderColor: hexToRgba(RAISED, 0.45),
+                          color: RAISED,
+                          background: hexToRgba(RAISED, refreshing ? 0.14 : 0.07),
+                          opacity: refreshing ? 0.85 : 1,
+                        }}
                       >
                         <motion.span
                           className="inline-flex"
                           animate={refreshing ? { rotate: 360 } : { rotate: 0 }}
                           transition={refreshing ? { repeat: Infinity, duration: 0.8, ease: 'linear' } : { type: 'spring', stiffness: 300, damping: 20 }}
                         >
-                          <RefreshIcon size={13} color="#fff" />
+                          <RefreshIcon size={13} color={RAISED} />
                         </motion.span>
                         {refreshing ? 'Fetching all…' : 'Hard refresh'}
                       </motion.button>
