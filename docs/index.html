@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Same gradient-ticket favicon as the board (index.html) — one brand, one tab icon. -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2214%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M16%2024a4%204%200%200%201%204-4h24a4%204%200%200%201%204%204%204%204%200%200%200%200%208%204%204%200%200%201%200%208%204%204%200%200%201-4%204H20a4%204%200%200%201-4-4%204%204%200%200%200%200-8%204%204%200%200%201%200-8z%22%20fill%3D%22%23ffffff%22%2F%3E%3Cpath%20d%3D%22M32%2017v30%22%20stroke%3D%22%236d5bd0%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-dasharray%3D%222%204%22%2F%3E%3C%2Fsvg%3E" />
+    <!-- Help & support icon — a white ? on the brand gradient. Deliberately NOT the board's
+         ticket favicon, so this tab reads as "the help page" at a glance. -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
     <title>My Jira Board — Setup &amp; Deployment Guide</title>
     <style>
       :root {
@@ -165,6 +166,70 @@
       footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 54px; }
       .ok { color: var(--ok); font-weight: 700; }
       a.dl { font-weight: 700; white-space: nowrap; }
+
+      /* ── modern & smooth ────────────────────────────────────────── */
+      .card, .step, .doc { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
+      .card:hover, .step:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 18px 42px -26px rgba(16, 24, 40, 0.5); }
+      .doc:hover { transform: translateY(-1px); }
+      .hero-pill {
+        display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--soft);
+        border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 72%, transparent);
+        border-radius: 999px; padding: 5px 13px; margin-bottom: 14px; backdrop-filter: blur(6px);
+      }
+      .hero-pill .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--ok); }
+
+      /* Quick-start stepper — the whole journey at a glance; every pill jumps to its section. */
+      .stepper { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 14px 0 4px; counter-reset: qs; }
+      .stepper a {
+        display: block; text-decoration: none; color: inherit; background: var(--card);
+        border: 1px solid var(--line); border-radius: 13px; padding: 13px 14px 11px;
+        transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+      .stepper a:hover { transform: translateY(-2px); border-color: var(--brand); box-shadow: 0 16px 32px -22px rgba(109, 91, 208, 0.7); }
+      .stepper .qn {
+        counter-increment: qs; display: inline-grid; place-items: center; width: 24px; height: 24px;
+        border-radius: 8px; font-weight: 800; font-size: 12px; color: #fff;
+        background: linear-gradient(135deg, var(--brand), var(--brand2)); margin-bottom: 7px;
+      }
+      .stepper .qn::before { content: counter(qs); }
+      .stepper b { display: block; font-size: 13px; letter-spacing: -0.01em; }
+      .stepper span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+      @media (max-width: 900px) { .stepper { grid-template-columns: repeat(2, 1fr); } }
+
+      /* The how-it-fits diagram (inline SVG, themed via CSS vars). */
+      .flow { width: 100%; height: auto; display: block; margin: 8px 0 0; }
+      .flow .bx { fill: var(--bg2); stroke: var(--line); rx: 12; }
+      .flow .bx.hot { fill: color-mix(in srgb, var(--brand) 10%, var(--bg2)); stroke: color-mix(in srgb, var(--brand) 45%, var(--line)); }
+      .flow .t1 { fill: var(--ink); font-size: 14.5px; font-weight: 700; }
+      .flow .t2 { fill: var(--muted); font-size: 11px; }
+      .flow .lbl { fill: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; }
+      .flow .ar { stroke: var(--muted); stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+      .flow .ar.dash { stroke-dasharray: 3 4; stroke: var(--warn); marker-end: url(#arrw); }
+
+      /* ── FAQ accordions ─────────────────────────────────────────── */
+      details.faq { border: 1px solid var(--line); border-radius: 13px; background: var(--card); margin: 10px 0; overflow: hidden; transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+      details.faq:hover { box-shadow: 0 12px 30px -24px rgba(16, 24, 40, 0.5); }
+      details.faq[open] { border-color: color-mix(in srgb, var(--brand2) 40%, var(--line)); }
+      details.faq summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 11px; padding: 13px 16px; font-weight: 700; font-size: 14px; color: var(--ink); }
+      details.faq summary::-webkit-details-marker { display: none; }
+      details.faq summary .qi {
+        flex: none; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center;
+        font-size: 14px; font-weight: 800; color: var(--brand2);
+        background: color-mix(in srgb, var(--brand2) 12%, transparent); transition: transform 0.2s ease;
+      }
+      details.faq[open] summary .qi { transform: rotate(45deg); }
+      details.faq .a { padding: 0 16px 14px 51px; color: var(--soft); font-size: 13.8px; }
+      details.faq .a > :first-child { margin-top: 0; }
+      details.faq .a pre { font-size: 12px; }
+      @media (prefers-reduced-motion: no-preference) {
+        details.faq[open] .a { animation: faq-in 0.22s ease; }
+      }
+      @keyframes faq-in { from { opacity: 0; transform: translateY(-4px); } }
+      .ftag { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-left: auto; flex: none; }
+      .ftag.docker { color: var(--brand2); background: color-mix(in srgb, var(--brand2) 12%, transparent); }
+      .ftag.data { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+      .ftag.board { color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); }
+      .ftag.net { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }
     </style>
   </head>
   <body>
@@ -179,6 +244,7 @@
         <a href="#ai-intern">AI Intern</a>
         <a href="#run">Run</a>
         <a href="#trouble">Troubleshooting</a>
+        <a href="#faq">FAQ</a>
       </div>
     </nav>
 
@@ -187,11 +253,13 @@
       <h1>Setup &amp; Deployment Guide</h1>
       <p class="sub">Everything you need to install the tools, clone the repo, add your Jira token, and get
         the board running — on <b>Windows</b>, <b>macOS</b> or <b>Linux</b>. Every command is copy-ready.</p>
+      <div style="margin-top: 16px"><span class="hero-pill"><span class="dot"></span> Self-hosted · one Docker command · ~10 minutes end to end</span></div>
     </header>
 
     <div class="layout">
       <aside class="toc" aria-label="On this page">
         <p class="toc-h">On this page</p>
+        <a href="#quick">Quick start</a>
         <a href="#what">What this is</a>
         <a href="#tools">Requirements</a>
         <a href="#install">Install the tools</a>
@@ -203,6 +271,7 @@
         <a href="#ai-model-files">GGUF models</a>
         <a href="#run">Other ways to run</a>
         <a href="#trouble">Troubleshooting</a>
+        <a href="#faq">FAQ</a>
         <a href="#more-docs">Full documentation</a>
       </aside>
 
@@ -214,6 +283,18 @@
         when it's up.
       </div>
 
+      <!-- ── QUICK START ──────────────────────────────────────────── -->
+      <h2 id="quick">Quick start — the whole journey in five steps</h2>
+      <div class="stepper">
+        <a href="#install"><span class="qn"></span><b>Install the tools</b><span>Docker Desktop + Git, per your OS</span></a>
+        <a href="#git"><span class="qn"></span><b>Clone the repo</b><span>one <code class="inl">git clone</code></span></a>
+        <a href="#configure"><span class="qn"></span><b>Add your token</b><span>Jira PAT → secrets file</span></a>
+        <a href="#configure"><span class="qn"></span><b>Personal config</b><span>your name + company URLs</span></a>
+        <a href="#docker"><span class="qn"></span><b>Deploy</b><span>one command → port 4321</span></a>
+      </div>
+      <p class="small">Each step below has the exact copy-ready commands for Windows, macOS and Linux. Stuck?
+        Jump straight to the <a href="#faq">FAQ</a> — it covers every problem actually hit on this project.</p>
+
       <!-- ── WHAT ─────────────────────────────────────────────────── -->
       <h2 id="what">What this is</h2>
       <div class="card">
@@ -224,6 +305,46 @@
           <li><b>The fetch</b> (<code class="inl">jira-intern/</code>) — pulls your tickets. Needs <b>one Jira token</b>.</li>
           <li><b>The app</b> (<code class="inl">dist/index.html</code>) — renders whatever the fetch produced. Needs nothing.</li>
         </ul>
+        <!-- How the pieces fit — themed inline SVG, so it reads in light AND dark mode. -->
+        <svg class="flow" viewBox="0 0 860 206" role="img"
+          aria-label="Flow: Jira is fetched by the jira-intern Python scripts into data.json, which the board renders. Tokens stay outside the repo.">
+          <defs>
+            <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0.5 L7.5 4 L0 7.5 z" fill="var(--muted)" />
+            </marker>
+            <marker id="arrw" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0.5 L7.5 4 L0 7.5 z" fill="var(--warn)" />
+            </marker>
+          </defs>
+          <rect class="bx" x="10" y="38" width="150" height="66" rx="12" />
+          <text class="t1" x="85" y="66" text-anchor="middle">Jira</text>
+          <text class="t2" x="85" y="86" text-anchor="middle">your real tickets</text>
+
+          <path class="ar" d="M162 71 H 238" />
+          <text class="lbl" x="200" y="62" text-anchor="middle">REST fetch</text>
+
+          <rect class="bx hot" x="242" y="38" width="196" height="66" rx="12" />
+          <text class="t1" x="340" y="66" text-anchor="middle">jira-intern</text>
+          <text class="t2" x="340" y="86" text-anchor="middle">Python fetch · runs in Docker</text>
+
+          <path class="ar" d="M440 71 H 516" />
+          <text class="lbl" x="478" y="62" text-anchor="middle">writes</text>
+
+          <rect class="bx" x="520" y="38" width="146" height="66" rx="12" />
+          <text class="t1" x="593" y="66" text-anchor="middle">data.json</text>
+          <text class="t2" x="593" y="86" text-anchor="middle">one plain file</text>
+
+          <path class="ar" d="M668 71 H 712" />
+
+          <rect class="bx hot" x="716" y="38" width="134" height="66" rx="12" />
+          <text class="t1" x="783" y="66" text-anchor="middle">The board</text>
+          <text class="t2" x="783" y="86" text-anchor="middle">localhost:4321</text>
+
+          <rect class="bx" x="242" y="152" width="196" height="44" rx="10" />
+          <text class="t2" x="340" y="171" text-anchor="middle">🔑 ~/.cursor/mcp-secrets.env</text>
+          <text class="t2" x="340" y="186" text-anchor="middle">tokens — always OUTSIDE the repo</text>
+          <path class="ar dash" d="M340 150 V 110" />
+        </svg>
         <div class="note pink"><b>Your tokens never enter the repo.</b> They live in one file outside it
           (<code class="inl">~/.cursor/mcp-secrets.env</code>); everything else points at it by path.</div>
       </div>
@@ -673,6 +794,123 @@ bash jira-intern/local-runner/update-completed.sh  <span class="cmt"># full Comp
           <tr><td><code class="inl">./start-jira-board.sh: Permission denied</code></td><td><code class="inl">chmod +x start-jira-board.sh</code></td></tr>
         </table>
       </div>
+
+      <!-- ── FAQ ──────────────────────────────────────────────────── -->
+      <h2 id="faq">FAQ — real problems, real fixes</h2>
+      <p class="small" style="margin: -4px 0 12px">Every one of these actually happened while building and running
+        this board — so a new user will likely meet some of them too. Click a question to open it.</p>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> Docker build dies at <code class="inl">RUN npm run build</code> — “Unable to resolve @typescript/typescript-linux-arm64” <span class="ftag docker">docker</span></summary>
+        <div class="a">
+          <p>TypeScript 7 ships its native compiler as per-platform <b>optional</b> npm packages. When
+            <code class="inl">npm ci</code> runs <i>inside</i> the image over a slow/flaky Docker-VM network, npm
+            silently skips optional packages — then <code class="inl">tsc</code> can’t find its Linux binary.</p>
+          <p><b>Fix:</b> deploy with <code class="inl">./start-jira-board.sh</code> — it builds
+            <code class="inl">dist/</code> on your machine first and tells Docker to just package it
+            (<code class="inl">DIST_SOURCE=prebuilt</code>). Building by hand:</p>
+          <pre><button class="copy">Copy</button>npm run build
+docker compose build --build-arg DIST_SOURCE=prebuilt</pre>
+          <p class="small">BuildKit collapses the real error — rerun with
+            <code class="inl">docker build --progress=plain .</code> to actually see it.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> The deploy “hangs” for 10+ minutes with no output <span class="ftag docker">docker</span></summary>
+        <div class="a">
+          <p>Docker Hub pulls can crawl from the Docker VM (~80&nbsp;KB/s seen here), and
+            <code class="inl">--pull</code> re-fetches the base image on every build. The start script
+            deliberately does <b>not</b> use <code class="inl">--pull</code> — keep it that way, keep the
+            <code class="inl">node</code> base image cached, and never Ctrl-C mid-pull (the download is discarded).</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> I redeployed and the board came up <b>empty</b> <span class="ftag data">data</span></summary>
+        <div class="a">
+          <p>Compose bind-mounts <code class="inl">./jira-intern</code> <b>from the folder you deploy from</b> —
+            your ticket data lives wherever you last deployed. Deploying from a fresh clone/folder points the
+            container at an empty directory.</p>
+          <p><b>Fix:</b> find the old data and copy it over before deploying from the new folder:</p>
+          <pre><button class="copy">Copy</button>docker inspect JIRA-Board --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}'
+<span class="cmt"># then copy data.json, data.js, .state.json, cache/, reports/ from that
+# jira-intern/ into the new folder's jira-intern/ and redeploy</span></pre>
+          <p class="small">Or simply press <b>Refresh board</b> and rebuild the Completed archive — everything is
+            re-fetchable from Jira, it just takes longer.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> <code class="inl">npm ci</code> fails: “Your cache folder contains root-owned files” <span class="ftag docker">docker</span></summary>
+        <div class="a">
+          <p>An old npm bug left root-owned files in <code class="inl">~/.npm</code>. Either fix the ownership
+            (the command npm prints) or sidestep with a throwaway cache:</p>
+          <pre><button class="copy">Copy</button>npm ci --cache "$TMPDIR/npm-cache"</pre>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> The <b>Raised</b> chip is missing (or shows nothing) <span class="ftag board">board</span></summary>
+        <div class="a">
+          <p>The raised-by-me list is fetched by the board refresh — a brand-new deployment has none yet.
+            Click <b>Refresh board</b> once (or the <b>Hard refresh</b> button inside the Raised view). The chip
+            hides itself while the list is empty, and the whole feature can be toggled in
+            Settings&nbsp;→&nbsp;<b>Raised by me</b>.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> AI briefs aren’t appearing on tickets <span class="ftag board">board</span></summary>
+        <div class="a">
+          <p>Three usual causes, in order: Settings → <b>AI usage</b> is set to <b>None</b> (deterministic mode —
+            no briefs by design); the <code class="inl">AI-Intern</code> container is down (Settings shows its
+            health); or it simply hasn’t gotten there yet — the summarize pass writes up to <b>8 briefs per
+            run</b>, so a full board fills in over a few scheduled passes. Raised tickets queue after active ones.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> “Jira MCP unavailable — showing last known state” / fetch keeps failing <span class="ftag net">network</span></summary>
+        <div class="a">
+          <p>Either the VPN is down (on-prem Jira is only reachable on it) or the token expired (Jira returns
+            401). Check the token file and test it directly:</p>
+          <pre><button class="copy">Copy</button>curl -sk -H "Authorization: Bearer $JIRA_PERSONAL_TOKEN" \
+  "$JIRA_URL/rest/api/2/myself" | head -c 200</pre>
+          <p class="small">A JSON blob with your name = token fine, look at the VPN. HTML or 401 = make a new
+            Personal Access Token and update <code class="inl">~/.cursor/mcp-secrets.env</code>.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> “Skipped — another refresh/archive was already running” <span class="ftag data">data</span></summary>
+        <div class="a">
+          <p>Only one job may write <code class="inl">data.json</code> at a time (lock files keep the daily
+            fetch, the archive rebuild, per-ticket refreshes and the raised refresh apart). Wait for the running
+            job — the header button shows its live progress. A stale lock from a killed run clears itself once
+            its owner process is gone.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> A ticket’s PR badge looks stale (merged PR still shows open) <span class="ftag data">data</span></summary>
+        <div class="a">
+          <p>Review activity happens in Bitbucket and never bumps the Jira ticket’s “updated” time, so the fast
+            path can carry an old badge. Use the <b>per-ticket refresh</b> button on the card (or in its drawer).
+            If Bitbucket itself is unreachable, PR data is deliberately carried forward rather than wiped — the
+            run note in the footer says so.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> Port 4321 is already in use <span class="ftag net">network</span></summary>
+        <div class="a">
+          <p><code class="inl">./start-jira-board.sh</code> reclaims the port automatically (it stops whatever
+            holds it, including stale containers from older compose projects). Manual alternatives:</p>
+          <pre><button class="copy">Copy</button>docker compose down
+PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another port</span></pre>
+        </div>
+      </details>
 
       <!-- ── MORE DOCS ────────────────────────────────────────────── -->
       <h2 id="more-docs">Full documentation</h2>
