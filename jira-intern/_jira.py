@@ -326,8 +326,13 @@ def build_update_log(key, created, status, resolved, changelog, prior_log=None):
     # merge prior custom entries (Assigned — initial brief, etc.)
     if prior_log:
         prior_texts = {e.get("text") for e in entries}
+        has_done = any((e.get("text") or "").startswith("Marked DONE") for e in entries)
         for e in prior_log:
             t = e.get("text") or ""
+            # The fresh "Marked DONE — <resolved day>" is authoritative: an older one (a different
+            # day, e.g. before the ticket was reopened) must not sit beside it.
+            if t.startswith("Marked DONE") and has_done:
+                continue
             if t.startswith("Assigned") or t.startswith("Marked DONE") or t.startswith("Refreshed"):
                 if t not in prior_texts:
                     entries.insert(0, e)
