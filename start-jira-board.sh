@@ -100,13 +100,30 @@ deploy() {
   [ -f Dockerfile ] || die "No Dockerfile in ${REPO_DIR}"
   [ -f docker-compose.yml ] || die "No docker-compose.yml in ${REPO_DIR}"
 
+  # Build dist/ on the HOST when the toolchain is here. The Docker VM's network is too
+  # slow/flaky for in-image npm ci (it silently drops optional platform binaries and tsc
+  # dies on "@typescript/typescript-linux-arm64"), so the image then just packages dist/.
+  DIST_SOURCE=build
+  if command -v npm >/dev/null 2>&1 && [ -d node_modules ]; then
+    log "Building the board on the host (npm run build)…"
+    if npm run build 2>&1 | tail -n 5 && [ -f dist/index.html ]; then
+      DIST_SOURCE=prebuilt
+      ok "Host build OK — the image will package dist/ as-is"
+    else
+      log "Host build failed — falling back to the in-image build"
+    fi
+  else
+    log "npm or node_modules missing on the host — building inside the image"
+  fi
+
   log "Building image ${IMAGE_NAME} (this can take a minute the first time)…"
   # Compose reads PORT from the environment for the published port mapping.
   # COMPOSE_PROJECT_NAME groups the stack in Docker Desktop as JIRA-Project.
+  # No --pull: Docker Hub is painfully slow from this VM and the base image is cached.
   export PORT
   docker compose -p jira-board down --remove-orphans >/dev/null 2>&1 || true
-  docker compose build --pull 2>&1 | tail -n 20
-  ok "Image built"
+  docker compose build --build-arg DIST_SOURCE="$DIST_SOURCE" 2>&1 | tail -n 20
+  ok "Image built (dist: ${DIST_SOURCE})"
 
   log "Deploying container '${CONTAINER_NAME}' on port ${PORT}…"
   # --force-recreate: even if the container already exists with the same config, replace it.

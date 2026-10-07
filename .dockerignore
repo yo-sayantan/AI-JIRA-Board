@@ -1,9 +1,10 @@
-# Keep the build context small and reproducible. dist/ and node_modules are
-# rebuilt inside the image, so never ship the host copies.
+# Keep the build context small and reproducible. node_modules is always rebuilt
+# inside the image. dist/ IS shipped: with DIST_SOURCE=prebuilt the image packages
+# the host-built board (the Docker VM's network is too flaky for in-image npm ci);
+# the default in-image build simply overwrites it.
 .git
 .gitignore
 node_modules
-dist
 
 # Editor / OS noise
 .DS_Store
