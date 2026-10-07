@@ -12,6 +12,11 @@ const stack: RefObject<HTMLElement | null>[] = []
 /**
  * While `active`, keep keyboard focus inside a modal panel (which needs tabIndex={-1}): focus the
  * panel when it opens, wrap Tab at its edges, and give focus back to the opener once it closes.
+ *
+ * Every modal on the page goes through this one hook, so stacked dialogs (a ticket drawer over
+ * the Completed archive, a report over a drawer) share ONE stack and only the newest entry
+ * handles Tab. A panel that unmounts when it closes passes `active = true` for its whole life;
+ * one that stays mounted passes its open flag.
  */
 export function useDialogFocus(active: boolean, ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
@@ -45,7 +50,8 @@ export function useDialogFocus(active: boolean, ref: RefObject<HTMLElement | nul
     return () => {
       cancelAnimationFrame(frame)
       document.removeEventListener('keydown', onKey)
-      stack.splice(stack.indexOf(ref), 1)
+      const at = stack.indexOf(ref)
+      if (at >= 0) stack.splice(at, 1)
       if (opener?.isConnected) opener.focus({ preventScroll: true })
     }
   }, [active, ref])

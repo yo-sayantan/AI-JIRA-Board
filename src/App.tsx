@@ -31,15 +31,16 @@ import { SettingsPanel } from './components/settings/Settings'
 import { Toasts } from './components/common/Toast'
 import { NoticesDock } from './components/common/NoticesDock'
 import { Footer } from './components/common/Footer'
+import { ErrorBoundary } from './components/common/ErrorBoundary'
 
 const served = isServed()
 
 export default function App() {
   const now = useClock()
-  const { settings, setSettings, ready: settingsReady, dark, toggleTheme } = useBoardSettings(served, now)
+  const { settings, setSettings, ready: settingsReady, dark, toggleTheme, saveFailed } = useBoardSettings(served, now)
   const { features } = settings
   const { toasts, toast, dismiss } = useToasts(settings.toastSeconds, settings.toastMax)
-  const { data, source, userArchived, reload, archive, restoreArchived } = useBoardData(served)
+  const { data, source, userArchived, reload, archive, restoreArchived } = useBoardData(served, (m) => toast(m, 'error'))
   const jobs = useInternJobs({ served, toast, dismiss, reload })
 
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -56,8 +57,12 @@ export default function App() {
 
   const byKey = useMemo(() => indexByKey(data), [data])
   const drawers = useDrawerStack(byKey)
-  useScrollLock(drawers.open || completedOpen)
-  useShortcuts(features.shortcuts && !drawers.open && !completedOpen, jobs.refreshBoard)
+  useScrollLock(drawers.open || completedOpen || settingsOpen || !!reports.openReport)
+  useShortcuts(features.shortcuts && !drawers.open && !completedOpen && !settingsOpen && !reports.openReport, jobs.refreshBoard)
+
+  useEffect(() => {
+    if (saveFailed) toast('Settings did not reach the server — your changes are saved in this browser only.', 'error')
+  }, [saveFailed, toast])
 
   const terms = useMemo(() => parseQuery(query), [query])
   const view = useMemo(() => splitBoard(data.tickets, terms, now, features.onHold), [data.tickets, terms, now, features.onHold])
@@ -159,7 +164,9 @@ export default function App() {
         reports={reportsMenu}
       />
 
-      <SettingsPanel open={settingsOpen} settings={settings} onChange={setSettings} onClose={closeSettings} aiLevelSynced={served} aiStatus={ai} />
+      <ErrorBoundary label="Settings" overlay onClose={closeSettings}>
+        <SettingsPanel open={settingsOpen} settings={settings} onChange={setSettings} onClose={closeSettings} aiLevelSynced={served} aiStatus={ai} />
+      </ErrorBoundary>
 
       {fr.stale && <StaleBanner label={fr.label} served={served} refreshing={refreshing} onRefresh={jobs.refreshBoard} />}
 
@@ -221,46 +228,52 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {drawers.stack.map((key, i) => {
-          const t = byKey.get(key)
-          return t ? (
-            <TicketDetail
-              key={`${i}:${key}`}
-              ticket={t}
-              now={now}
-              depth={i}
-              topDepth={drawers.stack.length - 1}
-              onClose={drawers.goBack}
-              onJumpTo={() => drawers.jumpTo(i)}
-              onOpen={drawers.pushTicket}
-              // Only a Done ticket still on the board can move to Completed; archive rows already live there.
-              onArchive={doneOnBoard.has(key) ? archiveAndClose : undefined}
-              onRefreshTicket={jobs.refreshTicket}
-              refreshing={jobs.refreshingKeys.has(t.key)}
-              user={data.user}
-              report={features.prReports ? (reports.index?.reports[t.key] ?? null) : null}
-              reportsEnabled={features.prReports}
-              briefsEnabled={features.aiBriefs}
-              reportGenerating={reports.generating.has(t.key)}
-              reportLoading={reports.loadingKey === t.key}
-              onOpenReport={reports.openReportFor}
-              onGenerateReport={reports.generateOne}
-              served={served}
-            />
-          ) : null
-        })}
-      </AnimatePresence>
+      <ErrorBoundary label="the ticket drawer" overlay onClose={drawers.closeAll}>
+        <AnimatePresence>
+          {drawers.stack.map((key, i) => {
+            const t = byKey.get(key)
+            return t ? (
+              <TicketDetail
+                key={`${i}:${key}`}
+                ticket={t}
+                now={now}
+                depth={i}
+                topDepth={drawers.stack.length - 1}
+                onClose={drawers.goBack}
+                onJumpTo={() => drawers.jumpTo(i)}
+                onOpen={drawers.pushTicket}
+                // Only a Done ticket still on the board can move to Completed; archive rows already live there.
+                onArchive={doneOnBoard.has(key) ? archiveAndClose : undefined}
+                onRefreshTicket={jobs.refreshTicket}
+                refreshing={jobs.refreshingKeys.has(t.key)}
+                user={data.user}
+                report={features.prReports ? (reports.index?.reports[t.key] ?? null) : null}
+                reportsEnabled={features.prReports}
+                briefsEnabled={features.aiBriefs}
+                reportGenerating={reports.generating.has(t.key)}
+                reportLoading={reports.loadingKey === t.key}
+                onOpenReport={reports.openReportFor}
+                onGenerateReport={reports.generateOne}
+                served={served}
+              />
+            ) : null
+          })}
+        </AnimatePresence>
+      </ErrorBoundary>
 
-      <CompletedOverlay open={completedOpen} onClose={closeCompleted} items={data.completed} onOpen={drawers.openTicket} pauseEsc={drawers.open} />
+      <ErrorBoundary label="the Completed archive" overlay onClose={closeCompleted}>
+        <CompletedOverlay open={completedOpen} onClose={closeCompleted} items={data.completed} onOpen={drawers.openTicket} pauseEsc={drawers.open} />
+      </ErrorBoundary>
 
-      <PrReportOverlay
-        report={reports.openReport}
-        onClose={reports.closeReport}
-        onRegenerate={served ? reports.generateOne : undefined}
-        generating={reports.openReport ? reports.generating.has(reports.openReport.key) : false}
-        internStatus={ai}
-      />
+      <ErrorBoundary label="the report" overlay onClose={reports.closeReport}>
+        <PrReportOverlay
+          report={reports.openReport}
+          onClose={reports.closeReport}
+          onRegenerate={served ? reports.generateOne : undefined}
+          generating={reports.openReport ? reports.generating.has(reports.openReport.key) : false}
+          internStatus={ai}
+        />
+      </ErrorBoundary>
 
       <NoticesDock notes={data.notes ?? []} seconds={settings.toastSeconds} />
       <Toasts toasts={toasts} onDismiss={dismiss} />

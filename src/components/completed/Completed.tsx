@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { CompletedTicket, Ticket } from '../../types'
-import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, releaseEnvOf, yearOf, hexToRgba, branchesOf, branchStatusOf, prListOf, isMergedPr, isClosedPr, shortBranch, cycleTime, fmtDays } from '../../lib/format'
+import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, releaseEnvOf, yearOf, monthOf, hexToRgba, branchesOf, branchStatusOf, prListOf, isMergedPr, isClosedPr, shortBranch, cycleTime, fmtDays } from '../../lib/format'
 import { matchRow, parseQuery } from '../../lib/search'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
-import { Pill, PrBadge, BranchStatusPill, PointsTag } from '../common/ui'
+import { Pill, PrBadge, BranchStatusPill, PointsTag, safeHref } from '../common/ui'
 import { BranchIcon, ChevronIcon, CommentIcon, ExpandAllIcon, PersonIcon, PrStateIcon, SearchIcon, SparkleIcon, TrophyIcon, TypeIcon } from '../common/Icons'
 
 const DONE = '#22c55e'
@@ -166,8 +166,7 @@ export function CompletedOverlay({
       arr.sort((a, b) => (b.resolved ?? '').localeCompare(a.resolved ?? ''))
       const months: MonthGroup[] = []
       for (const it of arr) {
-        const d = it.resolved ? new Date(it.resolved) : null
-        const label = d && !isNaN(d.getTime()) ? d.toLocaleString(undefined, { month: 'long' }) : ''
+        const label = monthOf(it.resolved)
         const last = months[months.length - 1]
         if (last && last.label === label) last.rows.push(it)
         else months.push({ label, rows: [it] })
@@ -623,8 +622,8 @@ function CompletedRow({ it, expanded, onToggle, onOpen, onOpenKey }: { it: Compl
                             {/* One ticket's PRs can live in different repos, so the number alone is ambiguous. */}
                             {p.repo && <code className="rounded bg-[var(--surface-solid)] px-1.5 py-[1px] font-mono text-[10.5px] text-[var(--ink-soft)]">{p.repo}</code>}
                             {typeof p.approvals === 'number' && <span className="text-[11px] text-[var(--muted)]">{p.approvals} approval{p.approvals === 1 ? '' : 's'}</span>}
-                            {p.url && (
-                              <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-bold hover:underline" style={{ color: 'var(--pr-link)' }}>
+                            {safeHref(p.url) && (
+                              <a href={safeHref(p.url)} target="_blank" rel="noopener noreferrer" className="text-[11px] font-bold hover:underline" style={{ color: 'var(--pr-link)' }}>
                                 {p.id ? `#${p.id}` : 'view'} ↗
                               </a>
                             )}
@@ -679,8 +678,8 @@ function SubRow({ s, onOpen }: { s: Ticket; onOpen: () => void }) {
       {prs.map((p, i) => (
         <span key={i} className="inline-flex shrink-0 items-center gap-1">
           <PrBadge state={p.state ?? 'none'} />
-          {p.url && (
-            <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-[10.5px] font-bold hover:underline" style={{ color: 'var(--pr-link)' }} title={[p.repo, p.title].filter(Boolean).join(' — ')}>
+          {safeHref(p.url) && (
+            <a href={safeHref(p.url)} target="_blank" rel="noopener noreferrer" className="text-[10.5px] font-bold hover:underline" style={{ color: 'var(--pr-link)' }} title={[p.repo, p.title].filter(Boolean).join(' — ')}>
               #{p.id}
             </a>
           )}

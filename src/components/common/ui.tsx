@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
 import type { ColumnKey, PrState } from '../../types'
 import { COLUMN_META } from '../../lib/columns'
@@ -122,26 +122,63 @@ export function BranchStatusPill({ state }: { state?: PrState | null }) {
   )
 }
 
+/** Old-browser / insecure-context fallback: select the text in a hidden textarea and copy it. */
+function legacyCopy(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+/** Write to the clipboard; resolves true on success. Never throws — a missing or refused Clipboard API falls back to the legacy copy. */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    /* permission denied or not a secure context — try the old way */
+  }
+  return legacyCopy(text)
+}
+
 export function CopyButton({ text, label = 'Copy', className = '' }: { text: string; label?: string; className?: string }) {
-  const [done, setDone] = useState(false)
+  const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle')
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const done = state === 'done'
+  const failed = state === 'failed'
   return (
     <motion.button
+      type="button"
       whileTap={{ scale: 0.92 }}
       onClick={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        navigator.clipboard?.writeText(text).then(
-          () => {
-            setDone(true)
-            setTimeout(() => setDone(false), 1300)
-          },
-          () => {},
-        )
+        void copyText(text).then((ok) => {
+          setState(ok ? 'done' : 'failed')
+          clearTimeout(timer.current)
+          timer.current = setTimeout(() => setState('idle'), ok ? 1300 : 2200)
+        })
       }}
+      title={failed ? `Copy failed — select and copy by hand: ${text}` : undefined}
+      aria-live="polite"
       className={`inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-medium text-[var(--ink-soft)] transition-colors hover:border-[var(--muted)] hover:text-[var(--ink)] ${className}`}
     >
-      {done ? <CheckIcon size={12} color="#22c55e" /> : <CopyIcon size={12} />}
-      {done ? 'Copied' : label}
+      {done ? <CheckIcon size={12} color="#22c55e" /> : <CopyIcon size={12} color={failed ? '#ef4444' : undefined} />}
+      {done ? 'Copied' : failed ? 'Copy failed' : label}
+      {failed && <span className="select-all font-mono text-[10px] text-[var(--muted)]">{text}</span>}
     </motion.button>
   )
 }
@@ -209,9 +246,21 @@ const DROP_WITH_CONTENT = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED
 const ALLOWED_ATTRS = new Set(['href', 'title', 'colspan', 'rowspan'])
 const SAFE_URL = /^(https?:|mailto:|#|\/)/i
 
-function isSafeUrl(v: string): boolean {
+/** http(s), mailto, a fragment or a site-relative path. Nothing else may become a link. */
+export function isSafeUrl(v: string): boolean {
   // Strip control chars/whitespace that hide "java\tscript:" and decode nothing.
   return SAFE_URL.test(v.replace(/[\u0000-\u0020]+/g, '').trim())
+}
+
+/**
+ * The href to put on a data-driven anchor, or undefined when the value is missing or not a web
+ * URL. Every `<a href>` built from dump or report data goes through this — the intern already
+ * drops javascript:/data: links, but the board must not rely on upstream for its own safety.
+ */
+export function safeHref(v?: string | null): string | undefined {
+  if (typeof v !== 'string') return undefined
+  const trimmed = v.trim()
+  return trimmed && isSafeUrl(trimmed) ? trimmed : undefined
 }
 
 function cleanElement(el: Element) {
@@ -295,9 +344,10 @@ export function SafeHtml({
 }
 
 export function ExternalLink({ href, children }: { href?: string | null; children: ReactNode }) {
-  if (!href) return <span>{children}</span>
+  const safe = safeHref(href)
+  if (!safe) return <span>{children}</span>
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="font-semibold hover:underline" style={{ color: 'var(--link)' }}>
+    <a href={safe} target="_blank" rel="noopener noreferrer" className="font-semibold hover:underline" style={{ color: 'var(--link)' }}>
       {children}
       <span className="opacity-60"> ↗</span>
     </a>

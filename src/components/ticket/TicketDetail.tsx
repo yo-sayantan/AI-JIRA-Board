@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { Ticket, LinkRef, Comment, PullRequest } from '../../types'
 import { COLUMN_META } from '../../lib/columns'
 import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba, cycleTime, fmtDays } from '../../lib/format'
-import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink } from '../common/ui'
+import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink, safeHref } from '../common/ui'
 import { Pipeline } from './Pipeline'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { toneColor, type PrReportSummary } from '../../lib/reportTypes'
 import { APP_CONFIG } from '../../lib/appConfig'
 import {
@@ -192,47 +193,14 @@ export function TicketDetail({
   const fromTop = topDepth - depth // 0 = front-most drawer
   const isTop = depth >= topDepth
   const asideRef = useRef<HTMLElement>(null)
+  const jiraHref = safeHref(ticket.url)
 
-  const focusablesIn = (node: HTMLElement) =>
-    [...node.querySelectorAll<HTMLElement>(
-      'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])',
-    )].filter((el) => el.offsetParent !== null)
-
-  // Save focus on mount, restore it on real unmount (drawer closed). This fires only on
-  // mount/unmount — NOT when a child drawer merely covers this one — so closing a sub-task
-  // returns focus into its parent, and closing the last drawer returns it to the opener card.
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null
-    return () => prev?.focus?.()
-  }, [])
-
-  // While this is the top drawer, move focus inside it and trap Tab so keyboard/AT users can't
-  // reach the inert page behind an aria-modal dialog.
-  useEffect(() => {
-    const node = asideRef.current
-    if (!isTop || !node) return
-    if (!node.contains(document.activeElement)) (focusablesIn(node)[0] ?? node).focus()
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return
-      const items = focusablesIn(node)
-      if (items.length === 0) {
-        e.preventDefault()
-        node.focus()
-        return
-      }
-      const first = items[0]
-      const last = items[items.length - 1]
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault()
-        last.focus()
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault()
-        first.focus()
-      }
-    }
-    node.addEventListener('keydown', onKey)
-    return () => node.removeEventListener('keydown', onKey)
-  }, [isTop])
+  // The drawer joins the shared dialog stack for its whole life (it unmounts when it closes), so
+  // a sub-task drawer pushed on top — or a report, or the Completed archive underneath — never
+  // fights it for Tab: only the newest entry traps. Focus is saved on mount and restored on
+  // unmount, so closing a sub-task lands back in its parent and closing the last drawer lands on
+  // the card (or archive row) that opened it.
+  useDialogFocus(true, asideRef)
 
   return (
       <motion.aside
@@ -317,9 +285,9 @@ export function TicketDetail({
               </button>
             )}
             <CopyButton text={ticket.key} label="Copy ID" />
-            {ticket.url && (
+            {jiraHref && (
               <a
-                href={ticket.url}
+                href={jiraHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-[filter,transform] hover:-translate-y-px hover:brightness-110"
@@ -329,11 +297,12 @@ export function TicketDetail({
               </a>
             )}
             {prs
-              .filter((p) => p.url)
-              .map((p, i) => (
+              .map((p) => ({ p, href: safeHref(p.url) }))
+              .filter((x): x is { p: PullRequest; href: string } => !!x.href)
+              .map(({ p, href }, i) => (
                 <a
                   key={i}
-                  href={p.url!}
+                  href={href}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-[filter,transform] hover:-translate-y-px hover:brightness-110"
@@ -723,13 +692,14 @@ function PrRow({ pr }: { pr: PullRequest }) {
   const knownState = pr.state && pr.state !== 'none'
   const cs = prCommentStats(pr)
   const closed = isClosedPr(pr)
+  const prHref = safeHref(pr.url)
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2">
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[11px]">
         {knownState ? <PrBadge state={pr.state} /> : <Pill color="#94a3b8">⊙ Pull request</Pill>}
         {pr.id != null &&
-          (pr.url ? (
-            <a href={pr.url} target="_blank" rel="noopener noreferrer" className="font-mono font-bold hover:underline" style={{ color: 'var(--pr-link)' }} title={prMeta(pr.state).label}>
+          (prHref ? (
+            <a href={prHref} target="_blank" rel="noopener noreferrer" className="font-mono font-bold hover:underline" style={{ color: 'var(--pr-link)' }} title={prMeta(pr.state).label}>
               #{pr.id} ↗
             </a>
           ) : (
@@ -817,16 +787,22 @@ function cleanLogEntry(e: { when?: string | null; text?: string | null }): { lab
   return { label, when: e.when ?? null }
 }
 
+/** Epoch ms for an update-log stamp; undated or unparseable entries sort after every dated one. */
+function logTs(when: string | null): number {
+  const ts = when ? Date.parse(when) : NaN
+  return Number.isNaN(ts) ? -Infinity : ts
+}
+
 function Timeline({ entries, accent }: { entries: { when?: string | null; text?: string | null }[]; accent: string }) {
   // Clean → newest-first (latest, usually Done, on top; Opened at the bottom) → drop consecutive duplicates.
+  // Dates are compared as instants, not strings, so "2025-11-26" and "2025-11-26T09:00:00Z" and
+  // offsets like "+05:30" all order correctly.
   const ranked = entries
     .map(cleanLogEntry)
     .filter((e) => e.label)
-    .map((e, i) => ({ ...e, rank: STATUS_RANK[e.label.toLowerCase()] ?? -1, i }))
+    .map((e, i) => ({ ...e, ts: logTs(e.when), rank: STATUS_RANK[e.label.toLowerCase()] ?? -1, i }))
     .sort((a, b) => {
-      const da = a.when ?? ''
-      const db = b.when ?? ''
-      if (da !== db) return db.localeCompare(da) // newer date first
+      if (a.ts !== b.ts) return b.ts - a.ts // newer instant first
       if (a.rank !== b.rank) return b.rank - a.rank // later lifecycle stage first within the same day
       return a.i - b.i
     })
@@ -861,15 +837,23 @@ function CommentItem({ c, now }: { c: Comment; now: number }) {
 }
 
 /** Richer rendering for Confluence / external references: title + extracted excerpt + url. */
-// Decode entities the intern sometimes leaves in raw URLs (e.g. &amp; → &).
+// Decode entities the intern sometimes leaves in raw URLs (e.g. &amp; → &). A numeric entity
+// outside the Unicode range (String.fromCodePoint throws above 0x10FFFF) is left as written.
 const deEnt = (s: string) =>
-  s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
+  s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, (entity: string, d: string) => {
+      const cp = Number(d)
+      return Number.isInteger(cp) && cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : entity
+    })
 
 function RefCards({ items }: { items: LinkRef[] }) {
   return (
     <div className="flex flex-col gap-1.5">
       {items.map((l, i) => {
-        const url = l.url ? deEnt(l.url) : null
+        const url = safeHref(l.url ? deEnt(l.url) : null) ?? null
         const rawTitle = l.title || l.key
         const hasTitle = !!rawTitle && rawTitle !== l.url
         // With a real title → show it (link) + the URL as a small subtitle. Without one
@@ -953,9 +937,9 @@ function TreeRow({ node, onOpen, isRoot = false, user }: { node: Ticket; onOpen?
       {nodePrs.map((p, i) => (
         <span key={i} className="hidden shrink-0 items-center gap-1 sm:inline-flex">
           <PrBadge state={p.state} />
-          {p.url && (
+          {safeHref(p.url) && (
             <a
-              href={p.url}
+              href={safeHref(p.url)}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-[10px] font-bold hover:underline"

@@ -13,7 +13,7 @@ const COLOR: Record<ToastKind, string> = { info: '#8b9cff', success: '#22c55e', 
 
 export const Toasts = memo(function Toasts({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: number) => void }) {
   return (
-    <div className="pointer-events-none fixed bottom-12 right-4 z-[60] flex flex-col items-end gap-2">
+    <div className="pointer-events-none fixed bottom-12 right-4 z-[60] flex flex-col items-end gap-2" role="status" aria-live="polite">
       <AnimatePresence>
         {toasts.map((t) => {
           const kind = t.kind ?? 'info'

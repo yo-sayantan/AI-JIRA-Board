@@ -12,11 +12,19 @@ export function injectedDump(): JiraData | null {
   return raw && Array.isArray(raw.tickets) ? raw : null
 }
 
+/** A dump entry the board can render: an object with a string key. Anything else is skipped. */
+function isTicketLike(t: unknown): t is Ticket {
+  return typeof t === 'object' && t !== null && typeof (t as { key?: unknown }).key === 'string'
+}
+
 function normalizeTicket(t: Ticket): Ticket {
-  // An unknown column would match no board column and the card would silently vanish.
-  const column = t.column && t.column in COLUMN_META ? t.column : mapStatusToColumn(t.status)
+  // An unknown column would match no board column and the card would silently vanish. Own-property
+  // check, not `in`: a column named "toString" or "constructor" must not pass as a real column.
+  const column = typeof t.column === 'string' && Object.prototype.hasOwnProperty.call(COLUMN_META, t.column) ? t.column : mapStatusToColumn(t.status)
   return {
     ...t,
+    title: typeof t.title === 'string' ? t.title : '',
+    status: typeof t.status === 'string' ? t.status : '',
     column,
     done: t.done ?? column === 'done',
     onHold: t.onHold ?? column === 'hold',
@@ -63,7 +71,7 @@ export function loadArchivedKeys(raw: JiraData | null): Set<string> {
       localStorage.removeItem('jb-hidden')
     }
     if (raw) {
-      const live = new Set(raw.tickets.map((t) => t.key))
+      const live = new Set(raw.tickets.filter(isTicketLike).map((t) => t.key))
       for (const k of [...cur]) if (!live.has(k)) cur.delete(k)
     }
     persistArchivedKeys(cur)
@@ -82,8 +90,8 @@ export function loadArchivedKeys(raw: JiraData | null): Set<string> {
  * Never mutates the input (the fixture is a shared module constant).
  */
 function prepare(raw: JiraData, now: number, archivedKeys: ReadonlySet<string>): { data: JiraData; userArchived: string[] } {
-  const tickets = (raw.tickets ?? []).map(normalizeTicket)
-  const completed = Array.isArray(raw.completed) ? [...raw.completed] : []
+  const tickets = (Array.isArray(raw.tickets) ? raw.tickets : []).filter(isTicketLike).map(normalizeTicket)
+  const completed: CompletedTicket[] = Array.isArray(raw.completed) ? raw.completed.filter((c): c is CompletedTicket => isTicketLike(c)) : []
   const completedKeys = new Set(completed.map((c) => c.key))
 
   const board: Ticket[] = []

@@ -8,15 +8,15 @@ import type { CompletedTicket, PullRequest, Ticket } from '../types'
  * parent's, its sub-tickets') and pull-request numbers — never against titles, branch
  * names or descriptions that merely happen to contain those digits.
  *
- * Everything else is ordinary token-AND substring matching, and `FIDM-6115` / `fidm6115`
+ * Everything else is ordinary token-AND substring matching, and `PROJ-123` / `proj123`
  * additionally count as an exact key match so the ticket you named ranks first.
  */
 
 type Row = Ticket | CompletedTicket
 
 /**
- * Two or more leading letters then digits: FIDM-6115, fidm6115, ACKYARISK-190.
- * The project group is LAZY on purpose. Project keys may contain digits, so `fidm6115`
+ * Two or more leading letters then digits: PROJ-123, proj123, ABC-190.
+ * The project group is LAZY on purpose. Project keys may contain digits, so `proj123`
  * is ambiguous; greedy matching would read it as project `fidm611` + ticket `5`. Taking
  * the shortest project leaves the longest number, which is the reading people mean.
  */
@@ -44,7 +44,7 @@ export function parseQuery(q: string): Term[] {
     })
 }
 
-/** Numeric part of an issue key: FIDM-6115 → "6115". */
+/** Numeric part of an issue key: PROJ-123 → "123". */
 export function keyNum(key?: string | null): string {
   if (!key) return ''
   const i = key.lastIndexOf('-')
@@ -169,7 +169,7 @@ export function matchRow(t: Row, terms: Term[]): Hit | null {
           }
         }
       }
-      // PR numbers answer only to a bare number, and only exactly: `ACKYARISK-190` must not
+      // PR numbers answer only to a bare number, and only exactly: `ABC-190` must not
       // match a ticket whose PR happens to be #1903.
       if (score === null && !term.project && ids.prIds.includes(term.num)) score = SCORE.pr
     }
@@ -179,7 +179,7 @@ export function matchRow(t: Row, terms: Term[]): Hit | null {
     if (score === null && (term.project || !term.num) && hay.includes(term.raw)) {
       score = SCORE.text
     }
-    // `fidm-6115` typed as `fidm6115` still has to find the hyphenated form in text.
+    // `fidm-6115` typed as `proj123` still has to find the hyphenated form in text.
     if (score === null && term.project && term.num && hay.includes(`${term.project}-${term.num}`)) {
       score = SCORE.text
     }

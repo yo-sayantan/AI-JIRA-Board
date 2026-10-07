@@ -31,6 +31,7 @@ function progressOf(s: InternStatus, prev: RunProgress | null): RunProgress | nu
 }
 
 function exitMessage(code: number): string {
+  if (code === 2) return 'Intern could not run — no Jira token configured. See setup/ (mcp-secrets.env).'
   if (code === 3) return 'Skipped — another refresh/archive was already running. Try again in a moment.'
   if (code === 127) return 'Intern finished with errors (tooling missing) — check logs/.'
   return 'Intern finished with errors — check logs/.'
@@ -88,7 +89,13 @@ export function useInternJobs({
       setRunning(job)
       const startedAt = Date.now()
       let sawRunning = false
+      let misses = 0
       const stop = subscribeStatus((s) => {
+        if (s) misses = 0
+        else if (++misses >= 4) {
+          endRun()
+          return void toast('Lost contact with the local server.', 'error')
+        }
         if (s?.running) sawRunning = true
         if (s) setProgress((prev) => progressOf(s, prev))
         const timedOut = Date.now() - startedAt > CEILING_MS[job]
@@ -190,6 +197,7 @@ export function useInternJobs({
       }
 
       const start = await startTicketRefresh(key)
+      if (start?.queueFull) return finish('The refresh queue is full — try again in a moment.', 'info')
       if (!start?.ok) return finish(`Couldn't start refresh for ${key}.`, 'error')
       const position = start.position ?? 0
       if (start.already) toast(`${key} is already in the refresh queue.`, 'info')
