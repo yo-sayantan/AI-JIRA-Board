@@ -163,7 +163,12 @@
       .os-pane .os-label { display: none; }
       body:not(.js-on) .os-pane .os-label { display: block; font-weight: 800; margin-top: 14px; }
 
-      footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 54px; }
+      /* Footer: quiet policy links first, tagline under them — present, never loud. */
+      footer { margin-top: 54px; border-top: 1px solid var(--line2); padding-top: 22px; text-align: center; }
+      footer .flinks { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-bottom: 10px; }
+      footer .flinks a { font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: none; transition: color 0.15s ease; }
+      footer .flinks a:hover { color: var(--ink); }
+      footer .tag { color: var(--muted); font-size: 13px; }
       .ok { color: var(--ok); font-weight: 700; }
       a.dl { font-weight: 700; white-space: nowrap; }
 
@@ -928,7 +933,18 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
         <a href="../setup/README.md">setup/README.md</a>.
       </div>
 
-      <footer>Built to dodge JIRA · made with ☕ + a refresh button</footer>
+      <footer>
+        <div class="flinks">
+          <a href="legal.html#privacy">Privacy Policy</a>
+          <a href="legal.html#terms">Terms &amp; Conditions</a>
+          <a href="legal.html#cookies">Cookie Policy</a>
+          <a href="legal.html#data">Your data</a>
+          <a href="legal.html#embeds">Third-party embeds</a>
+          <a href="legal.html#a11y">Accessibility</a>
+          <a href="legal.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking</div>
+      </footer>
       </main>
     </div>
 
