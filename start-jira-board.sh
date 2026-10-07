@@ -140,10 +140,23 @@ deploy() {
   ok "Image built (dist: ${DIST_SOURCE})"
 
   log "Deploying container '${CONTAINER_NAME}' on port ${PORT}…"
+  # AI-Ollama only boots when local AI is enabled in Settings AND models are known to exist
+  # (server/ollama.mjs reads jira-intern/.settings.json + .ollama-state.json). Otherwise the
+  # container is created but left stopped, so the board can start it later on demand.
+  OLLAMA_WANTED=yes
+  if command -v node >/dev/null 2>&1; then
+    OLLAMA_WANTED="$(node server/ollama.mjs wanted 2>/dev/null || echo yes)"
+  fi
   # --force-recreate: even if the container already exists with the same config, replace it.
   # --remove-orphans: drop stray services from older compose files.
-  docker compose up -d --force-recreate --remove-orphans
-  ok "Container started"
+  if [ "$OLLAMA_WANTED" = "yes" ]; then
+    docker compose up -d --force-recreate --remove-orphans
+    ok "Containers started (AI-Ollama included)"
+  else
+    docker compose create --force-recreate ollama >/dev/null 2>&1 || true
+    docker compose up -d --force-recreate --remove-orphans --no-deps jira-board jira-ai
+    ok "Containers started — AI-Ollama left stopped (local AI off in Settings, or no models installed)"
+  fi
 }
 
 # ── 4. Health check + open the board ──────────────────────────────────────────

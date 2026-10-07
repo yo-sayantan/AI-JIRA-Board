@@ -209,16 +209,21 @@ export async function startReportGeneration(key: string): Promise<ReportStart | 
 }
 
 /** Push the settings the server-side jobs honour; everything else stays in localStorage. */
-export async function saveServerSettings(patch: ServerSettings): Promise<boolean> {
+export type OllamaAction = 'starting' | 'stopping' | 'unchanged'
+
+/** Resolves with what the server did to the AI-Ollama container, or null when the save failed. */
+export async function saveServerSettings(patch: ServerSettings): Promise<OllamaAction | null> {
   try {
     const r = await fetchWithTimeout('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     })
-    return r.ok
+    if (!r.ok) return null
+    const body = (await r.json().catch(() => null)) as { ollama?: OllamaAction } | null
+    return body?.ollama === 'starting' || body?.ollama === 'stopping' ? body.ollama : 'unchanged'
   } catch {
-    return false
+    return null
   }
 }
 

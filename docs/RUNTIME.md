@@ -94,3 +94,19 @@ HOST (your machine)
    │         ▼
    AI-Ollama:11434 (volume jira-ai-models)
 ```
+
+## AI-Ollama lifecycle
+
+The Ollama container only runs while something can use it (`server/ollama.mjs`):
+
+| Moment | Rule |
+|---|---|
+| Deploy (`start-jira-board.sh`) | `node server/ollama.mjs wanted` → **yes** only when `aiLevel ≠ none`, `aiBackend = local` and host Ollama is off, AND the last probe saw at least one model (`jira-intern/.ollama-state.json`; unknown counts as yes so a first install can pull). Otherwise the container is *created but left stopped* and `jira-board`/`jira-ai` come up with `--no-deps`. |
+| Board server boot | Same rule, via the Docker socket: stops a running Ollama that is not wanted (or has no models), starts a wanted one. |
+| Settings change | Local AI switched on → start; switched off / cloud / host Ollama → stop. The board toasts what it did. |
+| Model pull | Starts the container on demand and waits for it to answer before proxying the pull. |
+
+Control goes through the Docker Engine API on `/var/run/docker.sock` (mounted in `docker-compose.yml`,
+with `group_add: "${DOCKER_GID:-0}"` so the unprivileged `node` user may use it). Without the socket every
+action reports `unavailable` and Ollama simply follows compose. `restart: unless-stopped` keeps a stopped
+Ollama stopped across Docker restarts.

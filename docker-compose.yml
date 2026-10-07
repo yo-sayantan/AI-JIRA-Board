@@ -51,7 +51,17 @@ services:
       # switches verification off entirely — last resort only.
       - JIRA_CA_BUNDLE
       - JIRA_INSECURE_TLS
+      # The board starts/stops AI-Ollama to match the AI settings (server/ollama.mjs).
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_CONTAINER=AI-Ollama
+    # The Docker socket is root:<gid> inside the VM; the board runs as `node`, so it joins that
+    # group. Docker Desktop: 0. Linux host: DOCKER_GID=$(stat -c %g /var/run/docker.sock).
+    group_add:
+      - "${DOCKER_GID:-0}"
     volumes:
+      # Docker socket, so the board can start and stop the AI-Ollama container on demand.
+      # Remove this line to opt out: Ollama then simply follows compose (always on).
+      - /var/run/docker.sock:/var/run/docker.sock
       # Tokens: reuse your existing connector secrets, read-only. The file needs
       # JIRA_PERSONAL_TOKEN (and optionally BITBUCKET_PAT / ATLASSIAN_TOKEN, plus
       # CURSOR_API_KEY / GEMINI_API_KEY / ANTHROPIC_API_KEY for the intern).
@@ -89,6 +99,8 @@ services:
     container_name: AI-Ollama
     volumes:
       - jira-ai-models:/root/.ollama
+    # unless-stopped: when the board stops this container (local AI off, or no models yet) it
+    # stays stopped across Docker restarts until the board starts it again.
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "ollama", "list"]
@@ -128,7 +140,10 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       ollama:
-        condition: service_healthy # ollama defines a healthcheck; wait for it to answer
+        # Ollama defines a healthcheck; a full `up` waits for it. start-jira-board.sh brings this
+        # service up with --no-deps when Ollama is not wanted, so the worker just sees it as down.
+        condition: service_healthy
+        required: false
     restart: unless-stopped
 
 volumes:

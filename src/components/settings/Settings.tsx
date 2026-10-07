@@ -693,7 +693,7 @@ function AiInternControls({
         <Segmented
           label="AI backend"
           options={[
-            { key: 'local', label: 'Local AI', hint: 'Ollama in Docker (CPU) or on this Mac (Metal). Slow, no tokens.' },
+            { key: 'local', label: 'Local AI', hint: 'Ollama in Docker (CPU) or on this Mac (Metal). Slow, no tokens. The AI-Ollama container starts when you pick this and stops when you leave it.' },
             { key: 'cloud', label: 'Cloud AI', hint: 'Claude, Cursor, or Gemini. Keys stay in ~/.cursor/mcp-secrets.env.' },
           ]}
           value={settings.aiBackend}

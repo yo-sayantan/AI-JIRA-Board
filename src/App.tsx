@@ -13,7 +13,7 @@ import { useInternStatus } from './hooks/useInternStatus'
 import { useScrollLock, useShortcuts } from './hooks/usePageEffects'
 import { useReports } from './hooks/useReports'
 import { useTicketMoves } from './hooks/useTicketMoves'
-import { useToasts } from './hooks/useToasts'
+import { useToasts, type ToastFn } from './hooks/useToasts'
 import { Header } from './components/header/Header'
 import type { ReportsMenuProps } from './components/header/ReportsMenu'
 import { Stats, type StatSelection } from './components/board/Stats'
@@ -37,9 +37,15 @@ const served = isServed()
 
 export default function App() {
   const now = useClock()
-  const { settings, setSettings, ready: settingsReady, dark, toggleTheme, saveFailed } = useBoardSettings(served, now)
+  // Settings and toasts need each other (toast sizing comes from settings; a settings save may
+  // announce the Ollama container starting/stopping), so the announcement goes through a ref.
+  const toastRef = useRef<ToastFn | null>(null)
+  const { settings, setSettings, ready: settingsReady, dark, toggleTheme, saveFailed } = useBoardSettings(served, now, (action) =>
+    toastRef.current?.(action === 'starting' ? 'Local AI on — starting the AI-Ollama container…' : 'Local AI off — stopping the AI-Ollama container.', 'info'),
+  )
   const { features } = settings
   const { toasts, toast, dismiss } = useToasts(settings.toastSeconds, settings.toastMax)
+  toastRef.current = toast
   const { data, source, userArchived, reload, archive, restoreArchived } = useBoardData(served, (m) => toast(m, 'error'))
   const jobs = useInternJobs({ served, toast, dismiss, reload })
   const moves = useTicketMoves({ served, toast, refreshTicket: jobs.refreshTicket })

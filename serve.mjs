@@ -72,6 +72,7 @@ import { externalGenerating, readReport, reportQueue, reportsIndex, resolveRepor
 import { aiStatus, enrichingKeys, localCatalog, proxyAi } from './server/ai.mjs'
 import { readBoardSettings, updateBoardSettings } from './server/settings.mjs'
 import { startScheduler } from './server/schedule.mjs'
+import { ensureOllamaReady, ollamaWanted, probeModels, reconcileOllama } from './server/ollama.mjs'
 
 const serveStatic = createStaticHandler(
   ROOT,
@@ -237,9 +238,18 @@ const routes = {
       return json(res, 400, { ok: false, error: 'bad json' })
     }
     try {
+      const before = await readBoardSettings()
       const { settings, error } = await updateBoardSettings(patch)
       if (error) return json(res, 400, { ok: false, error })
-      json(res, 200, { ok: true, settings })
+      const after = await readBoardSettings()
+      // The Ollama container follows the AI settings: on when local AI is wanted, off otherwise.
+      // Answered immediately; Docker takes its time in the background.
+      let ollama = 'unchanged'
+      if (ollamaWanted(before) !== ollamaWanted(after)) {
+        ollama = ollamaWanted(after) ? 'starting' : 'stopping'
+        reconcileOllama(after).then((r) => console.log(`[ollama] settings → ${r}`), () => {})
+      }
+      json(res, 200, { ok: true, settings, ollama })
     } catch (e) {
       console.error('[settings] save failed', e)
       json(res, 500, { ok: false, error: 'save failed' })
@@ -257,7 +267,14 @@ const routes = {
   },
 
   'GET /api/cloud-models': (req, res) => proxyAi(req, res, '/api/cloud-models'),
-  'POST /api/ai-models/pull': (req, res) => proxyAi(req, res, '/api/models/pull'),
+  // Pulling a model needs the container up — start it on demand (a stopped Ollama has no models).
+  'POST /api/ai-models/pull': async (req, res) => {
+    const settings = await readBoardSettings()
+    if (!settings.aiUseHostOllama && !(await ensureOllamaReady())) {
+      return json(res, 503, { ok: false, down: true, error: 'AI-Ollama container is not available' })
+    }
+    return proxyAi(req, res, '/api/models/pull')
+  },
   'POST /api/ai-jobs': (req, res) => proxyAi(req, res, '/api/jobs'),
 
   // One call carries everything the board polls for: run state, queues, reports, AI intern.
@@ -403,4 +420,10 @@ server.listen(PORT, HOST, () => {
   console.log(`\n  🎫  My Jira Board  →  http://${shown}:${PORT}${BOARD_PATH}`)
   console.log(`      Live Refresh enabled (runs the intern). Press Ctrl+C to stop.\n`)
   startScheduler().catch((e) => console.error('[schedule] failed to start', e))
+  // Ollama follows the saved AI settings; a boot also honours "no models → stay off".
+  readBoardSettings()
+    .then((s) => reconcileOllama(s, { boot: true }))
+    .then((r) => console.log(`[ollama] boot → ${r}`), (e) => console.error('[ollama] boot reconcile failed', e))
+  // Remember whether models exist, so the next deploy knows whether to start the container.
+  setInterval(() => void probeModels(), 5 * 60_000).unref()
 })

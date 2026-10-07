@@ -12,6 +12,7 @@ export const PATHS = {
   progress: join(INTERN, '.progress.json'),
   settings: join(INTERN, '.settings.json'),
   schedule: join(INTERN, '.schedule.json'),
+  ollamaState: join(INTERN, '.ollama-state.json'),
   internLock: join(INTERN, '.intern.lock'),
   completedLock: join(INTERN, '.completed.lock'),
   aiQueue: join(INTERN, '.ai-queue'),
