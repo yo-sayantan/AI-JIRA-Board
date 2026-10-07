@@ -37,8 +37,8 @@ AI agent to make a correct change without re-deriving the architecture.
 | `serve.mjs` + `server/` | Zero-dependency Node server: static allowlist + the `/api/*` routes (jobs, reports, settings, AI proxy, status). |
 | `ai-intern/` | The AI worker container: `worker.py` (job queue + HTTP; Ollama local or Claude/Cursor/Gemini cloud), `models.json` (local model catalog). |
 | `config/` | `jira-board.config.json` — tracked, **generic** project defaults (+ JSON schema). Personal values live OUTSIDE the repo in `~/.ai/config.json`. |
-| `setup/` | Templates for the two outside-the-repo files + Desktop launcher. Shipped into the Docker image. |
-| `docs/` | This documentation suite (see index at the bottom) + the served Setup Guide (`index.html`) and policies (`legal.html`). |
+| `setup/` | Templates ONLY (secrets, personal config, MCP, Desktop launcher) — the guide for them is `docs/SETUP.md`. Shipped into the Docker image. |
+| `docs/` | **All** documentation lives here (see index at the bottom): the suite, `index.html` (served Setup Guide), `doc.html` (styled viewer for the .md files), `legal.html` (policies). The only `.md` files outside are runtime inputs, not docs: `jira-intern/prompts/*.md` (LLM prompts read by scripts) and `.github/pull_request_template.md` (GitHub requires its location). |
 | `tests/` | Python unittests (`npm test`). |
 
 ## Golden rules (break these and the system corrupts)
@@ -155,4 +155,7 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
 | `docs/ARCHITECTURE.md` | The component-level overview (start here if new). |
 | `docs/DEPLOYMENT.md` | Run modes, Docker details, deploy pitfalls. |
 | `docs/USAGE.md` | The board as a user sees it. |
-| `setup/README.md` | The two outside-the-repo files and the public-repo checklist. |
+| `docs/SETUP.md` | The two outside-the-repo files (secrets, personal config), MCP templates, the public-repo checklist. |
+| `docs/CONFIG.md` | Key-by-key reference for `config/jira-board.config.json` and the personal override. |
+| `docs/INTERN.md` | The fetch pipeline (`jira-intern/`) from the inside: scripts, runners, behaviours. |
+| `docs/OVERVIEW.md` | The project overview (features, quick start, repository layout). |
