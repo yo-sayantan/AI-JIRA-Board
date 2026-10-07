@@ -196,6 +196,67 @@ export interface CompletedTicket {
   updateLog?: UpdateLogEntry[]
 }
 
+/** One assignee hand-off from the Jira changelog. The first assignment has from=null. */
+export interface AssigneeHop {
+  when?: string | null
+  from?: string | null
+  to?: string | null
+}
+
+/**
+ * A ticket I RAISED (reporter = me), whoever works it now. Sub-tasks are excluded at the
+ * source — a sub-ticket cut under my own work is mine by default, not "raised" work.
+ * Deliberately compact (no code/PR data): these rows answer "what's its status, and who
+ * holds it now?", and refresh with every daily run.
+ */
+export interface RaisedTicket {
+  key: string
+  title: string
+  status?: string | null
+  /** Mapped board column, for status colour-coding. The intern sets this. */
+  column?: ColumnKey
+  type?: string | null
+  priority?: string | null
+  /** Project key prefix, e.g. "FIDM". Derived from key if absent. */
+  project?: string | null
+  storyPoints?: number | null
+  created?: string | null
+  lastUpdate?: string | null
+  resolved?: string | null
+  done?: boolean
+  url?: string | null
+  reporter?: string | null
+  /** CURRENT assignee (null = nobody picked it up yet). */
+  assignee?: string | null
+  labels?: string[]
+  components?: string[]
+  fixVersions?: string[]
+  sprint?: string | null
+  sprintOverflow?: boolean
+  sprintCount?: number
+  /** HTML allowed. */
+  description?: string | null
+  /** Which tickets this was raised from / blocks / duplicates (Jira issue links). */
+  related?: LinkRef[]
+  /** Epic (or parent) lineage, when Jira has one. */
+  epic?: LinkRef | null
+  /** Chronological assignee hand-offs — the "has it been reassigned?" trail. */
+  assigneeLog?: AssigneeHop[]
+  updateLog?: UpdateLogEntry[]
+}
+
+/** Adapt a raised row to the rich Ticket shape so the detail drawer can render it. */
+export function raisedToTicket(r: RaisedTicket): Ticket {
+  const column = r.column ?? 'todo'
+  return {
+    ...r,
+    column,
+    status: r.status ?? 'Open',
+    done: r.done ?? column === 'done',
+    onHold: column === 'hold',
+  }
+}
+
 /** Adapt an archive row to the rich Ticket shape so the detail view can render it. */
 export function completedToTicket(c: CompletedTicket): Ticket {
   return {
@@ -219,6 +280,8 @@ export interface JiraData {
   tickets: Ticket[]
   /** Every Done ticket ever assigned to me (compact, full history). */
   completed: CompletedTicket[]
+  /** Every non-sub-task ticket I ever REPORTED (compact) — the "Raised by me" view. */
+  raised?: RaisedTicket[]
   /** Optional run notices (e.g. "Jira MCP unavailable"). */
   notes?: string[]
 }

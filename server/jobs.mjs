@@ -9,12 +9,13 @@ import { KeyQueue, runProcess } from './queue.mjs'
 const state = {
   daily: false,
   archive: null,
+  raised: false,
   lastExit: null,
   lastRunAt: null,
 }
 
 export async function dataWriterBusy() {
-  if (state.daily || state.archive) return true
+  if (state.daily || state.archive || state.raised) return true
   return (await dataLocksHeld()).held
 }
 
@@ -37,6 +38,18 @@ export async function startDaily() {
   const runAt = markStarted()
   runProcess('bash', [PATHS.dailyScript]).then((code) => {
     state.daily = false
+    state.lastExit = code
+  })
+  return runAt
+}
+
+/** Raised-by-me only: one quick JQL search merged into data.json — same writer rules. */
+export async function startRaised() {
+  if (await dataWriterBusy()) return null
+  state.raised = true
+  const runAt = markStarted()
+  runProcess('bash', [PATHS.raisedScript]).then((code) => {
+    state.raised = false
     state.lastExit = code
   })
   return runAt
@@ -78,7 +91,7 @@ export function stopArchive() {
 
 export async function runStatus() {
   const locks = await dataLocksHeld()
-  const running = state.daily || !!state.archive || locks.held
+  const running = state.daily || !!state.archive || state.raised || locks.held
   let progress = null
   if (running) {
     progress = await readFile(PATHS.progress, 'utf8').then(JSON.parse, () => null)
@@ -88,7 +101,7 @@ export async function runStatus() {
   }
   return {
     running,
-    job: state.archive ? 'archive' : state.daily ? 'daily' : locks.held ? 'external' : null,
+    job: state.archive ? 'archive' : state.daily ? 'daily' : state.raised ? 'raised' : locks.held ? 'external' : null,
     lastExit: state.lastExit,
     lastRunAt: state.lastRunAt,
     startedAt: locks.startedAt ?? state.lastRunAt,

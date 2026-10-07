@@ -4,6 +4,7 @@ import { pollNow, subscribeStatus } from '../lib/statusPoller'
 import {
   startArchiveRun,
   startInternRun,
+  startRaisedRun,
   startTicketRefresh,
   stopArchiveRun,
   type ArchiveScope,
@@ -12,10 +13,10 @@ import {
 } from '../lib/runner'
 import type { DismissFn, ToastFn } from './useToasts'
 
-export type RunJob = 'daily' | 'archive'
+export type RunJob = 'daily' | 'archive' | 'raised'
 
 // Each ceiling must exceed the runner's own timeout, or the board gives up on a live run.
-const CEILING_MS: Record<RunJob, number> = { daily: 32 * 60_000, archive: 130 * 60_000 }
+const CEILING_MS: Record<RunJob, number> = { daily: 32 * 60_000, archive: 130 * 60_000, raised: 6 * 60_000 }
 const RUN_POLL_MS = 800
 const TICKET_POLL_MS = 1500
 const TICKET_CEILING_MS = 11 * 60_000
@@ -168,6 +169,18 @@ export function useInternJobs({
     toast('Stopped the archive rebuild.', 'info')
   }, [endRun, toast])
 
+  // The Raised view's own refresh: tickets I reported but don't work are invisible to the
+  // normal board refresh, so this is the one pull that keeps that list current.
+  const refreshRaised = useCallback(async () => {
+    if (runningRef.current) return
+    if (!served) return void toast('Refreshing raised tickets needs the local server — run `npm run serve`.', 'info')
+    const id = toast('Refreshing the tickets you raised…', 'loading')
+    await begin('raised', startRaisedRun, id, {
+      already: 'Another intern job is running — watching it.',
+      fail: 'Could not start the raised-tickets refresh.',
+    })
+  }, [served, toast, begin])
+
   const dropRefreshingKey = useCallback((key: string) => {
     setRefreshingKeys((prev) => {
       const next = new Set(prev)
@@ -225,7 +238,7 @@ export function useInternJobs({
     if (!served) return
     void pollNow().then((s) => {
       if (!s?.running || runningRef.current) return
-      const job: RunJob = s.job === 'archive' ? 'archive' : 'daily'
+      const job: RunJob = s.job === 'archive' ? 'archive' : s.job === 'raised' ? 'raised' : 'daily'
       const id = toast('JIRA Intern Agent is running… the board updates when it finishes.', 'loading')
       watchRun(job, s.dataModified ?? null, id, s.lastRunAt)
     })
@@ -233,5 +246,5 @@ export function useInternJobs({
 
   useEffect(() => () => runWatch.current?.stop(), [])
 
-  return { running, progress, refreshingKeys, refreshBoard, rebuildArchive, stopArchive, refreshTicket }
+  return { running, progress, refreshingKeys, refreshBoard, rebuildArchive, stopArchive, refreshTicket, refreshRaised }
 }

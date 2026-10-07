@@ -38,8 +38,9 @@ export interface InternProgress {
 
 export interface InternStatus {
   running: boolean
-  /** Which writer is busy: the fast daily fetch, the deep archive rebuild, or a terminal-launched run. */
-  job?: 'daily' | 'archive' | 'external' | null
+  /** Which writer is busy: the fast daily fetch, the deep archive rebuild, the raised-by-me
+   *  refresh, or a terminal-launched run. */
+  job?: 'daily' | 'archive' | 'raised' | 'external' | null
   lastExit: number | null
   lastRunAt: string | null
   dataModified: number | null
@@ -389,6 +390,11 @@ async function startRun(path: string): Promise<RunStartResult> {
 
 export async function startInternRun(): Promise<RunStartResult> {
   return startRun('/api/run-intern')
+}
+
+/** Re-fetch ONLY the raised-by-me list (tickets I reported). One quick JQL search server-side. */
+export async function startRaisedRun(): Promise<RunStartResult> {
+  return startRun('/api/run-raised')
 }
 
 export type ArchiveScope =
