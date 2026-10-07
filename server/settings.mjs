@@ -8,7 +8,9 @@ export const DEFAULT_LOCAL_MODEL = 'qwen2.5-coder:7b'
 const ACTIVE_CADENCE = ['off', 'daily', 'twice-daily']
 const BOARD_CADENCE = ['off', 'daily', 'weekly', 'twice-weekly']
 const oneOf = (values) => (v) => (values.includes(v) ? { value: v } : null)
-const text = (max) => (v) => (typeof v === 'string' && v.length <= max ? { value: v } : null)
+// Model ids are passed to the AI intern and on to CLIs, so they are limited to tag characters.
+const MODEL_RE = /^[\w.:/-]*$/
+const model = (max) => (v) => (typeof v === 'string' && v.length <= max && MODEL_RE.test(v) ? { value: v } : null)
 const int = (lo, hi) => (v) => (Number.isInteger(v) && v >= lo && v <= hi ? { value: v } : null)
 const bool = (v) => ({ value: !!v })
 
@@ -16,8 +18,8 @@ const bool = (v) => ({ value: !!v })
 const SCHEMA = {
   aiLevel: oneOf(AI_LEVELS),
   aiBackend: oneOf(['local', 'cloud']),
-  aiLocalModel: text(80),
-  aiCloudModel: text(128),
+  aiLocalModel: model(80),
+  aiCloudModel: model(128),
   aiCloudProvider: oneOf(CLOUD_PROVIDERS),
   aiCloudEffort: oneOf(['low', 'medium']),
   aiUseHostOllama: bool,
@@ -79,8 +81,8 @@ export function updateBoardSettings(patch) {
 async function applyPatch(patch) {
   const next = await readSaved()
   for (const [key, value] of Object.entries(patch ?? {})) {
+    if (!Object.hasOwn(SCHEMA, key) || value === undefined) continue
     const check = SCHEMA[key]
-    if (!check || value === undefined) continue
     const ok = check(value)
     if (!ok) return { error: `bad ${key}` }
     next[key] = ok.value

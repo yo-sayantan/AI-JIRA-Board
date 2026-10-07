@@ -2,12 +2,17 @@ import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promi
 import { join } from 'node:path'
 import { AI_INTERN_URL, PATHS } from './config.mjs'
 import { AI_LEVELS, CLOUD_PROVIDERS, DEFAULT_LOCAL_MODEL } from './settings.mjs'
-import { json } from './http.mjs'
+import { json, readBody, readJson } from './http.mjs'
 
 // A crashed claim leaves a .running file forever; only a recent one means the intern is on it.
 const RUNNING_FRESH_MS = 30 * 60 * 1000
 // Several tabs and several endpoints ask for the intern's status within the same second.
 const STATUS_TTL_MS = 1000
+// Proxied bodies are a model name or one job description; anything bigger is not from the board.
+const PROXY_BODY_LIMIT = 64 * 1024
+const PROXY_TIMEOUT_MS = 15_000
+
+const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 
 async function readQueue() {
   let names
@@ -24,7 +29,8 @@ async function readQueue() {
       const path = join(PATHS.aiQueue, name)
       try {
         if (running && (await stat(path)).mtimeMs < freshAfter) return null
-        return { path, running, job: JSON.parse(await readFile(path, 'utf8')) }
+        const job = JSON.parse(await readFile(path, 'utf8'))
+        return isObject(job) ? { path, running, job } : null
       } catch {
         return null
       }
@@ -70,7 +76,8 @@ export async function dropQueuedEnrichJobs() {
 }
 
 export async function localCatalog() {
-  return readFile(PATHS.modelCatalog, 'utf8').then(JSON.parse, () => ({ models: [], defaultLocal: DEFAULT_LOCAL_MODEL }))
+  const catalog = await readJson(PATHS.modelCatalog, null)
+  return isObject(catalog) ? catalog : { models: [], defaultLocal: DEFAULT_LOCAL_MODEL }
 }
 
 async function fetchAiStatus() {
@@ -78,6 +85,7 @@ async function fetchAiStatus() {
   try {
     const r = await fetch(`${AI_INTERN_URL}/api/status`, { signal: AbortSignal.timeout(4000) })
     const body = await r.json()
+    if (!isObject(body)) throw new Error('bad status body')
     return { ...body, ok: body.ok !== false, queuedKeys, queued: queuedKeys.length }
   } catch {
     return {
@@ -101,39 +109,51 @@ export function invalidateAiStatus() {
 /** JIRA-AI-Intern health, current jobs and installed models — shared across concurrent callers. */
 export function aiStatus() {
   if (statusCache.value && Date.now() - statusCache.at < STATUS_TTL_MS) return Promise.resolve(statusCache.value)
-  statusCache.inflight ??= fetchAiStatus().then((value) => {
-    statusCache.value = value
-    statusCache.at = Date.now()
-    statusCache.inflight = null
-    return value
-  })
+  statusCache.inflight ??= fetchAiStatus()
+    .then((value) => {
+      statusCache.value = value
+      statusCache.at = Date.now()
+      return value
+    })
+    .finally(() => {
+      statusCache.inflight = null
+    })
   return statusCache.inflight
 }
 
 /** Keys the intern is enriching right now — queued, claimed, or reported active by the worker. */
 export function enrichingKeys(ai) {
-  const active = ai.active?.length ? ai.active : ai.current ? [ai.current] : []
-  const running = active.filter((j) => j?.type === 'enrich-report' && j.key).map((j) => String(j.key).toUpperCase())
-  return [...(ai.queuedKeys ?? []), ...running]
+  const active = Array.isArray(ai?.active) && ai.active.length ? ai.active : isObject(ai?.current) ? [ai.current] : []
+  const running = active.filter((j) => isObject(j) && j.type === 'enrich-report' && j.key).map((j) => String(j.key).toUpperCase())
+  const queued = Array.isArray(ai?.queuedKeys) ? ai.queuedKeys.filter((k) => typeof k === 'string') : []
+  return [...queued, ...running]
 }
 
 export async function proxyAi(req, res, destPath) {
+  const method = req.method === 'HEAD' ? 'GET' : req.method
+  let body
+  if (method !== 'GET') {
+    body = await readBody(req, PROXY_BODY_LIMIT)
+    if (body === undefined) return json(res, 400, { ok: false, error: 'aborted' })
+    if (body === null) return json(res, 413, { ok: false, error: 'too large' })
+    invalidateAiStatus()
+  }
   try {
-    let body
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      const chunks = []
-      for await (const c of req) chunks.push(c)
-      body = Buffer.concat(chunks)
-      invalidateAiStatus()
-    }
     const r = await fetch(`${AI_INTERN_URL}${destPath}`, {
-      method: req.method,
+      method,
       headers: { 'Content-Type': 'application/json' },
       body,
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
     })
+    const text = await r.text()
     res
-      .writeHead(r.status, { 'Content-Type': r.headers.get('content-type') || 'application/json', 'Cache-Control': 'no-store' })
-      .end(await r.text())
+      .writeHead(r.status, {
+        'Content-Type': r.headers.get('content-type') || 'application/json',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'no-referrer',
+      })
+      .end(text)
   } catch {
     json(res, 503, { ok: false, down: true, state: 'down', error: 'AI intern unreachable' })
   }
