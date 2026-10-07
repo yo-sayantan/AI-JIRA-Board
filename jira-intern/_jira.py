@@ -102,6 +102,24 @@ def jira_get(path, timeout=120):
     )
 
 
+def jira_post(path, body, timeout=60):
+    """POST JSON, no retries: a write that timed out may still have landed, and replaying a
+    status transition is not safe. Returns the parsed reply, or {} for an empty 204."""
+    req = urllib.request.Request(
+        JIRA_BASE + path,
+        data=json.dumps(body).encode(),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {os.environ['JIRA_PERSONAL_TOKEN']}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req, context=SSL_CTX, timeout=timeout) as r:
+        raw = r.read()
+    return json.loads(raw) if raw else {}
+
+
 def bb_get(path, timeout=45):
     tok = os.environ.get("BITBUCKET_PAT") or os.environ.get("ATLASSIAN_TOKEN", "")
     return get_json(BB_BASE + path, {"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=timeout, retries=1)
