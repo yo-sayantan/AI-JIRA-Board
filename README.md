@@ -72,11 +72,19 @@ AI-JIRA-Board/
 ├── .github/                 ← CI (typecheck + build), Dependabot, issue & PR templates
 ├── open-guide.sh            ← open the guide (macOS/Linux) — no server needed
 ├── open-guide.bat           ← open the guide (Windows) — no server needed
+├── AGENTS.md                ← 🤖 entry point for AI agents → docs/AGENTS.md
 ├── docs/                    ← 📚 documentation
 │   ├── index.html           ←   Setup & Deployment guide (per-OS install, git/Docker commands)
+│   ├── legal.html           ←   privacy, data, cookies, terms, accessibility, contact
+│   ├── AGENTS.md            ←   onboarding for engineers & AI agents: map, rules, gotchas
+│   ├── FEATURES.md          ←   every feature + where its code lives
+│   ├── DATA-FLOW.md         ←   every file, writer, lock and lifecycle
+│   ├── AI-PIPELINE.md       ←   briefs, report enrichment, models, queues
+│   ├── INTEGRATIONS.md      ←   Jira/Bitbucket, the HTTP API, config chain
+│   ├── RUNTIME.md           ←   containers, agents, queues, schedulers, runbook
 │   ├── ARCHITECTURE.md      ←   how the fetch, data file, and app fit together
 │   ├── DEPLOYMENT.md        ←   deploy & run: Docker / static file / live server
-│   └── USAGE.md             ←   using the board: chips, Next Sprint, drawer, shortcuts
+│   └── USAGE.md             ←   using the board: chips, Raised by me, Next Sprint, drawer
 ├── setup/                   ← 🔐 templates for secrets, config & MCP (no real values)
 │   ├── README.md            ←   step-by-step setup guide
 │   ├── mcp-secrets.env.template
@@ -120,7 +128,8 @@ npm run typecheck  # tsc --noEmit
 
 `src/types.ts` is the **data contract** — the single source of truth for the ticket shape, mirrored
 in prose by `jira-intern/prompts/intern-prompt.md`. Keep the two in sync. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full picture.
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full picture, and
+[`docs/AGENTS.md`](docs/AGENTS.md) for the whole-repo onboarding written for engineers and AI agents.
 
 ## Publishing this repo
 

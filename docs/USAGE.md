@@ -20,9 +20,37 @@ A tour of what's on screen and how to drive it.
 | **To Do / In Progress / In Review / QA / Done** | Filters the board to that one column. Click again to clear. |
 | **Next Sprint N** | Toggles the Next Sprint bar. Picking any other chip hides it again. |
 | **All** | Reveals everything at once — every column plus the Next Sprint queue, expanded. |
+| **Raised open/total** | Opens the Raised-by-me view — every ticket you reported (see below). |
 | **Completed** | Opens the full archive of every Done ticket. |
 
 Search (`/` to focus) narrows everything live; a bare number is treated as a ticket/PR id.
+
+## Raised by me
+
+The indigo chip (e.g. **Raised 6/12** — six still open of twelve you ever reported) opens an
+archive-style view of every **non-sub-task ticket you raised**: bugs you spotted and filed for
+someone to fix later. It answers three questions per row, straight off the aligned right rail:
+
+- **Status** — colour-coded pill (the row's left edge carries the same colour).
+- **Assignee** — teal *me*, a violet name for someone else, or grey *unassigned*.
+- **Hands** — `↻ N`, how many times it changed owners since you filed it; hover for the chain.
+
+Expand a row for the quick peek: the AI brief, the full description you filed, dates, the
+hand-off trail as a pill chain (*raised by you → A → B* with dates), and **Linked tickets** —
+what it was raised from / blocks / duplicates (also shown inline as a `⇄ KEY` chip). Clicking a
+row opens the full ticket drawer like anywhere else.
+
+Filters: status buckets (Open · In progress · Review/QA · Fixed), assignment (With me · With
+others · Unassigned · Reassigned), projects and types — plus the same search grammar as the rest
+of the board. Rows group by the year/month you raised them.
+
+**Hard refresh** (top-right of the view) re-pulls *every* ticket you ever reported straight from
+Jira — rows already listed pick up updates, newly raised ones appear. You need it because tickets
+other people work never ride the normal board refresh; the "fetched X ago" stamp under the button
+shows this list's own freshness. The daily refresh and an archive rebuild also update the list.
+
+Sub-tickets you created under your own tickets don't count — those are yours by default and live
+on the board. The whole feature toggles in Settings → **Raised by me**.
 
 ## Next Sprint
 
