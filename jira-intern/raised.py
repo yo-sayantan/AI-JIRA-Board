@@ -13,6 +13,8 @@ sub-ticket cut under my own work is mine by default, not "raised" work.
 import os
 import sys
 import urllib.error
+import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,14 +25,18 @@ from _jira import (  # noqa: E402
     is_excluded,
     iso,
     issue_links,
+    jira_get,
     light_html,
     person_fmt,
-    search_jira,
     status_column,
     story_points,
     wiki_to_html,
 )
 from _sprint import apply_sprint  # noqa: E402
+
+# Same parallelism knob as the daily fetch (Settings → Parallel refresh).
+WORKERS = max(1, min(16, int(os.environ.get("REFRESH_WORKERS") or 8)))
+PAGE = 100
 
 # No comment bodies and no subtasks here; issuelinks ARE fetched — "which ticket was this
 # raised from / related to" is part of the view's contract.
@@ -101,22 +107,39 @@ def build_raised_row(issue):
     return row
 
 
+def _search_parallel(jql):
+    """Paginated search with every page after the first fetched CONCURRENTLY — the same
+    batched parallelism the daily fetch and the archive use, applied to the one place the
+    raised refresh spends wall-clock. Page 1 reveals the total; the rest fan out."""
+    def page(start):
+        params = {"jql": jql, "startAt": start, "maxResults": PAGE, "fields": RAISED_FIELDS, "expand": "changelog"}
+        return jira_get("/rest/api/2/search?" + urllib.parse.urlencode(params))
+
+    first = page(0)
+    issues = list(first.get("issues") or [])
+    total = int(first.get("total") or len(issues))
+    starts = list(range(PAGE, total, PAGE))
+    if starts:
+        with ThreadPoolExecutor(max_workers=max(1, min(WORKERS, len(starts)))) as ex:
+            for batch in ex.map(page, starts):
+                issues.extend(batch.get("issues") or [])
+    return issues
+
+
 def fetch_raised(prior_rows):
     """All non-sub-task tickets I reported, newest first → (rows, ok). A failure keeps the
     previous list (≠ "I raised nothing") so the view never blanks on a blip."""
     try:
         try:
-            issues = search_jira(
-                "reporter = currentUser() AND issuetype not in subTaskIssueTypes() ORDER BY created DESC",
-                fields=RAISED_FIELDS,
-                expand="changelog",
+            issues = _search_parallel(
+                "reporter = currentUser() AND issuetype not in subTaskIssueTypes() ORDER BY created DESC"
             )
         except urllib.error.HTTPError as e:
             if e.code != 400:
                 raise
             # Older builds reject subTaskIssueTypes(); the parent-field filter below still
             # drops every sub-task, so the plain reporter search is equally correct.
-            issues = search_jira("reporter = currentUser() ORDER BY created DESC", fields=RAISED_FIELDS, expand="changelog")
+            issues = _search_parallel("reporter = currentUser() ORDER BY created DESC")
     except Exception:
         return list(prior_rows or []), False
     # Always a HARD, full replace: every reported ticket is re-fetched (rows already listed
@@ -136,6 +159,9 @@ def fetch_raised(prior_rows):
             row["aiSummary"] = prior["aiSummary"]
             row["aiSummaryAt"] = prior.get("aiSummaryAt")
         rows.append(row)
+    # Parallel pages can interleave if Jira's result set shifts mid-fetch — re-sort so the
+    # list is always strictly newest-raised first.
+    rows.sort(key=lambda r: r.get("created") or "", reverse=True)
     return rows, True
 
 

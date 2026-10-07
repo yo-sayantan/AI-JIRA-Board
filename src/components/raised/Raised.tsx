@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { AssigneeHop, ColumnKey, LinkRef, RaisedTicket } from '../../types'
 import { COLUMN_META, mapStatusToColumn } from '../../lib/columns'
-import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, yearOf, hexToRgba, isAssignedToMe } from '../../lib/format'
+import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, yearOf, hexToRgba, isAssignedToMe, unwrapBrief } from '../../lib/format'
 import { matchRow, parseQuery } from '../../lib/search'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { PriorityGlyph, SafeHtml } from '../common/ui'
@@ -600,7 +600,7 @@ function RaisedRow({ it, user, briefsEnabled, expanded, onToggle, onOpen }: { it
                       <span className="ml-auto font-semibold normal-case tracking-normal text-[var(--muted)]">{relTime(it.aiSummaryAt)}</span>
                     )}
                   </div>
-                  <SafeHtml html={it.aiSummary} className="px-3.5 py-3 text-[13px] leading-relaxed text-[var(--ink-soft)]" />
+                  <SafeHtml html={unwrapBrief(it.aiSummary)} className="px-3.5 py-3 text-[13px] leading-relaxed text-[var(--ink-soft)]" />
                 </div>
               )}
 

@@ -1583,6 +1583,28 @@ def data_writers_busy():
     return False
 
 
+def _clean_brief(raw):
+    """Model output → renderable HTML. Strips code fences and unwraps the JSON object some
+    models return ({"html": "…"}) no matter how firmly the prompt forbids it."""
+    html = (raw or "").strip()
+    if html.startswith("```"):
+        html = re.sub(r"^```(?:html|json)?", "", html).strip().rstrip("`").strip()
+    if html.startswith("{"):
+        try:
+            obj = json.loads(html)
+            if isinstance(obj, dict):
+                for k in ("html", "summary", "brief", "text"):
+                    v = obj.get(k)
+                    if isinstance(v, str) and v.strip():
+                        return v.strip()
+        except Exception:
+            # Wrapped but not valid JSON (literal newlines inside the string) — peel by regex.
+            m = re.search(r'"(?:html|summary|brief|text)"\s*:\s*"([\s\S]*?)"\s*}\s*$', html)
+            if m:
+                return m.group(1).replace('\\"', '"').replace("\\n", "\n").strip()
+    return html
+
+
 def summarize_active(job):
     waited = 0
     while data_writers_busy() and waited < 60:
@@ -1607,7 +1629,10 @@ def summarize_active(job):
     for t in rows:
         last = t.get("lastUpdate") or ""
         at = t.get("aiSummaryAt") or ""
-        if at >= last and t.get("aiSummary"):
+        cur = (t.get("aiSummary") or "").lstrip()
+        # A brief that still looks like a wrapped JSON object ({"html": …}) slipped past an
+        # older run — treat it as missing so it gets regenerated once, properly unwrapped.
+        if at >= last and cur and not cur.startswith("{"):
             continue
         key = t.get("key") or ""
         local = local_disk_pack(key, t, data)
@@ -1619,16 +1644,15 @@ def summarize_active(job):
         )
         system = (
             "Write a short HTML brief for this Jira ticket using LOCAL DATA and LIVE MCP READS. "
-            "Allowed tags: p b ul li code a. 1 lead paragraph + optional bullets. No invention."
+            "Allowed tags: p b ul li code a. 1 lead paragraph + optional bullets. No invention. "
+            "Reply with RAW HTML ONLY — no JSON wrapper object, no code fences, no quotes around it."
         )
         try:
             raw, _gen = infer(job, system, user)
         except Exception as e:
             log(f"summary skip {t.get('key')}: {e}")
             continue
-        html = (raw or "").strip()
-        if html.startswith("```"):
-            html = re.sub(r"^```(?:html)?", "", html).strip().rstrip("`")
+        html = _clean_brief(raw)
         if "<" not in html:
             html = f"<p>{_esc(html)}</p>"
         briefs[key] = {"aiSummary": html, "aiSummaryAt": now_iso(), "lastUpdate": last}

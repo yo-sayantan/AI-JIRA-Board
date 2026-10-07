@@ -531,3 +531,26 @@ export function shortBranch(b?: string | null, max = 30): string {
   if (!b) return ''
   return b.length > max ? b.slice(0, max - 1) + '…' : b
 }
+
+/**
+ * Some models wrap an AI brief as {"html": "…"} despite the prompt forbidding it, and a few
+ * of those slipped into stored data. Unwrap before rendering; the intern also regenerates
+ * them, but render-time healing means no brief ever SHOWS as raw JSON.
+ */
+export function unwrapBrief(raw?: string | null): string | null {
+  if (!raw) return raw ?? null
+  const s = raw.trim()
+  if (!s.startsWith('{')) return raw
+  try {
+    const obj = JSON.parse(s) as Record<string, unknown>
+    for (const k of ['html', 'summary', 'brief', 'text']) {
+      const v = obj[k]
+      if (typeof v === 'string' && v.trim()) return v.trim()
+    }
+  } catch {
+    // Wrapped but not valid JSON (literal newlines inside the string) — peel by regex.
+    const m = /"(?:html|summary|brief|text)"\s*:\s*"([\s\S]*?)"\s*\}\s*$/.exec(s)
+    if (m) return m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').trim()
+  }
+  return raw
+}

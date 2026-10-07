@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { Ticket, LinkRef, Comment, PullRequest } from '../../types'
 import { COLUMN_META } from '../../lib/columns'
-import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba, cycleTime, fmtDays } from '../../lib/format'
+import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba, cycleTime, fmtDays, unwrapBrief } from '../../lib/format'
 import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink } from '../common/ui'
 import { Pipeline } from './Pipeline'
 import { toneColor, type PrReportSummary } from '../../lib/reportTypes'
@@ -376,7 +376,7 @@ export function TicketDetail({
                   auto-generated{ticket.aiSummaryAt ? ` · ${fmtDate(ticket.aiSummaryAt)}` : ''}
                 </span>
               </div>
-              <SafeHtml html={ticket.aiSummary} className="px-3.5 py-3 text-[13.5px] leading-relaxed text-[var(--ink-soft)]" />
+              <SafeHtml html={unwrapBrief(ticket.aiSummary)} className="px-3.5 py-3 text-[13.5px] leading-relaxed text-[var(--ink-soft)]" />
             </div>
           )}
 
