@@ -34,7 +34,7 @@
       }
     },
     "bitbucket": {
-      "command": "~/.cursor/bin/mcp-with-secrets.sh",
+      "command": "~/.local/bin/mcp-with-secrets.sh",
       "args": ["your-bitbucket-mcp-server"],
       "envFile": "~/.cursor/mcp-secrets.env",
       "env": {

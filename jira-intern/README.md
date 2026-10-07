@@ -1,56 +1,77 @@
-# JIRA Intern
+# jira-intern — the fetch pipeline
 
-A headless agent that, on every run, fetches my Jira work and **dumps it as structured data**
-(`data.json` + `data.js`) for the **`git/jira-board`** app to render. Built with the models + MCPs
-from your Cursor setup.
+Fetches your Jira work and **dumps it as structured data** (`data.json` + `data.js`) for the board
+(the React app in `../src/`) to render. The intern never writes HTML; the board is the only UI.
 
-> **Architecture (since 2026-06):** the intern no longer writes HTML. It produces data; the
-> `git/jira-board` React app is the UI. The old `status.html`, `tickets/*.html` and `assets/` are
-> **retired legacy** (left on disk, no longer maintained).
+The deterministic Python scripts here are the **primary path**. An agent CLI (`cursor-agent`,
+`claude` or `codex`, chosen by `connector.active` in the config) is only a **fallback**, used when
+`daily_fetch.py` or `completed_archive.py` fails for a reason other than a missing token.
 
 ## Open the board
-Double-click **`../../jira-board/dist/index.html`** (or `open` it). It reads the intern's latest dump
-from `data.js`, so just reopen/refresh after a run — no rebuild. See `git/jira-board/README.md`.
 
-## What the intern writes (all under `jira-board/jira-intern/`)
-- **`data.json`** — canonical, parseable dump. The contract; schema mirrors `git/jira-board/src/types.ts`.
-- **`data.js`**   — `window.__JIRA_DATA__ = <that json>;` so the board loads it from `file://`.
-- **`.state.json`** — hidden memory (incremental briefing + "done once"). You never open it.
+Run the board with Docker (`docker compose up -d --build`, then open `http://localhost:4321/dist/index.html`)
+or open `../dist/index.html` after `npm run build`. See [`../docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md).
 
-The full output spec lives in **`prompts/intern-prompt.md`** — edit that to change what the intern collects,
-and keep its schema block in sync with `jira-board/src/types.ts`.
+## What is in this folder
 
-## Two runners (Cursor CLI, headless)
-Both run `cursor-agent` with your Cursor model + the `jira`/`confluence`/`bitbucket` MCP servers (sourcing
-`~/.cursor/mcp-secrets.env` for `CURSOR_API_KEY`). Split so the slow part runs less often:
+| Path | Role |
+|---|---|
+| `daily_fetch.py` | Active tickets (`tickets[]`): fetch, merge with `.state.json`, write the dump. Also `--key KEY` for a single-ticket refresh. |
+| `completed_archive.py` | The Completed archive (`completed[]`), resumable, cached per ticket in `cache/<KEY>.json`. |
+| `devinfo.py` | Branches, pull requests and approvals from Jira's dev-status index; Bitbucket only enriches still-open PRs. |
+| `pr_report.py` | Deterministic PR Readiness Reports (`reports/<KEY>.json`). The AI worker may only add to them. |
+| `ai_queue.py` | The file queue (`.ai-queue/*.json`) that hands report enrichment and briefs to the AI-Intern container. |
+| `_config.py`, `_jira.py`, `_sprint.py`, `datafile.py`, `progress.py` | Config loading, Jira HTTP + mapping, sprint labels, atomic output writing, run progress. |
+| `local-runner/` | Shell and Node wrappers: locks, environment, timeouts, log rotation, the agent fallback. |
+| `prompts/` | `intern-prompt.md` (the agent fallback's output contract; keep its schema in sync with `../src/types.ts`) and reference specs. |
+| `CONFIG.md` | Every configuration key and environment variable. |
 
-| Script | Scope | What it writes | Schedule |
-|---|---|---|---|
-| **`local-runner/run-intern.sh`** | ACTIVE tickets (fast) | `tickets[]` (+ preserves `completed[]`) | **daily** (e.g. 9:00) |
-| **`local-runner/update-completed.sh`** | the full COMPLETED archive (slow) | `completed[]` (+ leaves `tickets[]` alone) | **weekly** |
+Runtime files written here (`data.json`, `cache/`, `logs/`, `.state.json`, locks and so on) are
+git-ignored. [`../docs/RUNTIME-FILES.md`](../docs/RUNTIME-FILES.md) lists each one, who writes it, the
+lock rules, the runner exit codes and how to debug a failed fetch.
 
-- Daily: Shortcut → Run Shell Script → `bash /path/to/AI-JIRA-Board/jira-intern/local-runner/run-intern.sh` → Automation → Time of Day → 9:00 Daily.
-- Weekly: Shortcut → Run Shell Script → `bash /path/to/AI-JIRA-Board/jira-intern/local-runner/update-completed.sh` → Automation → Day of Week (once/week). It pages through every closed ticket, fetches **real** branches + all PRs, caches each in `cache/<KEY>.json`, and is **resumable** (a timeout just continues next run).
-- `FRESH=1 bash …/update-completed.sh` wipes the cache and rebuilds the archive from scratch (use it once now to replace any fabricated branch names / missing PRs with real Bitbucket data). `TIMEOUT_SEC=10800` raises the 2h ceiling.
-- They share one `data.json` (daily owns `tickets[]`, weekly owns `completed[]`); each re-syncs `data.js` after running.
+## Runners
+
+| Script | Scope | Writes |
+|---|---|---|
+| `local-runner/run-intern.sh` | Active tickets (fast, capped at 300 s on the fast path) | `tickets[]`; preserves `completed[]` |
+| `local-runner/update-completed.sh` | The full Completed archive (slow, resumable) | `completed[]`; leaves `tickets[]` alone |
+| `local-runner/refresh-ticket.sh KEY` | One ticket | that ticket's entry |
+| `local-runner/pr-report.sh`, `pr-reports-backfill.sh` | PR readiness reports | `reports/*.json` |
+
+The board schedules these itself (Settings, Background jobs), so you normally never call them by
+hand. Calling them from a terminal or an OS scheduler works too and uses the same locks.
+`FRESH=1 bash local-runner/update-completed.sh` wipes the archive cache and rebuilds from scratch;
+`TIMEOUT_SEC` raises the archive ceiling.
+
+Exit codes the board understands: `0` ok, `2` no Jira token (no agent fallback), `3` skipped because
+another writer holds a lock, `4` archive finished with some tickets keeping their previous row,
+`124` timeout, `127` agent CLI missing.
 
 ## How it behaves
-- **Board columns:** To Do · In Progress · **In Review** (folds Ready4Review + Code Review) · QA · Done.
-- **On Hold:** Blocked/Waiting/Parked tickets get `column:"hold"`; the board shows that section only when occupied.
-- **Completed:** the **weekly** `update-completed.sh` pages a full-history JQL (`assignee was currentUser() AND
-  statusCategory = Done`) into `completed[]` — every Done ticket I've ever worked, with real branches + all PRs.
-  The daily run never touches it. It's the board's archive (gold pill → full-screen overlay, real branches/PRs).
-- **On assignment:** an active ticket gets a full rich object in `tickets[]` immediately.
-- **Refresh:** rich fields update only on a **new comment** or **status change**, each prepended to `updateLog`.
-- **PR status:** from Bitbucket (by branch / key) → approved / comments / changes / merged / none.
-- **Done once:** at QA/Done, one final "Marked DONE" entry; `state.done=true`; kept visible in the Done column + archive.
-- **MCP scope:** only `jira`, `confluence`, `bitbucket` (others blocked via `git/.cursor/cli.json`).
-- **Never invents data:** if Jira MCP is unavailable, it rewrites the dump from last-known `.state.json`,
-  adds a `notes[]` notice (also prepended to `_STATUS.md`), and stops.
+
+- **Columns:** To Do, In Progress, In Review (folds Ready4Review and Code Review), QA, Done. The
+  intern decides `column` (`_jira.py status_column`); `../src/lib/columns.ts` is only the fallback
+  for dumps without it. On Hold tickets get `column: "hold"` and have their own section.
+- **Completed:** the archive query is `(assignee was currentUser() OR assignee = currentUser())`,
+  filtered client-side to Done tickets, plus the parent of each of your sub-tasks as a context row
+  (`mine: false`). `ARCHIVE_SCOPE=year|since|key` (with `ARCHIVE_YEAR`, `ARCHIVE_SINCE` or
+  `ARCHIVE_KEY`) rebuilds a slice. The daily run never touches `completed[]`.
+- **Refresh:** rich fields update only on a new comment or a status change, each prepended to
+  `updateLog`. A Done ticket gets exactly one "Marked DONE" entry.
+- **PR status:** from Jira's dev-status index. The Bitbucket key-scan fallback runs only for projects
+  listed in `bitbucket.projectMap` and `bitbucket.repoHints`, which are empty by default.
+- **One bad ticket never stops a run:** a ticket that fails to build keeps its previous entry and
+  logs a `WARN` line; the run fails only when every ticket failed.
+- **Never invents data:** with no Jira access it re-stamps the last known dump, adds a `notes[]`
+  notice and stops.
 
 ## Branch convention
-`<type>/<KEY>_<short_description>` — `feature` for stories/tasks, `bugfix` for bugs.
+
+`<type>/<KEY>_<short_description>`: `feature` for stories and tasks, `bugfix` for bugs.
 
 ## Notes
-- Requires the corporate network/VPN.
-- `cursor-agent -p` headless can hang; the runner kills it after 30 min. Logs in `logs/`.
+
+- Needs network access to your Jira (VPN if it is internal). TLS is verified; for a private CA set
+  `JIRA_CA_BUNDLE`, see [`CONFIG.md`](CONFIG.md).
+- Logs are in `logs/`. The agent fallback is killed after its timeout (30 min for the daily run).

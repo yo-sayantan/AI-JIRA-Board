@@ -158,6 +158,7 @@
         <a href="#ai-intern">AI Intern</a>
         <a href="#run">Run</a>
         <a href="#trouble">Troubleshooting</a>
+        <a href="#privacy">Privacy</a>
       </div>
     </nav>
 
@@ -183,10 +184,11 @@
       <div class="card">
         <p style="margin-top: 0">A personal, self-hosted mirror of your Jira board. A background fetcher pulls
           the tickets assigned to you into a plain data file; a single-file React app renders them — no Jira
-          login, no waiting on the web UI. Two moving parts:</p>
+          login, no waiting on the web UI. Three moving parts:</p>
         <ul>
           <li><b>The fetch</b> (<code class="inl">jira-intern/</code>) — pulls your tickets. Needs <b>one Jira token</b>.</li>
           <li><b>The app</b> (<code class="inl">dist/index.html</code>) — renders whatever the fetch produced. Needs nothing.</li>
+          <li><b>The AI intern</b> (<code class="inl">ai-intern/</code>, optional) — enriches PR Readiness Reports and writes ticket briefs with a local model by default. Needs no key unless you choose a cloud provider.</li>
         </ul>
         <div class="note pink"><b>Your tokens never enter the repo.</b> They live in one file outside it
           (<code class="inl">~/.cursor/mcp-secrets.env</code>); everything else points at it by path.</div>
@@ -224,16 +226,16 @@
         <div class="card tool">
           <span class="ic">🟩</span>
           <div>
-            <h3>Node.js 20+ <span class="req opt">Optional</span></h3>
-            <p class="small">Only to build/develop the app outside Docker, or to run the live server.</p>
-            <p class="small"><a href="https://nodejs.org/">nodejs.org</a> (LTS)</p>
+            <h3>Node.js 22.12+ <span class="req opt">Optional</span></h3>
+            <p class="small">Only to build/develop the app outside Docker, or to run the live server. The Docker image and CI use Node 26 (<code class="inl">.nvmrc</code>).</p>
+            <p class="small"><a href="https://nodejs.org/">nodejs.org</a> (current LTS or newer)</p>
           </div>
         </div>
         <div class="card tool">
           <span class="ic">🐍</span>
           <div>
-            <h3>Python 3.9+ <span class="req opt">Optional</span></h3>
-            <p class="small">Only to run the fetch scripts directly on your machine. The Docker image already contains it.</p>
+            <h3>Python 3.11+ <span class="req opt">Optional</span></h3>
+            <p class="small">Only to run the fetch scripts directly on your machine (standard library only, no packages). The Docker images already contain it.</p>
             <p class="small"><a href="https://www.python.org/downloads/">python.org/downloads</a></p>
           </div>
         </div>
@@ -298,7 +300,7 @@ sudo usermod -aG docker "$USER"      <span class="cmt"># run docker without sudo
 newgrp docker                        <span class="cmt"># apply the group now (or log out/in)</span></pre>
         <p class="small">Node.js (optional) via <a href="https://github.com/nvm-sh/nvm">nvm</a>:</p>
         <pre><button class="copy">Copy</button>curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-nvm install 20</pre>
+nvm install 26      <span class="cmt"># or any version >= 22.12; the repo's .nvmrc says 26</span></pre>
         <p class="small">Fedora/RHEL: swap <code class="inl">apt</code> for <code class="inl">dnf</code>.
           Arch: <code class="inl">sudo pacman -S git docker docker-compose nodejs</code>.</p>
       </div>
@@ -393,26 +395,36 @@ Copy-Item "setup\config.example.json" "$HOME\.ai\config.json"</pre>
         <pre><button class="copy">Copy</button>docker compose up -d --build</pre>
         <p>Then open <a href="http://localhost:4321/dist/index.html">http://localhost:4321/dist/index.html</a>
           <span class="ok">✓</span></p>
-        <p class="small">This builds the image (stage 1 compiles the app, stage 2 runs the server + Python fetch),
-          starts Compose project <code class="inl">JIRA-Project</code> with container <code class="inl">JIRA-Board</code>, mounts your secrets read-only, fetches once
-          on boot, and re-fetches every 15 minutes.</p>
+        <p class="small">This builds the board image (stage 1 compiles the app, stage 2 runs the server + Python fetch)
+          and starts Compose project <code class="inl">JIRA-Project</code> with three containers:
+          <code class="inl">JIRA-Board</code> (the board), <code class="inl">AI-Ollama</code> (local models) and
+          <code class="inl">AI-Intern</code> (report enrichment). It mounts your <code class="inl">~/.cursor</code> and
+          <code class="inl">~/.ai</code> folders read-only, fetches once on boot, and then refreshes on the cadence you
+          choose in <b>Settings → Background jobs</b> (defaults: active tickets twice a day, whole board and PR reports
+          twice a week). There is no fixed timer.</p>
+        <p class="small">Board only, without the AI pair (Settings then shows "AI intern offline"):</p>
+        <pre><button class="copy">Copy</button>docker compose up -d --build jira-board</pre>
+        <div class="note"><b>Loopback by default.</b> The port is published on <code class="inl">127.0.0.1</code> only.
+          To reach the board from another device, publish it on the LAN <i>and</i> tell the server which host names it
+          may answer to (it rejects unknown <code class="inl">Host</code> headers with 403 to block DNS rebinding):
+          <code class="inl">BIND_IP=0.0.0.0 ALLOWED_HOSTS=my-laptop.local,192.168.1.20 docker compose up -d</code></div>
+        <div class="note"><b>Linux hosts:</b> the board runs as user id 1000 inside the container, so the bind-mounted
+          data folder must be writable by it — once: <code class="inl">sudo chown -R 1000:1000 ./jira-intern</code>.
+          Docker Desktop (macOS / Windows) handles this for you.</div>
       </div>
 
       <div class="card">
-        <h3>Build and run separately</h3>
-        <pre><button class="copy">Copy</button><span class="cmt"># build the image only</span>
-docker compose build --pull
-<span class="cmt"># or with plain docker</span>
-docker build -t jira-board:latest .
-
-<span class="cmt"># run it (plain docker, without compose)</span>
-docker run -d --name JIRA-Board -p 4321:4321 \
-  -v "$HOME/.cursor/mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro" \
-  -v "$(pwd)/jira-intern:/app/jira-intern" \
-  jira-board:latest</pre>
-        <p class="small">Windows PowerShell equivalent for the volume flags:
-          <code class="inl">-v "${HOME}\.cursor\mcp-secrets.env:/root/.cursor/mcp-secrets.env:ro"</code> and
-          <code class="inl">-v "${PWD}\jira-intern:/app/jira-intern"</code>.</p>
+        <h3>Build and start separately</h3>
+        <pre><button class="copy">Copy</button><span class="cmt"># build the images only (no --pull: Docker Hub can be slow; add it when you want fresh base images)</span>
+docker compose build
+<span class="cmt"># start what was built</span>
+docker compose up -d</pre>
+        <p class="small">Stick with Compose rather than a hand-written <code class="inl">docker run</code>: it wires the
+          three services together, publishes only the board port, and mounts the <b>directories</b>
+          <code class="inl">~/.cursor</code> → <code class="inl">/home/node/.cursor</code> and
+          <code class="inl">~/.ai</code> → <code class="inl">/home/node/.ai</code> read-only (a single-file bind mount
+          keeps pointing at the old inode after an editor rewrites <code class="inl">mcp-secrets.env</code>).
+          <code class="inl">docker-compose.yml</code> is commented line by line if you need to adapt it.</p>
       </div>
 
       <div class="card">
@@ -435,12 +447,16 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
         <table>
           <tr><th>Variable</th><th>Default</th><th>What it does</th></tr>
           <tr><td><code class="inl">PORT</code></td><td>4321</td><td>Host port the board is published on.</td></tr>
-          <tr><td><code class="inl">REFRESH_ON_START</code></td><td>1</td><td>Fetch once when the container boots.</td></tr>
-          <tr><td><code class="inl">REFRESH_INTERVAL</code></td><td>900</td><td>Seconds between auto-refreshes. <code class="inl">0</code> disables.</td></tr>
-          <tr><td><code class="inl">SKIP_SUMMARY</code></td><td>1</td><td>No LLM in the <b>fetch</b> container. Report enrichment and briefs run in <code class="inl">AI-Intern</code>.</td></tr>
+          <tr><td><code class="inl">BIND_IP</code></td><td>127.0.0.1</td><td>Host interface the port is published on. <code class="inl">0.0.0.0</code> exposes it to the network — pair with <code class="inl">ALLOWED_HOSTS</code>.</td></tr>
+          <tr><td><code class="inl">ALLOWED_HOSTS</code></td><td><i>(empty)</i></td><td>Comma-separated <code class="inl">host[:port]</code> names the server accepts besides loopback. Anything else gets 403.</td></tr>
+          <tr><td><code class="inl">REFRESH_ON_START</code></td><td>config <code class="inl">refresh.onStart</code> (true)</td><td>Fetch once when the container boots. Repeat runs follow Settings → Background jobs, not a timer.</td></tr>
+          <tr><td><code class="inl">JIRA_CA_BUNDLE</code></td><td><i>(unset)</i></td><td>Path to your private root CA (PEM) inside the container. TLS verification is on by default; a corporate CA needs this. Uncomment the <code class="inl">private-ca.pem</code> volume lines in <code class="inl">docker-compose.yml</code> and set <code class="inl">JIRA_CA_BUNDLE_HOST</code> to the file on your machine.</td></tr>
+          <tr><td><code class="inl">JIRA_INSECURE_TLS</code></td><td><i>(unset)</i></td><td><code class="inl">1</code> disables certificate verification for Jira/Bitbucket. Last resort only — every run logs a warning.</td></tr>
           <tr><td><code class="inl">AI_INTERN_URL</code></td><td>http://jira-ai:4322</td><td>Where the board proxies intern health, jobs, and model pulls.</td></tr>
         </table>
-        <pre><button class="copy">Copy</button>PORT=8080 docker compose up -d --build   <span class="cmt"># run on a different port</span></pre>
+        <pre><button class="copy">Copy</button>PORT=8080 docker compose up -d --build   <span class="cmt"># run on a different port</span>
+JIRA_CA_BUNDLE_HOST=/path/to/root-ca.pem JIRA_CA_BUNDLE=/etc/ssl/private-ca.pem docker compose up -d   <span class="cmt"># private CA</span></pre>
+        <p class="small">Every variable the fetch scripts read is listed in <code class="inl">jira-intern/CONFIG.md</code>.</p>
       </div>
 
       <div class="card">
@@ -455,11 +471,12 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
 
       <h2 id="ai-intern">AI Intern — local &amp; cloud models</h2>
       <div class="card">
-        <h3>Two containers, one command</h3>
-        <p><code class="inl">docker compose up -d --build</code> starts project <b>JIRA-Project</b> with <b>JIRA-Board</b> (fetch + UI), <b>AI-Ollama</b>, and
-          <b>AI-Intern</b> (report enrichment, ticket briefs, model download). Both stay up with
+        <h3>Three containers, one command</h3>
+        <p><code class="inl">docker compose up -d --build</code> starts project <b>JIRA-Project</b> with <b>JIRA-Board</b> (fetch + UI), <b>AI-Ollama</b> (local models), and
+          <b>AI-Intern</b> (report enrichment, ticket briefs, model download). All three stay up with
           <code class="inl">restart: unless-stopped</code>. Refresh and Regenerate honour Settings — you do not
-          need a host terminal for AI.</p>
+          need a host terminal for AI. The AI pair is optional: <code class="inl">docker compose up -d --build jira-board</code>
+          runs the board alone and reports stay deterministic.</p>
         <p class="small">Settings → AI usage: <b>None / Low / Moderate / Max</b>, then <b>Local</b> or <b>Cloud</b>.
           Max is the product name for the stored value <code class="inl">full</code> (longest timeout).
           Local models are a <b>dropdown</b>. If the chosen tag is already on disk, that is enough.
@@ -578,9 +595,13 @@ ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
           No UI change is required.</p>
       </div>
 
-      <div class="note warn"><b>Honest gap.</b> Local models (including Gemma / GPT-OSS / nano) read the intern
-        volume and live Jira/Bitbucket REST (same tokens as Cursor MCP). CI, Checkmarx and live Dynatrace stay
-        <b>Not verified</b> until dedicated REST is added.</div>
+      <div class="note warn"><b>What the AI can and cannot see.</b> Every model — local or cloud — reads the intern
+        volume plus live Jira/Bitbucket REST with your tokens. The CI, Checkmarx and Dynatrace proof rows are
+        filled only when their optional keys and endpoints are configured (<code class="inl">BITBUCKET_PAT</code> for
+        build status; <code class="inl">CHECKMARX_API_KEY</code> + <code class="inl">endpoints.checkmarxBase</code>;
+        <code class="inl">DYNATRACE_PAT</code> + <code class="inl">endpoints.dynatraceTenants</code> — see
+        <code class="inl">jira-intern/CONFIG.md</code>). Without them those rows read <b>Not read</b> / <b>Not verified</b>
+        and are shown as gaps, never guessed.</div>
 
       <!-- ── RUN WITHOUT DOCKER ───────────────────────────────────── -->
       <h2 id="run">Other ways to run</h2>
@@ -601,7 +622,7 @@ start dist\index.html</pre>
           <p class="small">The header button becomes a real <b>Refresh</b> that runs the fetch on your machine.</p>
           <pre><button class="copy">Copy</button>npm install
 npm run serve</pre>
-          <p class="small">Serves on port 4321. Needs Node.js 20+.</p>
+          <p class="small">Serves on <code class="inl">127.0.0.1:4321</code>. Needs Node.js 22.12+ and Python 3.11+.</p>
         </div>
       </div>
 
@@ -610,6 +631,7 @@ npm run serve</pre>
         <pre><button class="copy">Copy</button>npm install        <span class="cmt"># install dependencies</span>
 npm run dev        <span class="cmt"># localhost:5173 — sample data, hot reload</span>
 npm run typecheck  <span class="cmt"># tsc --noEmit</span>
+npm test           <span class="cmt"># Python suite + vitest suite</span>
 npm run build      <span class="cmt"># → dist/index.html (single file)</span></pre>
       </div>
 
@@ -633,6 +655,11 @@ bash jira-intern/local-runner/update-completed.sh  <span class="cmt"># full Comp
           <tr><td><code class="inl">Name or service not known</code> for your Jira host</td><td>Docker DNS, common on VPN. Uncomment the <code class="inl">dns:</code> block in <code class="inl">docker-compose.yml</code> and recreate.</td></tr>
           <tr><td>Container exits immediately</td><td><code class="inl">docker logs JIRA-Board</code> — usually a bad token or an unreachable host.</td></tr>
           <tr><td>Changed <code class="inl">src/</code> but the UI looks old</td><td>Rebuild: <code class="inl">docker compose up -d --build</code>.</td></tr>
+          <tr><td><code class="inl">403 forbidden host</code> in the browser</td><td>You opened the board under a name that isn't loopback. Start with <code class="inl">ALLOWED_HOSTS=&lt;that-host[:port]&gt;</code>.</td></tr>
+          <tr><td><code class="inl">certificate verify failed</code> in the fetch log</td><td>Your Jira uses a private CA. Set <code class="inl">JIRA_CA_BUNDLE</code> (see Environment knobs above).</td></tr>
+          <tr><td><code class="inl">could not seed /app/jira-intern</code> / permission errors (Linux)</td><td><code class="inl">sudo chown -R 1000:1000 ./jira-intern</code> — the board runs as uid 1000.</td></tr>
+          <tr><td>Settings shows "AI intern offline"</td><td>The <code class="inl">jira-ai</code> service isn't running or healthy: <code class="inl">docker compose up -d jira-ai</code>, then <code class="inl">docker compose logs jira-ai</code>. The board works without it.</td></tr>
+          <tr><td>Refresh says another refresh/archive was already running</td><td>A lock is held by a running job (or one on the host). Wait for it; details in <code class="inl">docs/RUNTIME-FILES.md</code>.</td></tr>
           <tr><td>Permission denied running <code class="inl">docker</code> on Linux</td><td><code class="inl">sudo usermod -aG docker "$USER"</code>, then log out and back in.</td></tr>
           <tr><td><code class="inl">./start-jira-board.sh: Permission denied</code></td><td><code class="inl">chmod +x start-jira-board.sh</code></td></tr>
         </table>
@@ -644,14 +671,40 @@ bash jira-intern/local-runner/update-completed.sh  <span class="cmt"># full Comp
         <a class="doc" href="../setup/README.md"><b>⚙️ Setup guide</b><span>Secrets, config &amp; MCP — every template explained.</span></a>
         <a class="doc" href="DEPLOYMENT.md"><b>🚀 Deployment</b><span>Docker, static file, live server, troubleshooting.</span></a>
         <a class="doc" href="USAGE.md"><b>🧭 Using the board</b><span>Chips, Next Sprint, the drawer, keyboard shortcuts.</span></a>
-        <a class="doc" href="ARCHITECTURE.md"><b>🏗️ Architecture</b><span>How the fetch, data file and app fit together.</span></a>
+        <a class="doc" href="ARCHITECTURE.md"><b>🏗️ Architecture</b><span>Containers, server modules, data flow, AI queue, scheduler, locks.</span></a>
+        <a class="doc" href="API.md"><b>🔌 API</b><span>Every board-server and AI-worker route, with guards and status codes.</span></a>
+        <a class="doc" href="RUNTIME-FILES.md"><b>🗂️ Runtime files</b><span>Every file under jira-intern/, lock rules, exit codes, debugging a fetch.</span></a>
+        <a class="doc" href="SECURITY.md"><b>🔒 Security &amp; privacy</b><span>Threat model, what is stored where, TLS, LAN exposure, AI data flows.</span></a>
+        <a class="doc" href="CONTRIBUTING.md"><b>🛠️ Contributing</b><span>Dev loop, tests, the keep-in-sync contracts, recipes, PR checklist.</span></a>
+        <a class="doc" href="CHANGELOG.md"><b>📝 Changelog</b><span>What changed, by area.</span></a>
+        <a class="doc" href="../jira-intern/CONFIG.md"><b>🧭 Configuration reference</b><span>Every config key and environment variable.</span></a>
       </div>
 
       <div class="note warn" style="margin-top: 24px">
         <b>Before making the repo public:</b> confirm no <code class="inl">*.env</code> with real values is staged,
-        keep <code class="inl">config/jira-board.config.json</code> generic, and keep real identity/internal
-        hostnames only in <code class="inl">~/.ai/config.json</code>. Checklist in
+        keep <code class="inl">config/jira-board.config.json</code> generic, keep real identity/internal
+        hostnames only in <code class="inl">~/.ai/config.json</code> — and remember that <b>git history</b> can still
+        hold names the current tree no longer does (rewrite it or publish from a fresh-history mirror). Checklist in
         <a href="../setup/README.md">setup/README.md</a>.
+      </div>
+
+      <!-- ── PRIVACY ──────────────────────────────────────────────── -->
+      <h2 id="privacy">Privacy &amp; data</h2>
+      <div class="card">
+        <p style="margin-top: 0"><b>Everything stays on your machine by default.</b> Your tickets, comments, PR
+          metadata and reports are written to <code class="inl">jira-intern/</code> (git-ignored) and nowhere else.
+          The only network calls are to your own Jira, Bitbucket and Confluence, with your tokens, over verified TLS.</p>
+        <p class="small"><b>Local AI</b> (the default) sends ticket text to Ollama inside Docker or on this
+          machine — still nothing leaves it. <b>Cloud AI</b> is a choice you make in Settings: the AI-Intern then sends
+          the ticket title, description, comments, acceptance criteria, PR metadata, changed-file <i>paths</i> (not
+          diffs) and the base report to the provider you picked — Claude, Gemini or Cursor — under your own key.
+          Cursor Cloud Agents run in agent mode; prefer Local AI or the Claude/Gemini chat APIs for sensitive
+          tickets.</p>
+        <p class="small"><b>No cookies, no analytics, no telemetry, no external fonts or scripts.</b> The board keeps
+          your appearance, notification and feature choices, manual archive moves and acceptance-criteria ticks in
+          the browser's <code class="inl">localStorage</code>; job and AI choices also go to
+          <code class="inl">jira-intern/.settings.json</code> when the server runs. The server listens on loopback
+          unless you opt in to the LAN. Full detail: <a href="SECURITY.md">docs/SECURITY.md</a>.</p>
       </div>
 
       <footer>Built to dodge JIRA · made with ☕ + a refresh button</footer>

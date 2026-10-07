@@ -12,5 +12,8 @@
 
 - [ ] `npm run typecheck` passes
 - [ ] `npm run build` succeeds (the single-file `dist/index.html`)
-- [ ] No secrets, tokens, real ticket content, or internal hostnames in the diff
-- [ ] Docs updated if behaviour or setup changed (`docs/`, `setup/`, or `README.md`)
+- [ ] Tests pass (`npm test` — the Python suite and the vitest suite); new behaviour has a test
+- [ ] Docs updated for any behaviour change (`docs/`, `setup/`, `README.md`, `jira-intern/CONFIG.md`) and a line added to `docs/CHANGELOG.md`
+- [ ] The keep-in-sync contracts still agree (`src/types.ts` ↔ `intern-prompt.md`, `reportTypes.ts` ↔ `pr_report.py`, `columns.ts` ↔ `_jira.py`) — see `docs/CONTRIBUTING.md`
+- [ ] No secrets, tokens, real ticket content, company names, internal hostnames, tenant ids or project keys in the diff
+- [ ] No runtime files staged (`jira-intern/data.*`, `reports/`, `.settings.json`, `logs/`, `cache/`)
