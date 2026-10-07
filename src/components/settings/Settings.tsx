@@ -341,7 +341,7 @@ export function SettingsPanel({
           <motion.section
             ref={panelRef}
             tabIndex={-1}
-            className="jb-dialog-panel flex max-h-[calc(100dvh-24px)] w-full max-w-[960px] flex-col overflow-visible rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
+            className="jb-dialog-panel flex max-h-[calc(100dvh-24px)] w-[min(960px,calc(100vw-24px))] flex-col overflow-visible rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-2xl"
             initial={{ y: 20, scale: 0.98 }}
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 12, scale: 0.98 }}
@@ -374,7 +374,7 @@ export function SettingsPanel({
               </button>
             </header>
 
-            <div className="grid min-h-0 grid-cols-1 gap-x-6 gap-y-4 px-4 pb-4 pt-3 md:grid-cols-2">
+            <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-4 px-4 pb-4 pt-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <div className="flex min-w-0 flex-col gap-4">
                 <Section title="Appearance">
                   <Segmented
@@ -806,6 +806,7 @@ function AiInternControls({
         )}
       </div>
 
+      <div className="flex min-h-[10.5rem] min-w-0 flex-col gap-1.5">
       {settings.aiBackend !== 'cloud' && (
         <OllamaStatusRow enabled={settings.ollamaEnabled} info={aiStatus?.container ?? null} showList={settings.showLocalModels} onShowList={(v) => set('showLocalModels', v)} />
       )}
@@ -842,6 +843,7 @@ function AiInternControls({
           )}
           </>
       )}
+      </div>
     </div>
   )
 }
