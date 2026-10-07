@@ -145,7 +145,7 @@ deploy() {
   # container is created but left stopped, so the board can start it later on demand.
   # One-time migration: models pulled into the old named volume move into jira-intern/models/.
   mkdir -p jira-intern/models
-  if [ -z "$(ls -A jira-intern/models 2>/dev/null)" ] && docker volume inspect jira-board_jira-ai-models >/dev/null 2>&1; then
+  if [ ! -d jira-intern/models/models ] && ! ls jira-intern/models/*.gguf >/dev/null 2>&1 && docker volume inspect jira-board_jira-ai-models >/dev/null 2>&1; then
     log "Moving models from the old jira-ai-models volume into jira-intern/models/…"
     docker run --rm -v jira-board_jira-ai-models:/from -v "$REPO_DIR/jira-intern/models":/to --entrypoint sh ollama/ollama -c 'cp -a /from/. /to/' \
       && ok "Models migrated (the old volume is left in place; remove it with: docker volume rm jira-board_jira-ai-models)" \

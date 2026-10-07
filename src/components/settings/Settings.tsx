@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { ACTIVE_CADENCE, AI_LEVELS, BOARD_CADENCE, FEATURES, LIMITS, clampSetting, type AiCloudProvider, type FeatureKey, type Settings } from '../../lib/settings'
@@ -207,50 +207,70 @@ function internTone(ai: AiInternStatus | null | undefined): string {
 
 /** Board sections first, then content, then behaviour — so the 3-column grid reads by row. */
 const FEATURE_ORDER: FeatureKey[] = ['nextSprint', 'onHold', 'dragMove', 'completedArchive', 'raisedTickets', 'prReports', 'aiBriefs', 'shortcuts', 'reloadActive', 'autoRefresh', 'animations']
+/**
+ * The AI-Ollama container is a Feature like the others, but it is a SERVER setting
+ * (`ollamaEnabled`) rather than a `features` flag, because the server starts and stops the
+ * container. Rendered in the Features grid; the AI section only shows its status.
+ */
+const OLLAMA_FEATURE = {
+  key: 'ollamaContainer',
+  label: 'AI-Ollama container',
+  hint: 'Local models in Docker — needs a model in jira-intern/models/',
+  detail:
+    'Runs the AI-Ollama Docker container for Local AI. It only starts when this is on AND jira-intern/models/ contains a model — one pulled from the AI section, or a .gguf file you place there yourself. Off stops the container at once and keeps it off across restarts and deploys. Cloud AI never needs it.',
+} as const
+const OLLAMA_STYLE = { color: '#0ea5e9', icon: (c: string) => <SparkleIcon size={13} color={c} /> }
+
 const ORDERED_FEATURES = [...FEATURES].sort((a, b) => {
   const rank = (k: FeatureKey) => (FEATURE_ORDER.includes(k) ? FEATURE_ORDER.indexOf(k) : FEATURE_ORDER.length)
   return rank(a.key) - rank(b.key)
 })
 
 /**
- * The AI-Ollama container switch. The server only runs the container while this is on AND
- * jira-intern/models/ holds a model, so the row also shows what it found there.
+ * AI-section row for the Ollama container: live status (the switch itself is a Feature — see
+ * OLLAMA_FEATURE) plus a checkbox that only shows or hides the local-model list below.
  */
-function OllamaContainerToggle({ enabled, info, onChange }: { enabled: boolean; info: OllamaContainerInfo | null; onChange: (v: boolean) => void }) {
+function OllamaStatusRow({
+  enabled,
+  info,
+  showList,
+  onShowList,
+}: {
+  enabled: boolean
+  info: OllamaContainerInfo | null
+  showList: boolean
+  onShowList: (v: boolean) => void
+}) {
   const dir = info?.modelsDir ?? 'jira-intern/models/'
   const models = info?.models ?? []
   const state = !info
-    ? null
+    ? { text: 'needs the local server', color: '#94a3b8' }
     : !info.available
       ? { text: 'Docker socket not mounted — container follows compose', color: '#94a3b8' }
       : info.running
-        ? { text: 'container running', color: '#22c55e' }
+        ? { text: 'AI-Ollama running', color: '#22c55e' }
         : !enabled
-          ? { text: 'container stopped (toggle off)', color: '#94a3b8' }
+          ? { text: 'AI-Ollama off — turn it on under Features', color: '#94a3b8' }
           : models.length === 0
-            ? { text: `container stopped — no model in ${dir}`, color: '#f59e0b' }
-            : { text: 'container starting…', color: '#3b82f6' }
+            ? { text: `AI-Ollama waiting — no model in ${dir}`, color: '#f59e0b' }
+            : { text: 'AI-Ollama starting…', color: '#3b82f6' }
   const title = [
-    'Runs the AI-Ollama Docker container (local models on CPU in the Docker VM).',
-    `It only starts when this is ON and ${dir} contains a model — either one pulled from the list below, or a .gguf file you place there yourself.`,
-    'Turning it off stops the container at once; it stays off across restarts and deploys until you turn it on again.',
+    `${state.text}.`,
+    `The container runs only while Features → AI-Ollama container is on AND ${dir} contains a model (pulled from the list below, or a .gguf placed there by hand).`,
     models.length ? `Found: ${models.join(', ')}` : `Nothing found in ${dir} yet.`,
   ].join('\n')
   return (
-    <label
-      className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[11.5px] font-semibold text-[var(--ink-soft)]"
-      title={title}
-    >
-      <input type="checkbox" checked={enabled} onChange={(e) => onChange(e.target.checked)} />
-      <span className="shrink-0">AI-Ollama container</span>
-      <span className="ml-auto flex min-w-0 items-center gap-1.5 text-[10.5px] font-medium text-[var(--muted)]">
-        {state && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />}
-        <span className="truncate">
-          {state ? state.text : 'needs the local server'}
-          {models.length > 0 && ` · ${models.length} model${models.length === 1 ? '' : 's'} in ${dir}`}
-        </span>
+    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[11px] text-[var(--muted)]" title={title}>
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />
+      <span className="min-w-0 truncate font-medium">
+        {state.text}
+        {models.length > 0 && ` · ${models.length} model${models.length === 1 ? '' : 's'} in ${dir}`}
       </span>
-    </label>
+      <label className="ml-auto flex shrink-0 cursor-pointer items-center gap-1.5 font-semibold text-[var(--ink-soft)]" title="Show or hide the local model list below. Display only — it does not start or stop the container.">
+        <input type="checkbox" checked={showList} onChange={(e) => onShowList(e.target.checked)} />
+        Model list
+      </label>
+    </div>
   )
 }
 
@@ -459,11 +479,27 @@ export function SettingsPanel({
                 </Section>
               </div>
 
-              <Section title="Features" className="md:col-span-2" aside={<span className="text-[var(--muted)]">{FEATURES.filter((f) => settings.features[f.key]).length} of {FEATURES.length} on</span>}>
+              <Section
+                title="Features"
+                className="md:col-span-2"
+                aside={
+                  <span className="text-[var(--muted)]">
+                    {FEATURES.filter((f) => settings.features[f.key]).length + (settings.ollamaEnabled ? 1 : 0)} of {FEATURES.length + 1} on
+                  </span>
+                }
+              >
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
                   {ORDERED_FEATURES.map((f) => (
-                    <FeatureCard key={f.key} feature={f} on={settings.features[f.key]} onToggle={(v) => setFeature(f.key, v)} />
+                    <FeatureCard key={f.key} feature={f} style={FEATURE_STYLE[f.key]} on={settings.features[f.key]} onToggle={(v) => setFeature(f.key, v)} />
                   ))}
+                  <FeatureCard
+                    feature={OLLAMA_FEATURE}
+                    style={OLLAMA_STYLE}
+                    on={settings.ollamaEnabled}
+                    onToggle={(v) => onChange({ ...settings, ollamaEnabled: v })}
+                    disabled={!aiLevelSynced}
+                    disabledHint="Needs the local server (the container is started and stopped by it)"
+                  />
                 </div>
               </Section>
             </div>
@@ -492,23 +528,30 @@ const FEATURE_STYLE: Record<FeatureKey, { color: string; icon: (c: string) => Re
 
 function FeatureCard({
   feature,
+  style,
   on,
   onToggle,
+  disabled = false,
+  disabledHint,
 }: {
-  feature: (typeof FEATURES)[number]
+  feature: { label: string; hint: string; detail: string }
+  style: { color: string; icon: (c: string) => ReactNode }
   on: boolean
   onToggle: (v: boolean) => void
+  disabled?: boolean
+  disabledHint?: string
 }) {
-  const { color, icon } = FEATURE_STYLE[feature.key]
+  const { color, icon } = style
 
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
+      aria-disabled={disabled || undefined}
       aria-label={`${feature.label}, ${on ? 'on' : 'off'}. ${feature.hint}`}
-      title={feature.detail}
-      onClick={() => onToggle(!on)}
+      title={disabled && disabledHint ? `${disabledHint}\n\n${feature.detail}` : feature.detail}
+      onClick={() => !disabled && onToggle(!on)}
       className="flex h-11 w-full min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left transition-colors"
       style={{
         borderColor: on ? hexToRgba(color, 0.45) : 'var(--line)',
@@ -763,31 +806,35 @@ function AiInternControls({
         )}
       </div>
 
-      <OllamaContainerToggle enabled={settings.ollamaEnabled} info={aiStatus?.container ?? null} onChange={(v) => set('ollamaEnabled', v)} />
+      {settings.aiBackend !== 'cloud' && (
+        <OllamaStatusRow enabled={settings.ollamaEnabled} info={aiStatus?.container ?? null} showList={settings.showLocalModels} onShowList={(v) => set('showLocalModels', v)} />
+      )}
 
       {settings.aiBackend === 'cloud' ? (
 
           <CloudModelPicker settings={settings} onChange={onChange} pricesOpen={pricesOpen} onTogglePrices={onTogglePrices} panelRef={panelRef} />
         ) : (
           <>
-          <LocalModelPicker
-            catalog={catalog}
-            installed={installed}
-            pulling={pulling}
-            pullProgress={aiStatus?.state === 'pulling' ? aiStatus.pullProgress ?? null : null}
-            settings={settings}
-            onSelect={(id) => set('aiLocalModel', id)}
-          onDownload={async (m) => {
-            setPulling(m.id)
-            setPullFailed(false)
-            const ok = await pullAiModel(m.pull, settings.aiUseHostOllama || m.fits === 'host')
-            if (!ok) {
-              console.error('[jira-ai] pull enqueue failed', m.pull)
-              setPulling(null)
-              setPullFailed(true)
-            }
-          }}
-          />
+          {settings.showLocalModels && (
+            <LocalModelPicker
+              catalog={catalog}
+              installed={installed}
+              pulling={pulling}
+              pullProgress={aiStatus?.state === 'pulling' ? aiStatus.pullProgress ?? null : null}
+              settings={settings}
+              onSelect={(id) => set('aiLocalModel', id)}
+            onDownload={async (m) => {
+              setPulling(m.id)
+              setPullFailed(false)
+              const ok = await pullAiModel(m.pull, settings.aiUseHostOllama || m.fits === 'host')
+              if (!ok) {
+                console.error('[jira-ai] pull enqueue failed', m.pull)
+                setPulling(null)
+                setPullFailed(true)
+              }
+            }}
+            />
+          )}
           {pullFailed && (
             <p className="mt-1 text-[11px] font-semibold text-red-500" role="alert">
               Download failed — see AI intern logs
