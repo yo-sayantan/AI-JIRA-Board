@@ -14,8 +14,18 @@
 #     jira-board
 # Then open http://localhost:4321
 
-# ── Stage 1: build the board ───────────────────────────────────────────────────
-FROM node:26-bookworm-slim AS build
+# Where dist/index.html comes from:
+#   build    (default) — npm ci + vite build inside the image. Needs registry access
+#            from the Docker VM, whose network is slow/flaky here — npm then silently
+#            skips OPTIONAL platform binaries (@typescript/typescript-linux-arm64,
+#            lightningcss-…), and tsc dies at "Unable to resolve …-linux-arm64".
+#   prebuilt — take the dist/ the HOST already built (start-jira-board.sh runs
+#            `npm run build` first and passes --build-arg DIST_SOURCE=prebuilt).
+#            No npm, no network, no platform-binary roulette.
+ARG DIST_SOURCE=build
+
+# ── Stage 1a: build the board in-image ─────────────────────────────────────────
+FROM node:26-bookworm-slim AS dist-build
 WORKDIR /app
 # Install deps first so this layer is cached until the lockfile changes.
 COPY package.json package-lock.json ./
@@ -23,6 +33,14 @@ RUN npm ci
 # Bring in the source and produce dist/index.html (tsc --noEmit && vite build).
 COPY . .
 RUN npm run build
+
+# ── Stage 1b: take the host-built board as-is ──────────────────────────────────
+FROM node:26-bookworm-slim AS dist-prebuilt
+WORKDIR /app
+COPY dist ./dist
+
+# The stage the runtime copies dist/ from, chosen by DIST_SOURCE.
+FROM dist-${DIST_SOURCE} AS build
 
 # ── Stage 2: runtime ───────────────────────────────────────────────────────────
 FROM node:26-bookworm-slim AS runtime
