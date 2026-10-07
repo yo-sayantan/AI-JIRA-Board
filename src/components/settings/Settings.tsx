@@ -144,7 +144,9 @@ function AiLevelPicker({ value, onChange }: { value: Settings['aiLevel']; onChan
       {AI_LEVELS.map((level, i) => {
         const active = value === level.key
         return (
-          <div key={level.key} className="relative min-w-0" onMouseEnter={() => setTip(level.key)} onMouseLeave={() => setTip(null)}>
+          // `flex`, not a plain block: an inline-flex button in a block wrapper is placed by its
+          // baseline, which differs between "None" (text first) and the sparkle levels (icon first).
+          <div key={level.key} className="relative flex min-w-0" onMouseEnter={() => setTip(level.key)} onMouseLeave={() => setTip(null)}>
             <button
               type="button"
               role="radio"
@@ -225,6 +227,9 @@ const ORDERED_FEATURES = [...FEATURES].sort((a, b) => {
   return rank(a.key) - rank(b.key)
 })
 
+/** Status strips in the AI card: one fixed height, so Local and Cloud rows line up exactly. */
+const STRIP = 'flex h-8 min-w-0 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 text-[11px] text-[var(--muted)]'
+
 /**
  * AI-section row for the Ollama container: live status (the switch itself is a Feature — see
  * OLLAMA_FEATURE) plus a checkbox that only shows or hides the local-model list below.
@@ -259,7 +264,7 @@ function OllamaStatusRow({
     models.length ? `Found: ${models.join(', ')}` : `Nothing found in ${dir} yet.`,
   ].join('\n')
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[11px] text-[var(--muted)]" title={title}>
+    <div className={STRIP} title={title}>
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />
       <span className="min-w-0 truncate font-medium">
         {state.text}
@@ -462,15 +467,14 @@ export function SettingsPanel({
                     )
                   }
                 >
-                  {/* Groups spread over the card's full height so the column never shows a dead area. */}
-                  <div className="flex h-full flex-col gap-4">
+                  <div className="flex h-full flex-col gap-3">
                     <div>
                       <AiLevelPicker value={settings.aiLevel} onChange={(v) => set('aiLevel', v)} />
                       <p className="mt-1.5 h-4 truncate text-[11px] leading-4 text-[var(--muted)]">
                         {AI_LEVELS.find((l) => l.key === settings.aiLevel)?.hint} · applies from the next report
                       </p>
                     </div>
-                    <div className="flex flex-1 flex-col">
+                    <div className="flex min-h-0 flex-1 flex-col">
                       {aiLevelSynced ? (
                         <AiInternControls settings={settings} onChange={onChange} aiStatus={aiStatus} />
                       ) : (
@@ -771,8 +775,16 @@ function AiInternControls({
 
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value })
 
+  const isCloud = settings.aiBackend === 'cloud'
+  const provider = cloudProviderOf(settings)
+  const cloud = useCloudModels(isCloud ? provider : null)
+  // Same pick as LocalModelPicker: the saved tag, or the catalog's first entry when none is saved.
+  const localModel = catalog.find((m) => m.id === settings.aiLocalModel) ?? (settings.aiLocalModel ? null : (catalog[0] ?? null))
+
   return (
-    <div className="flex h-full flex-col gap-3">
+    // Fixed rows, identical for Local and Cloud, so switching never moves anything:
+    // backend · status strip · model picker + note · facts (fills whatever height the card has).
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="grid grid-cols-2 gap-1.5">
         <Segmented
           label="AI backend"
@@ -805,24 +817,25 @@ function AiInternControls({
         )}
       </div>
 
-      <div className="flex min-h-[6.5rem] min-w-0 flex-1 flex-col justify-evenly gap-3">
-      {settings.aiBackend !== 'cloud' && (
+      {isCloud ? (
+        <CloudKeyRow provider={provider} cloud={cloud} />
+      ) : (
         <OllamaStatusRow enabled={settings.ollamaEnabled} info={aiStatus?.container ?? null} showList={settings.showLocalModels} onShowList={(v) => set('showLocalModels', v)} />
       )}
 
-      {settings.aiBackend === 'cloud' ? (
-
-          <CloudModelPicker settings={settings} onChange={onChange} />
-        ) : (
-          <>
-          {settings.showLocalModels && (
-            <LocalModelPicker
-              catalog={catalog}
-              installed={installed}
-              pulling={pulling}
-              pullProgress={aiStatus?.state === 'pulling' ? aiStatus.pullProgress ?? null : null}
-              settings={settings}
-              onSelect={(id) => set('aiLocalModel', id)}
+      {/* Picker row + its two-line note: 68px in every state (loading, downloading, hidden list). */}
+      <div className="flex h-[4.25rem] min-w-0 flex-col gap-1">
+        {isCloud ? (
+          <CloudModelPicker settings={settings} onChange={onChange} cloud={cloud} />
+        ) : settings.showLocalModels ? (
+          <LocalModelPicker
+            catalog={catalog}
+            installed={installed}
+            pulling={pulling}
+            pullProgress={aiStatus?.state === 'pulling' ? aiStatus.pullProgress ?? null : null}
+            failed={pullFailed}
+            settings={settings}
+            onSelect={(id) => set('aiLocalModel', id)}
             onDownload={async (m) => {
               setPulling(m.id)
               setPullFailed(false)
@@ -833,16 +846,20 @@ function AiInternControls({
                 setPullFailed(true)
               }
             }}
-            />
-          )}
-          {pullFailed && (
-            <p className="mt-1 text-[11px] font-semibold text-red-500" role="alert">
-              Download failed — see AI intern logs
-            </p>
-          )}
+          />
+        ) : (
+          <>
+            <div className="flex h-8 min-w-0 items-center rounded-lg border border-dashed border-[var(--line)] px-2.5 text-[11.5px] text-[var(--muted)]">
+              <span className="min-w-0 truncate">
+                Using <code className="font-mono text-[11px] text-[var(--ink-soft)]">{localModel?.label ?? (settings.aiLocalModel || 'the default model')}</code>
+              </span>
+            </div>
+            <p className="h-8 line-clamp-2 text-[10.5px] leading-4 text-[var(--muted)]">Model list hidden — tick Model list above to change or download a model.</p>
           </>
-      )}
+        )}
       </div>
+
+      <AiFacts settings={settings} aiStatus={aiStatus ?? null} localModel={localModel} installed={installed} pulling={pulling} />
     </div>
   )
 }
@@ -882,18 +899,18 @@ const CLOUD_PROVIDER_INFO: Record<
   },
 }
 
-function CloudModelPicker({
-  settings,
-  onChange,
-}: {
-  settings: Settings
-  onChange: (s: Settings) => void
-}) {
-  const provider = cloudProviderOf(settings)
-  const info = CLOUD_PROVIDER_INFO[provider]
-  const [loaded, setLoaded] = useState<{ provider: AiCloudProvider; models: CloudModelChoice[]; error: string | null; hasKey: boolean } | null>(null)
+interface CloudModels {
+  provider: AiCloudProvider
+  models: CloudModelChoice[]
+  error: string | null
+  hasKey: boolean
+}
 
+/** The provider's model list and key status, loaded once per provider switch (null while loading). */
+function useCloudModels(provider: AiCloudProvider | null): CloudModels | null {
+  const [loaded, setLoaded] = useState<CloudModels | null>(null)
   useEffect(() => {
+    if (!provider) return
     let cancelled = false
     setLoaded(null)
     void getCloudModels().then((res) => {
@@ -905,10 +922,53 @@ function CloudModelPicker({
       cancelled = true
     }
   }, [provider])
+  return loaded && loaded.provider === provider ? loaded : null
+}
 
-  const ready = loaded?.provider === provider
-  const models = useMemo(() => (ready ? loaded.models : []), [ready, loaded])
-  const hasKey = ready && loaded.hasKey
+/** Which key the intern reads for each provider, and who bills for it. */
+const CLOUD_KEYS: Record<AiCloudProvider, { env: string; biller: string }> = {
+  cursor: { env: 'CURSOR_API_KEY', biller: 'Cursor' },
+  claude: { env: 'ANTHROPIC_API_KEY', biller: 'Anthropic' },
+  gemini: { env: 'GEMINI_API_KEY', biller: 'Google' },
+}
+
+/** Cloud counterpart of the Ollama strip: is the key there, and how many models it unlocks. */
+function CloudKeyRow({ provider, cloud }: { provider: AiCloudProvider; cloud: CloudModels | null }) {
+  const k = CLOUD_KEYS[provider]
+  const n = cloud?.models.length ?? 0
+  const state = !cloud
+    ? { text: `Checking ${k.env}…`, color: '#94a3b8' }
+    : !cloud.hasKey
+      ? { text: `${k.env} missing — add it to ~/.cursor/mcp-secrets.env`, color: '#f59e0b' }
+      : cloud.error
+        ? { text: cloud.error, color: '#f59e0b' }
+        : { text: `${k.env} found · ${n} model${n === 1 ? '' : 's'} on this key`, color: '#22c55e' }
+  return (
+    <div
+      className={STRIP}
+      title={`${state.text}.\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />
+      <span className="min-w-0 truncate font-medium">{state.text}</span>
+      <span className="ml-auto shrink-0 font-semibold text-[var(--ink-soft)]">Billed by {k.biller}</span>
+    </div>
+  )
+}
+
+function CloudModelPicker({
+  settings,
+  onChange,
+  cloud,
+}: {
+  settings: Settings
+  onChange: (s: Settings) => void
+  cloud: CloudModels | null
+}) {
+  const provider = cloudProviderOf(settings)
+  const info = CLOUD_PROVIDER_INFO[provider]
+  const ready = cloud !== null
+  const models = useMemo(() => cloud?.models ?? [], [cloud])
+  const hasKey = !!cloud?.hasKey
   const selected = models.find((m) => m.id === settings.aiCloudModel) ?? null
   const efforts = selected?.efforts ?? []
 
@@ -920,7 +980,7 @@ function CloudModelPicker({
     onChange({ ...settings, aiCloudModel: info.prefer(models).id })
   }, [models, info, settings, onChange])
 
-  const hint = !hasKey ? info.missingKey : (loaded?.error ?? info.about)
+  const hint = !ready ? 'Loading the model list…' : !hasKey ? info.missingKey : (cloud.error ?? info.about)
 
   return (
     <>
@@ -972,11 +1032,110 @@ function CloudModelPicker({
   )
 }
 
+/** USD per 1M tokens at standard speed. Mirrors docs/index.html#ai-cloud-prices — keep both in step. */
+const CLOUD_RATES: Record<string, { input: string; cache: string; output: string }> = {
+  'gpt-5.6-luna': { input: '$0.20', cache: '$0.02', output: '$1.20' },
+  'composer-2.5': { input: '$0.50', cache: '$0.20', output: '$2.50' },
+  'gemini-3-flash': { input: '$0.50', cache: '$0.05', output: '$3' },
+  'kimi-k2.7-code': { input: '$0.95', cache: '$0.19', output: '$4' },
+  'glm-5.2': { input: '$1.40', cache: '$0.26', output: '$4.40' },
+  'grok-4.7': { input: '$2', cache: '$0.50', output: '$6' },
+  'grok-4.6': { input: '$2', cache: '$0.50', output: '$6' },
+  'gemini-3.6-flash': { input: '$1.50', cache: '$0.15', output: '$7.50' },
+  'claude-sonnet-5': { input: '$2', cache: '$0.20', output: '$10' },
+}
+
+function FactTile({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
+  return (
+    <div className="flex min-w-0 flex-col justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5" title={hint}>
+      <span className="truncate text-[9.5px] font-bold uppercase tracking-wider text-[var(--muted)]">{label}</span>
+      <span className="truncate text-[12.5px] font-semibold tabular-nums text-[var(--ink)]">{value}</span>
+    </div>
+  )
+}
+
+/**
+ * The rest of the AI card: facts about the model the next job will use, and the intern's queue.
+ * Laid out absolutely inside the leftover height, so it fills the card without ever making the
+ * card — or the dialog — taller.
+ */
+function AiFacts({
+  settings,
+  aiStatus,
+  localModel,
+  installed,
+  pulling,
+}: {
+  settings: Settings
+  aiStatus: AiInternStatus | null
+  localModel: AiCatalogModel | null
+  installed: string[]
+  pulling: string | null
+}) {
+  let tiles: ReactNode
+  if (settings.aiBackend === 'cloud') {
+    const rate = CLOUD_RATES[settings.aiCloudModel]
+    const biller = CLOUD_KEYS[cloudProviderOf(settings)].biller
+    tiles = rate ? (
+      <>
+        <FactTile label="Input / 1M" value={rate.input} hint="USD per million input tokens, standard speed" />
+        <FactTile label="Output / 1M" value={rate.output} hint="USD per million output tokens — Low effort spends fewer" />
+        <FactTile label="Cache read / 1M" value={rate.cache} hint="USD per million cached input tokens" />
+      </>
+    ) : (
+      <div className="col-span-3 flex min-w-0 items-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 text-[11px] text-[var(--muted)]">
+        <span className="min-w-0 truncate">{settings.aiCloudModel ? `${biller} sets this model's prices — the guide lists the Cursor value picks.` : 'Pick a model to see its prices.'}</span>
+      </div>
+    )
+  } else {
+    const id = localModel?.id ?? settings.aiLocalModel
+    const ready = !!id && modelInstalled(installed, id)
+    const downloading = !!(pulling && localModel && (pulling === localModel.id || pulling === localModel.pull))
+    const vm = aiStatus?.memGb
+    tiles = (
+      <>
+        <FactTile label="Size" value={localModel?.params || '—'} hint="Parameters — bigger reasons better and runs slower" />
+        <FactTile
+          label="Memory"
+          value={localModel?.ramGb ? `~${localModel.ramGb} GB` : '—'}
+          hint={vm ? `Needs about this much RAM; the AI-Intern VM reports ${vm} GB` : 'Needs about this much RAM'}
+        />
+        <FactTile
+          label="On disk"
+          value={downloading ? 'Downloading…' : ready ? 'Ready' : 'Not yet'}
+          hint={ready ? 'Downloaded — jobs can use it now' : 'Not downloaded yet — use the download button beside the list'}
+        />
+      </>
+    )
+  }
+
+  const running = aiStatus?.active?.length ?? (aiStatus?.current ? 1 : 0)
+  const queued = aiStatus?.queued ?? 0
+  const down = !aiStatus || aiStatus.down
+  const activity = down
+    ? 'offline — reports stay deterministic until AI-Intern runs'
+    : `${queued} waiting · ${running} running${aiStatus?.parallel ? ` · up to ${aiStatus.parallel} at once` : ''}`
+
+  return (
+    <div className="relative min-h-[5.5rem] flex-1">
+      <div className="absolute inset-0 flex flex-col gap-2">
+        <div className="grid min-h-0 flex-1 grid-cols-3 gap-1.5">{tiles}</div>
+        <div className={STRIP} title={`AI-Intern: ${activity}`}>
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: down ? '#dc2626' : running ? AI : '#16a34a' }} />
+          <span className="shrink-0 font-semibold text-[var(--ink-soft)]">Intern</span>
+          <span className="min-w-0 truncate">{activity}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LocalModelPicker({
   catalog,
   installed,
   pulling,
   pullProgress,
+  failed = false,
   settings,
   onSelect,
   onDownload,
@@ -985,6 +1144,8 @@ function LocalModelPicker({
   installed: string[]
   pulling: string | null
   pullProgress: AiPullProgress | null
+  /** The last download request was refused — shown in the note slot. */
+  failed?: boolean
   settings: Settings
   onSelect: (id: string) => void
   onDownload: (m: AiCatalogModel) => void
@@ -1095,10 +1256,11 @@ function LocalModelPicker({
           </p>
         </div>
         <p
-          className={`absolute inset-0 line-clamp-2 overflow-hidden text-[10.5px] leading-4 text-[var(--muted)] ${downloading ? 'invisible' : ''}`}
-          title={selected?.why || undefined}
+          className={`absolute inset-0 line-clamp-2 overflow-hidden text-[10.5px] leading-4 ${failed ? 'font-semibold text-red-500' : 'text-[var(--muted)]'} ${downloading ? 'invisible' : ''}`}
+          title={failed ? undefined : selected?.why || undefined}
+          role={failed && !downloading ? 'alert' : undefined}
         >
-          {selected?.why || '\u00a0'}
+          {failed ? 'Download failed — see the AI-Intern logs (docker logs AI-Intern).' : selected?.why || '\u00a0'}
         </p>
       </div>
     </>
