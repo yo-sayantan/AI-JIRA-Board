@@ -276,6 +276,7 @@ export const fixture: JiraData = {
     { key: 'RULES-2099', title: 'Migrate rule store to v2 schema', type: 'Story', priority: 'High', project: 'RULES', status: 'Done', created: '2025-10-06', resolved: '2025-11-02', storyPoints: 13, branch: 'feature/RULES-2099_rule_store_v2', pr: { state: 'merged', id: 60, merged: true }, url: 'https://jira.example.com/browse/RULES-2099' },
   ],
   // Tickets I REPORTED (bugs spotted and filed for later) — drives the "Raised by me" view.
+  raisedAt: '2026-06-30T15:50:00Z',
   raised: [
     {
       key: 'RULES-2301',
@@ -299,6 +300,9 @@ export const fixture: JiraData = {
         { key: 'RULES-2099', url: 'https://jira.example.com/browse/RULES-2099', summary: 'Migrate rule store to v2 schema', status: 'Done', relation: 'is caused by' },
       ],
       epic: { key: 'RULES-2000', url: 'https://jira.example.com/browse/RULES-2000', relation: 'epic (parent)' },
+      aiSummary:
+        '<p><b>Nested rule groups silently lose clauses</b> beyond depth 3 — found while testing the config-loader refactor. Priya took it over from Nikhil mid-June and is reworking the evaluator walk.</p><ul><li>Repro: any rule with 3+ nested condition groups</li><li>Impact: trailing conditions never evaluate, rules pass that should fail</li></ul>',
+      aiSummaryAt: '2026-06-28T10:00:00Z',
       assigneeLog: [
         { when: '2026-06-03', from: null, to: 'Rao, Nikhil' },
         { when: '2026-06-17', from: 'Rao, Nikhil', to: 'Varma, Priya' },

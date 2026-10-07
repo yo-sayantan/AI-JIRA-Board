@@ -1595,7 +1595,16 @@ def summarize_active(job):
     data_path = INTERN / "data.json"
     data = json.loads(data_path.read_text(encoding="utf-8"))
     briefs = {}
-    for t in data.get("tickets") or []:
+    # Active tickets first (richest payloads), then raised[] rows — tickets I reported that
+    # someone else works carry no comments/code, so the brief is what makes them skimmable.
+    # A key in both lists is briefed once, from its richer tickets[] copy.
+    rows, seen_keys = [], set()
+    for t in list(data.get("tickets") or []) + list(data.get("raised") or []):
+        k = t.get("key") or ""
+        if k and k not in seen_keys:
+            seen_keys.add(k)
+            rows.append(t)
+    for t in rows:
         last = t.get("lastUpdate") or ""
         at = t.get("aiSummaryAt") or ""
         if at >= last and t.get("aiSummary"):
@@ -1641,12 +1650,14 @@ def write_briefs(briefs):
     data_path = INTERN / "data.json"
     data = json.loads(data_path.read_text(encoding="utf-8"))
     applied = 0
-    for t in data.get("tickets") or []:
-        b = briefs.get(t.get("key") or "")
-        if b and (t.get("lastUpdate") or "") == b["lastUpdate"]:
-            t["aiSummary"] = b["aiSummary"]
-            t["aiSummaryAt"] = b["aiSummaryAt"]
-            applied += 1
+    # A key can live in tickets[] AND raised[] (I reported it and work it) — stamp both copies.
+    for section in ("tickets", "raised"):
+        for t in data.get(section) or []:
+            b = briefs.get(t.get("key") or "")
+            if b and (t.get("lastUpdate") or "") == b["lastUpdate"]:
+                t["aiSummary"] = b["aiSummary"]
+                t["aiSummaryAt"] = b["aiSummaryAt"]
+                applied += 1
     if not applied:
         return 0
     try:

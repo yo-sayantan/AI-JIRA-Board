@@ -243,6 +243,9 @@ export interface RaisedTicket {
   /** Chronological assignee hand-offs — the "has it been reassigned?" trail. */
   assigneeLog?: AssigneeHop[]
   updateLog?: UpdateLogEntry[]
+  /** AI brief (written by the summarize pass; carried across raised refreshes). HTML. */
+  aiSummary?: string | null
+  aiSummaryAt?: string | null
 }
 
 /** Adapt a raised row to the rich Ticket shape so the detail drawer can render it. */
@@ -282,6 +285,8 @@ export interface JiraData {
   completed: CompletedTicket[]
   /** Every non-sub-task ticket I ever REPORTED (compact) — the "Raised by me" view. */
   raised?: RaisedTicket[]
+  /** When raised[] was last re-fetched (its freshness is independent of generatedAt). */
+  raisedAt?: string | null
   /** Optional run notices (e.g. "Jira MCP unavailable"). */
   notes?: string[]
 }

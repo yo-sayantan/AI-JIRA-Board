@@ -438,7 +438,7 @@ const FEATURE_STYLE: Record<FeatureKey, { color: string; icon: (c: string) => Re
   prReports: { color: '#a855f7', icon: (c) => <DocIcon size={13} color={c} /> },
   nextSprint: { color: '#2684ff', icon: (c) => <CalendarIcon size={13} color={c} /> },
   completedArchive: { color: '#b45309', icon: () => <TrophyIcon size={13} /> },
-  raisedTickets: { color: '#f43f5e', icon: (c) => <MegaphoneIcon size={13} color={c} /> },
+  raisedTickets: { color: '#6366f1', icon: (c) => <MegaphoneIcon size={13} color={c} /> },
   animations: { color: '#ec4899', icon: (c) => <SparkleIcon size={13} color={c} /> },
   shortcuts: { color: '#14b8a6', icon: (c) => <SearchIcon size={13} color={c} /> },
   autoRefresh: { color: '#10b981', icon: (c) => <RefreshIcon size={13} color={c} /> },

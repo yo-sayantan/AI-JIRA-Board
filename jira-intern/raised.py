@@ -119,6 +119,10 @@ def fetch_raised(prior_rows):
             issues = search_jira("reporter = currentUser() ORDER BY created DESC", fields=RAISED_FIELDS, expand="changelog")
     except Exception:
         return list(prior_rows or []), False
+    # Always a HARD, full replace: every reported ticket is re-fetched (rows already listed
+    # pick up their updates; newly raised ones appear; vanished ones drop). Only the AI brief
+    # is carried forward — the summarize pass regenerates it once lastUpdate outruns it.
+    prior_map = {r.get("key"): r for r in (prior_rows or []) if isinstance(r, dict) and r.get("key")}
     rows, seen = [], set()
     for i in issues:
         key = i.get("key")
@@ -126,7 +130,12 @@ def fetch_raised(prior_rows):
         if not key or key in seen or is_excluded(key) or (i["fields"].get("parent") or {}).get("key"):
             continue
         seen.add(key)
-        rows.append(build_raised_row(i))
+        row = build_raised_row(i)
+        prior = prior_map.get(key)
+        if prior and prior.get("aiSummary"):
+            row["aiSummary"] = prior["aiSummary"]
+            row["aiSummaryAt"] = prior.get("aiSummaryAt")
+        rows.append(row)
     return rows, True
 
 
@@ -134,6 +143,8 @@ def refresh_raised_in_place(data):
     """Fetch and swap raised[] inside an already-loaded dump dict. Returns ok."""
     rows, ok = fetch_raised(data.get("raised") or [])
     data["raised"] = rows
+    if ok:
+        data["raisedAt"] = utcnow()  # the Raised view shows how fresh ITS list is
     return ok
 
 

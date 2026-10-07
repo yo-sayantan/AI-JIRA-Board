@@ -106,7 +106,7 @@ export const FEATURES = [
     label: 'Raised by me',
     hint: 'Tickets you reported, and who holds them',
     detail:
-      'Adds the rose Raised chip beside Completed, listing every ticket you reported (sub-tickets you cut under your own work are excluded): its current status, who it is assigned to now, and every hand-off since you raised it.',
+      'Adds the indigo Raised button beside Completed, listing every ticket you reported (sub-tickets you cut under your own work are excluded): its current status, who it is assigned to now, every hand-off since you raised it, and its AI brief.',
   },
   {
     key: 'animations',

@@ -5,16 +5,25 @@ import { COLUMN_META, mapStatusToColumn } from '../../lib/columns'
 import { fmtDate, relTime, priorityMeta, projectOf, typeMeta, effectiveType, yearOf, hexToRgba, isAssignedToMe } from '../../lib/format'
 import { matchRow, parseQuery } from '../../lib/search'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
-import { PriorityGlyph } from '../common/ui'
-import { ChevronIcon, CheckIcon, ClockIcon, ExpandAllIcon, LinkIcon, MegaphoneIcon, PersonIcon, QuestionIcon, RefreshIcon, SearchIcon, TypeIcon } from '../common/Icons'
+import { PriorityGlyph, SafeHtml } from '../common/ui'
+import { ChevronIcon, CheckIcon, ClockIcon, DocIcon, ExpandAllIcon, LinkIcon, MegaphoneIcon, PersonIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, TypeIcon } from '../common/Icons'
 
-// The Raised view's own palette — warm "needs attention" colours, deliberately apart from
-// the Completed archive's green/gold. Rose is the identity; amber marks what's still open.
-const RAISED = '#f43f5e'
+// The Raised view's own palette — indigo identity (deliberately apart from the Completed
+// archive's green/gold, and not a red/alarm family); amber marks what's still open.
+const RAISED = '#6366f1'
+const RAISED_DEEP = '#4f46e5'
+const RAISED_LEDGE = '#3730a3' // the 3D button's bottom edge
 const OPEN = '#f59e0b'
-const HANDOFF = '#8b5cf6' // a ticket that moved between people
+const HANDOFF = '#0ea5e9' // a ticket that moved between people
 const FIXED = '#22c55e'
 const NOBODY = '#64748b'
+
+/** Raised, modern, pressable — gradient face, inner bevel, solid ledge, soft drop. */
+const BTN_3D = {
+  background: `linear-gradient(180deg, #818cf8, ${RAISED} 55%, ${RAISED_DEEP})`,
+  boxShadow: `inset 0 1.5px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(0,0,0,0.18), 0 4px 0 ${RAISED_LEDGE}, 0 10px 18px -8px rgba(79,70,229,0.6)`,
+  textShadow: '0 1px 2px rgba(0,0,0,0.35)',
+} as const
 
 /**
  * Fixed widths for the right-hand rail, right-to-left: Raised date, Status, Assignee,
@@ -67,6 +76,8 @@ export function RaisedOverlay({
   user,
   onRefresh,
   refreshing,
+  fetchedAt,
+  briefsEnabled,
   pauseEsc,
 }: {
   open: boolean
@@ -78,6 +89,10 @@ export function RaisedOverlay({
   /** The view's own pull — these tickets are invisible to the normal board refresh. Served mode only. */
   onRefresh?: () => void
   refreshing?: boolean
+  /** When raised[] was last re-fetched from Jira (shown beside the refresh button). */
+  fetchedAt?: string | null
+  /** Settings → AI briefs: show the per-ticket aiSummary in the peek. */
+  briefsEnabled?: boolean
   /** When a ticket detail is layered on top, ignore Esc here so one keypress closes only the top layer. */
   pauseEsc?: boolean
 }) {
@@ -217,7 +232,7 @@ export function RaisedOverlay({
             role="dialog"
             aria-modal="true"
           >
-            <span className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${RAISED}, ${OPEN} 55%, ${HANDOFF})` }} aria-hidden />
+            <span className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${RAISED}, ${HANDOFF} 55%, #a855f7)` }} aria-hidden />
 
             {/* hero header: title + at-a-glance stat band */}
             <div
@@ -232,7 +247,7 @@ export function RaisedOverlay({
                   <MegaphoneIcon size={24} color={RAISED} />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="bg-gradient-to-r bg-clip-text text-[24px] font-black leading-none tracking-tight text-transparent" style={{ backgroundImage: `linear-gradient(95deg, ${RAISED}, ${OPEN})` }}>
+                  <h2 className="bg-gradient-to-r bg-clip-text text-[24px] font-black leading-none tracking-tight text-transparent" style={{ backgroundImage: `linear-gradient(95deg, ${RAISED}, #a855f7)` }}>
                     Raised by me
                   </h2>
                   <p className="mt-1.5 truncate text-[12px] font-medium text-[var(--muted)]">
@@ -254,35 +269,39 @@ export function RaisedOverlay({
                     )}
                   </p>
                 </div>
-                <div className="ml-auto flex shrink-0 items-center gap-2">
+                <div className="ml-auto flex shrink-0 items-center gap-2.5">
                   {/* Raised tickets you don't WORK never ride the normal board refresh — this
-                      button is the one pull that updates this list (status + hand-offs). */}
+                      button is the one pull that updates this list. Always a HARD fetch: it
+                      re-pulls EVERY reported ticket (updates the rows already here) and the
+                      full search also surfaces newly raised ones not in the list yet. */}
                   {onRefresh && (
-                    <motion.button
-                      whileHover={refreshing ? undefined : { scale: 1.04, y: -1 }}
-                      whileTap={refreshing ? undefined : { scale: 0.95 }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-                      onClick={onRefresh}
-                      disabled={refreshing}
-                      aria-busy={refreshing || undefined}
-                      title="Re-fetch every ticket you reported — status, current assignee and hand-offs. The board's normal refresh does not cover tickets other people are working."
-                      className="inline-flex h-10 items-center gap-1.5 rounded-xl border px-3.5 text-[12px] font-bold transition-colors"
-                      style={{
-                        borderColor: hexToRgba(RAISED, 0.45),
-                        color: RAISED,
-                        background: hexToRgba(RAISED, refreshing ? 0.14 : 0.07),
-                        opacity: refreshing ? 0.85 : 1,
-                      }}
-                    >
-                      <motion.span
-                        className="inline-flex"
-                        animate={refreshing ? { rotate: 360 } : { rotate: 0 }}
-                        transition={refreshing ? { repeat: Infinity, duration: 0.8, ease: 'linear' } : { type: 'spring', stiffness: 300, damping: 20 }}
+                    <div className="flex flex-col items-end gap-1">
+                      <motion.button
+                        whileHover={refreshing ? undefined : { y: -1, scale: 1.02 }}
+                        whileTap={refreshing ? undefined : { y: 2, scale: 0.97 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                        onClick={onRefresh}
+                        disabled={refreshing}
+                        aria-busy={refreshing || undefined}
+                        title="Hard refresh — re-pulls EVERY ticket you ever reported straight from Jira: rows already listed pick up their updates, and newly raised tickets appear. (The board's normal refresh never covers tickets other people are working.)"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-extrabold text-white transition-[filter] hover:brightness-[1.06]"
+                        style={{ ...BTN_3D, opacity: refreshing ? 0.85 : 1 }}
                       >
-                        <RefreshIcon size={13} color={RAISED} />
-                      </motion.span>
-                      {refreshing ? 'Refreshing…' : 'Refresh raised'}
-                    </motion.button>
+                        <motion.span
+                          className="inline-flex"
+                          animate={refreshing ? { rotate: 360 } : { rotate: 0 }}
+                          transition={refreshing ? { repeat: Infinity, duration: 0.8, ease: 'linear' } : { type: 'spring', stiffness: 300, damping: 20 }}
+                        >
+                          <RefreshIcon size={13} color="#fff" />
+                        </motion.span>
+                        {refreshing ? 'Fetching all…' : 'Hard refresh'}
+                      </motion.button>
+                      {fetchedAt && !refreshing && (
+                        <span className="text-[10px] font-semibold text-[var(--muted)]" title={`This list was last re-fetched from Jira ${fmtDate(fetchedAt)}`}>
+                          fetched {relTime(fetchedAt) || fmtDate(fetchedAt)}
+                        </span>
+                      )}
+                    </div>
                   )}
                   <button
                     onClick={onClose}
@@ -431,7 +450,7 @@ export function RaisedOverlay({
                                 )}
                                 <div className="flex flex-col gap-2">
                                   {m.rows.map((it) => (
-                                    <RaisedRow key={it.key} it={it} user={user} expanded={expanded.has(it.key)} onToggle={() => toggleRow(it.key)} onOpen={() => onOpen(it.key)} />
+                                    <RaisedRow key={it.key} it={it} user={user} briefsEnabled={briefsEnabled} expanded={expanded.has(it.key)} onToggle={() => toggleRow(it.key)} onOpen={() => onOpen(it.key)} />
                                   ))}
                                 </div>
                               </div>
@@ -477,7 +496,7 @@ function handoffTitle(hops: AssigneeHop[]): string {
   return `Changed hands ${hops.length} time${hops.length === 1 ? '' : 's'}:\n${steps.join('\n')}`
 }
 
-function RaisedRow({ it, user, expanded, onToggle, onOpen }: { it: RaisedTicket; user: UserRef; expanded: boolean; onToggle: () => void; onOpen: () => void }) {
+function RaisedRow({ it, user, briefsEnabled, expanded, onToggle, onOpen }: { it: RaisedTicket; user: UserRef; briefsEnabled?: boolean; expanded: boolean; onToggle: () => void; onOpen: () => void }) {
   const col = colOf(it)
   const accent = COLUMN_META[col]?.accent ?? NOBODY
   const et = effectiveType(it)
@@ -574,6 +593,21 @@ function RaisedRow({ it, user, expanded, onToggle, onOpen }: { it: RaisedTicket;
         {expanded && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden">
             <div className="border-t border-[var(--line)] bg-[var(--surface-2)] px-4 py-3.5">
+              {/* The brief leads: for a ticket someone else works, it's the fastest answer to
+                  "what is this and where does it stand" without opening the full page. */}
+              {briefsEnabled && it.aiSummary && (
+                <div className="mb-3.5 overflow-hidden rounded-xl border" style={{ borderColor: hexToRgba(RAISED, 0.3), background: hexToRgba(RAISED, 0.05) }}>
+                  <div className="flex items-center gap-1.5 border-b px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.07em]" style={{ borderColor: hexToRgba(RAISED, 0.18), color: RAISED }}>
+                    <SparkleIcon size={12} color={RAISED} />
+                    AI brief
+                    {it.aiSummaryAt && (
+                      <span className="ml-auto font-semibold normal-case tracking-normal text-[var(--muted)]">{relTime(it.aiSummaryAt)}</span>
+                    )}
+                  </div>
+                  <SafeHtml html={it.aiSummary} className="px-3.5 py-3 text-[13px] leading-relaxed text-[var(--ink-soft)]" />
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
                 <Field label="Raised on" value={it.created ? fmtDate(it.created) : '—'} />
                 <Field label="Last update" value={it.lastUpdate ? `${fmtDate(it.lastUpdate)}${relTime(it.lastUpdate) ? ` · ${relTime(it.lastUpdate)}` : ''}` : '—'} />
@@ -588,6 +622,15 @@ function RaisedRow({ it, user, expanded, onToggle, onOpen }: { it: RaisedTicket;
                 {(it.labels?.length ?? 0) > 0 && <Field label="Labels" value={it.labels!.join(', ')} />}
                 {(it.components?.length ?? 0) > 0 && <Field label="Components" value={it.components!.join(', ')} />}
               </div>
+
+              {/* The raw report, as filed — scrolls when long rather than swallowing the peek. */}
+              {it.description && (
+                <div className="mt-3.5">
+                  <Section label="Description" icon={<DocIcon size={12} color="var(--muted)" />}>
+                    <SafeHtml html={it.description} className="max-h-44 overflow-y-auto text-[12.5px] leading-relaxed text-[var(--ink-soft)]" />
+                  </Section>
+                </div>
+              )}
 
               {/* Who has held it, and what it hangs off — the view's two "vivid" answers. */}
               <div className={`mt-3.5 grid grid-cols-1 items-start gap-2.5 ${links.length > 0 ? 'md:grid-cols-2' : ''}`}>
