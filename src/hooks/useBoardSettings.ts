@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getServerSettings, saveServerSettings } from '../lib/runner'
 import {
   applySettings,
@@ -17,7 +17,14 @@ import {
  */
 export function useBoardSettings(served: boolean, now: number) {
   const [settings, setSettings] = useState<Settings>(loadSettings)
+  // `ready` opens the Settings panel once the first GET settles, success or not. `synced` is true
+  // only after a GET succeeded: until then a POST would overwrite the server with this browser's guess.
   const [ready, setReady] = useState(!served)
+  const [synced, setSynced] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(0)
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+  const lastSent = useRef<string | null>(null)
   const dark = useMemo(() => resolveDark(settings, new Date(now)), [settings, now])
 
   useEffect(() => saveSettings(settings), [settings])
@@ -26,20 +33,30 @@ export function useBoardSettings(served: boolean, now: number) {
   useEffect(() => {
     if (!served) return
     void getServerSettings().then((saved) => {
-      if (saved) setSettings((current) => mergeServerSettings(current, saved))
+      if (saved) {
+        lastSent.current = JSON.stringify(serverSettingsOf(mergeServerSettings(settingsRef.current, saved)))
+        setSettings((current) => mergeServerSettings(current, saved))
+        setSynced(true)
+      }
       setReady(true)
     })
   }, [served])
 
   const serverJson = JSON.stringify(serverSettingsOf(settings))
   useEffect(() => {
-    if (served && ready) void saveServerSettings(JSON.parse(serverJson) as ServerSettings)
-  }, [served, ready, serverJson])
+    if (!served || !synced || lastSent.current === serverJson) return
+    lastSent.current = serverJson
+    void saveServerSettings(JSON.parse(serverJson) as ServerSettings).then((ok) => {
+      if (ok) return
+      lastSent.current = null
+      setSaveFailed((n) => n + 1)
+    })
+  }, [served, synced, serverJson])
 
   // Flipping the theme from the header pins it; auto or a schedule would override the click.
   const toggleTheme = useCallback(() => {
     setSettings((s) => ({ ...s, themeMode: 'fixed', theme: resolveDark(s) ? 'light' : 'dark' }))
   }, [])
 
-  return { settings, setSettings, ready, dark, toggleTheme }
+  return { settings, setSettings, ready, dark, toggleTheme, saveFailed }
 }

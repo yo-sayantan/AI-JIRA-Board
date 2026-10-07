@@ -18,7 +18,8 @@ if (!dir) {
 }
 const src = join(dir, 'data.json')
 const dst = join(dir, 'data.js')
-const tmp = join(dir, '.data.js.swap')
+// Per-process temp name: the entrypoint, a runner and the server can all regenerate at once.
+const tmp = join(dir, `.data.js.${process.pid}.swap`)
 try {
   const obj = JSON.parse(readFileSync(src, 'utf8'))
   // Also expose the app-facing config section (branding, requiredApprovals, …) so the

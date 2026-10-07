@@ -171,19 +171,38 @@ const oneOf =
   <T extends string>(allowed: readonly T[]): Parse<T> =>
   (v, f) =>
     pickCadence(allowed, v, f)
-const text: Parse<string> = (v, f) => (typeof v === 'string' ? v : f)
 const bool: Parse<boolean> = (v, f) => (typeof v === 'boolean' ? v : f)
 const bounded =
   (key: keyof typeof LIMITS): Parse<number> =>
   (v, f) =>
     clampSetting(key, v, f)
+/** Hour of day for the schedule window: an integer 0–23, else the fallback. */
+const hour: Parse<number> = (v, f) => {
+  const n = Math.round(Number(v))
+  return Number.isFinite(n) && n >= 0 && n <= 23 ? n : f
+}
+
+/**
+ * Model ids reach shell runners and CLIs, so they are limited to tag characters — the SAME regex and
+ * lengths server/settings.mjs enforces. Anything else would make the server reject the whole patch
+ * with a 400, and every other setting in it would silently never reach the server.
+ */
+export const MODEL_ID_RE = /^[\w.:/-]*$/
+export const MODEL_ID_MAX = { aiLocalModel: 80, aiCloudModel: 128 } as const
+export function isModelId(v: unknown, max: number): v is string {
+  return typeof v === 'string' && v.length <= max && MODEL_ID_RE.test(v)
+}
+const modelId =
+  (max: number): Parse<string> =>
+  (v, f) =>
+    isModelId(v, max) ? v : f
 
 /** Settings the server-side jobs honour, mirrored to jira-intern/.settings.json in served mode. */
 const SERVER_FIELDS = {
   aiLevel: oneOf<AiLevel>(['none', 'low', 'moderate', 'full']),
   aiBackend: oneOf<AiBackend>(['local', 'cloud']),
-  aiLocalModel: text,
-  aiCloudModel: text,
+  aiLocalModel: modelId(MODEL_ID_MAX.aiLocalModel),
+  aiCloudModel: modelId(MODEL_ID_MAX.aiCloudModel),
   aiCloudProvider: oneOf<AiCloudProvider>(['claude', 'cursor', 'gemini']),
   aiCloudEffort: oneOf<AiCloudEffort>(['low', 'medium']),
   aiUseHostOllama: bool,
@@ -214,6 +233,16 @@ export function mergeServerSettings(current: Settings, saved: Record<string, unk
 }
 
 export type FeatureKey = (typeof FEATURES)[number]['key']
+
+/** Everything that lives only in localStorage. Together with SERVER_FIELDS this covers every key of Settings. */
+const LOCAL_FIELDS = {
+  themeMode: oneOf<ThemeMode>(['auto', 'fixed', 'schedule']),
+  theme: oneOf<Settings['theme']>(['dark', 'light']),
+  dayStart: hour,
+  dayEnd: hour,
+  toastSeconds: bounded('toastSeconds'),
+  toastMax: bounded('toastMax'),
+} satisfies { [K in Exclude<keyof Settings, ServerKey | 'features'>]: Parse<Settings[K]> }
 
 export const AI_LEVELS: {
   key: AiLevel
@@ -282,30 +311,34 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const KEY = 'jb-settings'
 
+/**
+ * Validate a saved settings object field by field; anything missing, of the wrong type, out of
+ * range or no longer a valid choice (an old "aiLevel": "high", a model tag with a space) takes the
+ * default instead of being passed through. Never throws — a non-object yields the defaults.
+ */
+export function parseSettings(raw: unknown, defaults: Settings = DEFAULT_SETTINGS): Settings {
+  const saved = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+  const next: Record<string, unknown> = { ...defaults }
+  for (const k of SERVER_KEYS) {
+    const parse = SERVER_FIELDS[k] as Parse<Settings[typeof k]>
+    next[k] = parse(saved[k], defaults[k])
+  }
+  for (const k of Object.keys(LOCAL_FIELDS) as (keyof typeof LOCAL_FIELDS)[]) {
+    const parse = LOCAL_FIELDS[k] as Parse<Settings[typeof k]>
+    next[k] = parse(saved[k], defaults[k])
+  }
+  const rawFeatures = (typeof saved.features === 'object' && saved.features !== null ? saved.features : {}) as Record<string, unknown>
+  const features = { ...defaults.features }
+  for (const key of Object.keys(features) as FeatureKey[]) features[key] = bool(rawFeatures[key], defaults.features[key])
+  next.features = features
+  return next as unknown as Settings
+}
+
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return migrateLegacyTheme(DEFAULT_SETTINGS)
-    const parsed = JSON.parse(raw) as Partial<Settings>
-    return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
-      aiCloudEffort:
-        parsed.aiCloudEffort === undefined
-          ? DEFAULT_SETTINGS.aiCloudEffort
-          : parsed.aiCloudEffort === 'medium'
-            ? 'medium'
-            : 'low',
-      reportParallel: clampSetting('reportParallel', parsed.reportParallel, DEFAULT_SETTINGS.reportParallel),
-      archiveParallel: clampSetting('archiveParallel', parsed.archiveParallel, DEFAULT_SETTINGS.archiveParallel),
-      refreshParallel: clampSetting('refreshParallel', parsed.refreshParallel, DEFAULT_SETTINGS.refreshParallel),
-      toastSeconds: clampSetting('toastSeconds', parsed.toastSeconds, DEFAULT_SETTINGS.toastSeconds),
-      toastMax: clampSetting('toastMax', parsed.toastMax, DEFAULT_SETTINGS.toastMax),
-      activeRefresh: pickCadence(ACTIVE_CADENCE, parsed.activeRefresh, DEFAULT_SETTINGS.activeRefresh),
-      fullRefresh: pickCadence(BOARD_CADENCE, parsed.fullRefresh, DEFAULT_SETTINGS.fullRefresh),
-      reportRefresh: pickCadence(BOARD_CADENCE, parsed.reportRefresh, DEFAULT_SETTINGS.reportRefresh),
-      features: { ...DEFAULT_FEATURES, ...(parsed.features ?? {}) },
-    }
+    return parseSettings(JSON.parse(raw))
   } catch {
     return DEFAULT_SETTINGS
   }

@@ -34,4 +34,13 @@ export const AI_INTERN_URL = process.env.AI_INTERN_URL || 'http://127.0.0.1:4322
 export const PORT = Number(process.env.PORT) || Number(cfg.app?.servePort) || 4321
 // Loopback by default so a laptop run stays private; the Docker image sets BIND_HOST=0.0.0.0.
 export const HOST = process.env.BIND_HOST || '127.0.0.1'
+// Host header values the server answers for besides loopback and its own bind address, e.g. a LAN
+// name used from another machine: ALLOWED_HOSTS="mymac.local:4321,192.168.1.20". Anything else is
+// refused, which is what stops a DNS-rebinding page from talking to this server.
+export const ALLOWED_HOSTS = new Set(
+  (process.env.ALLOWED_HOSTS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+)
 export const BOARD_PATH = '/dist/index.html'

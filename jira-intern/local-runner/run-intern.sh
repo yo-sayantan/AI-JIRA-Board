@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # JIRA Intern — Mac local runner via the Cursor CLI (cursor-agent).
 # Uses the MODELS and MCP SERVERS you already have configured in Cursor (~/.cursor/mcp.json):
 # jira, confluence, bitbucket, etc. Auth + tokens come from ~/.cursor/mcp-secrets.env at runtime —
@@ -18,13 +18,16 @@ LOG="$LOG_DIR/run-$(date +%Y%m%d-%H%M%S).log"
 # cache + the historical archive are owned by the separate weekly job local-runner/update-completed.sh
 # (run `FRESH=1 bash update-completed.sh` to rebuild the archive).
 
-refuse_if_locked "this daily run" "$INTERN_DIR/.completed.lock" "$INTERN_DIR/.refresh.lock"
-
 # Run-lock so the board (served mode) can tell whether the intern is running, even across page
 # refreshes and regardless of who launched it (button or terminal). Removed on any exit.
 LOCK="$INTERN_DIR/.intern.lock"
-echo "$$ $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$LOCK"
-trap 'rm -f "$LOCK"' EXIT INT TERM
+refuse_if_locked "this daily run" "$LOCK" "$INTERN_DIR/.completed.lock" "$INTERN_DIR/.refresh.lock"
+acquire_lock_or_exit "this daily run" "$LOCK"
+# INT/TERM exit explicitly (130/143) so an interrupted fast path never falls through to the
+# LLM fallback; the EXIT trap then removes the lock.
+trap 'rm -f "$LOCK"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # The agent CLI is located LATER — only inside the fallback, if the fast path fails. The
 # deterministic daily_fetch.py is the PRIMARY path and needs no agent, so a machine without
@@ -53,6 +56,12 @@ if [ -z "$FORCE_AGENT" ] && command -v python3 >/dev/null 2>&1 && [ -f "$INTERN_
     FAST_OK=1
     code=0
     echo "$(date): fast path OK — skipping the agent run" | tee -a "$LOG"
+  elif [ "$fast_code" = "2" ]; then
+    # Configuration error (no Jira token): the agent's MCP servers need the same token, so a
+    # fallback would only burn 30 minutes. Surface it instead.
+    FAST_OK=1
+    code=2
+    echo "$(date): fast path refused (exit 2: configuration — no Jira token?) — not falling back" | tee -a "$LOG"
   else
     echo "$(date): fast path failed (exit $fast_code) — falling back to the $AGENT_CONNECTOR agent" | tee -a "$LOG"
   fi
@@ -104,7 +113,7 @@ fi
 rm -f "$PREV_DATA"
 
 # Log rotation — keep the most recent 40 run logs so logs/ doesn't grow forever.
-ls -1t "$LOG_DIR"/run-*.log 2>/dev/null | tail -n +41 | xargs rm -f 2>/dev/null || true
+rotate_logs run 40
 
 sync_datajs
 
@@ -149,6 +158,7 @@ case "$code" in
   0)   RESULT="✅ JIRA Intern done" ;;
   124) RESULT="⏱️ JIRA Intern timed out ($((TIMEOUT_DAILY / 60))m)" ;;
   127) RESULT="⚠️ JIRA Intern: agent CLI not found" ;;
+  2)   RESULT="⚠️ JIRA Intern skipped: no Jira token configured (see setup/)" ;;
   *)   RESULT="❌ JIRA Intern failed (exit $code)" ;;
 esac
 

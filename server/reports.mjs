@@ -2,6 +2,7 @@ import { readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { KEY_RE, PATHS, ROOT } from './config.mjs'
+import { readJson } from './http.mjs'
 import { dataWriterBusy } from './jobs.mjs'
 import { KeyQueue, runProcess } from './queue.mjs'
 import { readBoardSettings } from './settings.mjs'
@@ -28,8 +29,9 @@ async function generate(key) {
   return code
 }
 
-/** Reports write only reports/, but they read data.json, so they wait for its writers. */
-export const reportQueue = new KeyQueue({ run: generate, isBlocked: dataWriterBusy })
+// Reports write only reports/, but they read data.json, so they wait for its writers. A bulk or
+// scheduled run can legitimately queue a whole year of tickets, hence the larger ceiling.
+export const reportQueue = new KeyQueue({ run: generate, isBlocked: dataWriterBusy, max: 500 })
 
 export async function stopReports() {
   reportQueue.clear()
@@ -37,11 +39,9 @@ export async function stopReports() {
     cancelled = true
     baseChild.kill('SIGTERM')
   }
-  await Promise.all([
-    writeFile(PATHS.aiCancelReport, '1').catch(() => {}),
-    dropQueuedEnrichJobs().catch(() => {}),
-    writeFile(PATHS.reportsStatus, JSON.stringify({ generating: {} }) + '\n').catch(() => {}),
-  ])
+  // reports/.status.json is not touched: only terminal and cron runs register there, and a row
+  // whose process has gone is already ignored by externalGenerating().
+  await Promise.all([writeFile(PATHS.aiCancelReport, '1').catch(() => {}), dropQueuedEnrichJobs().catch(() => {})])
 }
 
 /**
@@ -76,9 +76,12 @@ export function resolveReportKeys({ year, since, keys, force }) {
 
 /** Keys another process (cron backfill, terminal) is generating, from reports/.status.json. */
 export async function externalGenerating() {
-  const st = await readFile(PATHS.reportsStatus, 'utf8').then(JSON.parse, () => null)
+  const st = await readJson(PATHS.reportsStatus, null)
+  const generating = st?.generating
+  if (!generating || typeof generating !== 'object' || Array.isArray(generating)) return []
   const out = []
-  for (const [key, v] of Object.entries(st?.generating ?? {})) {
+  for (const [key, v] of Object.entries(generating)) {
+    if (!KEY_RE.test(key)) continue
     const pid = Number(v?.pid)
     // pid 1 is a container's init, never the report itself, so those rows would never expire.
     if (!Number.isInteger(pid) || pid <= 1) continue

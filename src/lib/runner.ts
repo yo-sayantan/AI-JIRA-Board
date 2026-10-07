@@ -6,6 +6,26 @@ import type { ServerSettings } from './settings'
 
 export const RUN_COMMAND = 'bash jira-intern/local-runner/run-intern.sh'
 
+/** How long any one request to the local server may take before it counts as a miss. */
+export const FETCH_TIMEOUT_MS = 8_000
+
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms)
+  const controller = new AbortController()
+  setTimeout(() => controller.abort(), ms)
+  return controller.signal
+}
+
+/**
+ * `fetch` that gives up after `ms`. A stalled local server (asleep laptop, container restarting,
+ * a half-open socket) otherwise leaves a request pending for minutes and the board stuck on
+ * "busy". An abort rejects like any other network failure, so every caller's `catch → null` path
+ * already handles it.
+ */
+export function fetchWithTimeout(url: string, init: RequestInit = {}, ms = FETCH_TIMEOUT_MS): Promise<Response> {
+  return fetch(url, { ...init, signal: init.signal ?? timeoutSignal(ms) })
+}
+
 /** True when the board was opened through the local server (http/https), not file://. */
 export function isServed(): boolean {
   return typeof location !== 'undefined' && /^https?:$/.test(location.protocol)
@@ -145,7 +165,7 @@ export async function getReportsIndex(): Promise<PrReportsIndex | null> {
     return { reports, generating: g.generating ?? [] }
   }
   try {
-    const r = await fetch('/api/reports', { cache: 'no-store' })
+    const r = await fetchWithTimeout('/api/reports', { cache: 'no-store' })
     if (!r.ok) return null
     return (await r.json()) as PrReportsIndex
   } catch {
@@ -159,7 +179,7 @@ export async function getReport(key: string): Promise<PrReport | null> {
     return (window as unknown as ReportsGlobal).__JIRA_PR_REPORTS__?.reports?.[key] ?? null
   }
   try {
-    const r = await fetch(`/api/reports/${encodeURIComponent(key)}`, { cache: 'no-store' })
+    const r = await fetchWithTimeout(`/api/reports/${encodeURIComponent(key)}`, { cache: 'no-store' })
     if (!r.ok) return null
     return (await r.json()) as PrReport
   } catch {
@@ -172,12 +192,15 @@ export interface ReportStart {
   already?: boolean
   queued?: boolean
   pending?: string[]
+  /** HTTP 429: the server-side queue is at capacity — try again shortly, nothing is wrong. */
+  queueFull?: boolean
 }
 
 /** Ask the server to (re)generate one ticket's report in the background (served mode only). */
 export async function startReportGeneration(key: string): Promise<ReportStart | null> {
   try {
-    const r = await fetch(`/api/report?key=${encodeURIComponent(key)}`, { method: 'POST' })
+    const r = await fetchWithTimeout(`/api/report?key=${encodeURIComponent(key)}`, { method: 'POST' })
+    if (r.status === 429) return { ok: false, queueFull: true }
     if (!r.ok) return null
     return (await r.json()) as ReportStart
   } catch {
@@ -188,7 +211,7 @@ export async function startReportGeneration(key: string): Promise<ReportStart | 
 /** Push the settings the server-side jobs honour; everything else stays in localStorage. */
 export async function saveServerSettings(patch: ServerSettings): Promise<boolean> {
   try {
-    const r = await fetch('/api/settings', {
+    const r = await fetchWithTimeout('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -213,6 +236,8 @@ export interface BulkReportStart {
   /** Tickets this call actually added to the queue. */
   queuedKeys: string[]
   pending?: string[]
+  /** The queue hit capacity before every matched ticket was added; the rest need another pass. */
+  full?: boolean
 }
 
 /**
@@ -226,14 +251,15 @@ export async function startBulkReportGeneration(target: ReportScope, force = fal
   if (target.scope === 'keys') q.set('keys', target.keys.join(','))
   if (force) q.set('force', '1')
   try {
-    const r = await fetch(`/api/reports/bulk?${q}`, { method: 'POST' })
+    const r = await fetchWithTimeout(`/api/reports/bulk?${q}`, { method: 'POST' })
     if (!r.ok) return null
-    const body = (await r.json()) as { ok?: boolean; matched?: number; queued?: string[]; pending?: string[] }
+    const body = (await r.json()) as { ok?: boolean; matched?: number; queued?: string[]; pending?: string[]; full?: boolean }
     return {
       ok: body.ok !== false,
       matched: body.matched ?? 0,
       queuedKeys: Array.isArray(body.queued) ? body.queued : [],
       pending: body.pending,
+      full: body.full === true,
     }
   } catch {
     return null
@@ -249,13 +275,16 @@ export interface TicketRefreshStart {
   active?: string | null
   position?: number
   pending?: string[]
+  /** HTTP 429: the refresh queue is at capacity — try again shortly, nothing is wrong. */
+  queueFull?: boolean
 }
 
 /** Trigger a targeted background fetch for ONE ticket (served mode only).
  *  Always queues when another refresh is in flight — never drops later clicks. */
 export async function startTicketRefresh(key: string): Promise<TicketRefreshStart | null> {
   try {
-    const r = await fetch(`/api/refresh-ticket?key=${encodeURIComponent(key)}`, { method: 'POST' })
+    const r = await fetchWithTimeout(`/api/refresh-ticket?key=${encodeURIComponent(key)}`, { method: 'POST' })
+    if (r.status === 429) return { ok: false, queueFull: true }
     if (!r.ok) return null
     return (await r.json()) as TicketRefreshStart
   } catch {
@@ -284,7 +313,8 @@ export async function getCloudModels(): Promise<{
   error?: string
 } | null> {
   try {
-    const r = await fetch('/api/cloud-models', { cache: 'no-store' })
+    const r = await fetchWithTimeout('/api/cloud-models', { cache: 'no-store' })
+    if (!r.ok) return { ok: false, error: `AI intern returned ${r.status}` }
     return (await r.json()) as {
       ok: boolean
       claude?: CloudProviderModels
@@ -305,7 +335,8 @@ export async function getAiModels(): Promise<{
   memGb?: number | null
 } | null> {
   try {
-    const r = await fetch('/api/ai-models', { cache: 'no-store' })
+    const r = await fetchWithTimeout('/api/ai-models', { cache: 'no-store' })
+    if (!r.ok) return { ok: false, down: true }
     return (await r.json()) as { ok: boolean; down?: boolean; catalog?: AiInternStatus['catalog']; installed?: string[] }
   } catch {
     return { ok: false, down: true }
@@ -314,7 +345,7 @@ export async function getAiModels(): Promise<{
 
 export async function pullAiModel(model: string, useHostOllama = false): Promise<boolean> {
   try {
-    const r = await fetch('/api/ai-models/pull', {
+    const r = await fetchWithTimeout('/api/ai-models/pull', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, useHostOllama }),
@@ -336,7 +367,7 @@ let lastStatus: { text: string; value: InternStatus } | null = null
 /** Unchanged payloads return the previous object, so state setters can bail out of a re-render. */
 export async function getInternStatus(): Promise<InternStatus | null> {
   try {
-    const r = await fetch('/api/intern-status', { cache: 'no-store' })
+    const r = await fetchWithTimeout('/api/intern-status', { cache: 'no-store' })
     if (!r.ok) return null
     const text = await r.text()
     if (lastStatus?.text !== text) lastStatus = { text, value: JSON.parse(text) as InternStatus }
@@ -346,10 +377,14 @@ export async function getInternStatus(): Promise<InternStatus | null> {
   }
 }
 
-/** The raw dump behind data.js. Revalidates against the server's ETag, so an unchanged file costs a 304. */
+/**
+ * The raw dump behind data.js. The server sends `Cache-Control: no-store` for /jira-intern/*, so the
+ * browser never serves this from cache; `no-cache` here is belt-and-braces for any proxy in between.
+ * (The server still answers 304 to a conditional request if one ever arrives.)
+ */
 export async function getDataDump(): Promise<JiraData | null> {
   try {
-    const r = await fetch('/jira-intern/data.json', { cache: 'no-cache' })
+    const r = await fetchWithTimeout('/jira-intern/data.json', { cache: 'no-cache' }, 20_000)
     if (!r.ok) return null
     const raw = (await r.json()) as JiraData
     return Array.isArray(raw?.tickets) ? raw : null
@@ -361,7 +396,7 @@ export async function getDataDump(): Promise<JiraData | null> {
 /** Machine-wide AI choices: central defaults overlaid by jira-intern/.settings.json. */
 export async function getServerSettings(): Promise<Record<string, unknown> | null> {
   try {
-    const r = await fetch('/api/settings', { cache: 'no-store' })
+    const r = await fetchWithTimeout('/api/settings', { cache: 'no-store' })
     if (!r.ok) return null
     const body = (await r.json()) as { settings?: Record<string, unknown> }
     return body.settings ?? null
@@ -380,7 +415,7 @@ export interface RunStartResult {
 
 async function startRun(path: string): Promise<RunStartResult> {
   try {
-    const r = await fetch(path, { method: 'POST' })
+    const r = await fetchWithTimeout(path, { method: 'POST' })
     const body = (await r.json().catch(() => ({}))) as { runAt?: string }
     return { ok: r.ok, status: r.status, runAt: body.runAt }
   } catch {
@@ -414,9 +449,9 @@ export async function startArchiveRun(target: ArchiveScope = { scope: 'all' }): 
 }
 
 export async function stopArchiveRun(): Promise<void> {
-  await fetch('/api/run-archive/stop', { method: 'POST' }).catch(() => {})
+  await fetchWithTimeout('/api/run-archive/stop', { method: 'POST' }).catch(() => {})
 }
 
 export async function stopReportRun(): Promise<void> {
-  await fetch('/api/reports/stop', { method: 'POST' }).catch(() => {})
+  await fetchWithTimeout('/api/reports/stop', { method: 'POST' }).catch(() => {})
 }

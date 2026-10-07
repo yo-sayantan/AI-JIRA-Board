@@ -9,7 +9,7 @@
 // Only ADDS aiSummary/aiSummaryAt onto tickets/sub-tasks in the NEW file that lack one but had
 // one in the PREV file (matched by key). Touches nothing else. Best-effort: on any
 // error it leaves the new file untouched and exits 0.
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, renameSync, rmSync } from 'fs'
 
 const [prevPath, curPath] = process.argv.slice(2)
 try {
@@ -44,7 +44,19 @@ try {
   }
   apply(cur.tickets)
 
-  if (applied) writeFileSync(curPath, JSON.stringify(cur, null, 2) + '\n')
+  if (applied) {
+    // Atomic: a crash mid-write must never leave data.json truncated (the board reads it live).
+    const tmp = `${curPath}.${process.pid}.swap`
+    try {
+      writeFileSync(tmp, JSON.stringify(cur, null, 2) + '\n')
+      renameSync(tmp, curPath)
+    } catch (e) {
+      try {
+        rmSync(tmp, { force: true })
+      } catch {}
+      throw e
+    }
+  }
   process.stdout.write(String(applied))
 } catch {
   process.exit(0)

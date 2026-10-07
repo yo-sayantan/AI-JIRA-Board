@@ -4,7 +4,16 @@
 # the default in-image build simply overwrites it.
 .git
 .gitignore
+.gitattributes
+.github
 node_modules
+tests
+
+# Secrets must never enter the build context (the templates in setup/ end in
+# .template and are kept — the server serves /setup and /docs).
+.env
+.env.*
+*.env
 
 # Editor / OS noise
 .DS_Store
@@ -18,13 +27,33 @@ node_modules
 agent-transcripts
 
 # jira-intern runtime cruft — regenerated at runtime, must not be baked in.
-# NOTE: data.json / data.js / config.json / *.py / prompts ARE kept on purpose so
+# NOTE: data.json / data.js / *.py / prompts ARE kept on purpose so
 # the board has content and the fetch scripts work the moment the container starts.
 jira-intern/logs
 jira-intern/cache
 jira-intern/*.lock
 jira-intern/.*.lock
 jira-intern/.data.*
+jira-intern/.data.lock
 jira-intern/.tmp-*
 jira-intern/.state.json
 jira-intern/_STATUS.md
+# Per-machine state written by the board (Settings, schedule, AI queue, progress, overrides).
+jira-intern/.settings.json
+jira-intern/.settings.json.*.tmp
+jira-intern/.schedule.json
+jira-intern/.ai-queue
+jira-intern/.ai-status.json
+jira-intern/.ai-cancel-report
+jira-intern/.progress.json
+jira-intern/.pr_overrides.json
+jira-intern/*.bak
+# Company content that only ever lives on the host (also git-ignored).
+jira-intern/reports
+jira-intern/jira-export.xml
+jira-intern/models
+jira-intern/status.html
+jira-intern/tickets
+jira-intern/assets
+# Superseded legacy fetcher with hardcoded identity — never ship it.
+jira-intern/.fetch-intern.py

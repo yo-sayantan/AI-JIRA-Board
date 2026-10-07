@@ -1,5 +1,6 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
 import { PATHS } from './config.mjs'
+import { readJson } from './http.mjs'
 import { readBoardSettings } from './settings.mjs'
 import { runStatus, startArchive, startDaily } from './jobs.mjs'
 import { reportQueue, reportsIndex, resolveReportKeys } from './reports.mjs'
@@ -20,8 +21,10 @@ function due(last, cadence) {
   return Number.isFinite(then) && Date.now() - then >= every
 }
 
+/** Last-run stamps from .schedule.json; a missing, corrupt or non-object file reads as empty. */
 async function readState() {
-  return readFile(PATHS.schedule, 'utf8').then(JSON.parse, () => ({}))
+  const state = await readJson(PATHS.schedule, null)
+  return state && typeof state === 'object' && !Array.isArray(state) ? state : {}
 }
 
 async function writeState(state) {

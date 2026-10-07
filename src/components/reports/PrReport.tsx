@@ -18,6 +18,7 @@ import { ReportHtml } from './ReportHtml'
 import type { AiInternStatus } from '../../lib/runner'
 import { hrefForKey, shareableLinks } from '../../lib/reportLinks'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
+import { isSafeUrl, safeHref } from '../common/ui'
 
 /**
  * PR Readiness Report overlay — renders a report GENERICALLY from its block kinds, so the
@@ -83,7 +84,7 @@ export function PrReportOverlay({
     () =>
       (report?.tabs ?? []).map((t) => ({
         ...t,
-        tone: t.tone ?? worstTone(t.blocks.map((b) => b.tone)),
+        tone: t.tone ?? worstTone((t.blocks ?? []).map((b) => b.tone)),
       })),
     [report],
   )
@@ -97,8 +98,8 @@ export function PrReportOverlay({
   const blockHalfWidth = useMemo(() => halfWidthFlags(blocks), [blocks])
   const v = report?.verdict
   const vc = toneColor(v?.tone)
-  const extras = report ? shareableLinks(report) : []
-  const ticketHref = report ? hrefForKey(report, report.key) : null
+  const extras = report ? shareableLinks(report).filter((l) => isSafeUrl(l.href)) : []
+  const ticketHref = report ? safeHref(hrefForKey(report, report.key)) : undefined
 
   // Portalled to <body> so print can hide its siblings with display:none. Hiding them by
   // visibility instead would keep the whole board's height in the layout, and the document would
@@ -256,8 +257,20 @@ export function PrReportOverlay({
                   <button
                     key={t.id}
                     role="tab"
+                    id={`pr-tab-${t.id}`}
                     aria-selected={on}
+                    aria-controls={`pr-panel-${t.id}`}
+                    tabIndex={on ? 0 : -1}
                     onClick={() => setTabId(t.id)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+                      e.preventDefault()
+                      const i = tabs.findIndex((x) => x.id === t.id)
+                      const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]
+                      if (!next) return
+                      setTabId(next.id)
+                      document.getElementById(`pr-tab-${next.id}`)?.focus()
+                    }}
                     className="relative flex shrink-0 items-center gap-2 rounded-t-lg px-3.5 py-2 text-[12.5px] font-semibold transition-colors"
                     style={{
                       color: on ? c : 'var(--ink-soft)',
@@ -282,7 +295,7 @@ export function PrReportOverlay({
                 half-width, and only when there's an adjacent partner — everything else (tables,
                 card grids, stats, callouts) stays full-width so no block is ever left stranded
                 next to blank space. */}
-            <div className="px-5 py-5 lg:px-8" role="tabpanel">
+            <div className="px-5 py-5 lg:px-8" role="tabpanel" id={active ? `pr-panel-${active.id}` : undefined} aria-labelledby={active ? `pr-tab-${active.id}` : undefined}>
               {active?.summary && (
                 <p className="mb-3 text-[13px] text-[var(--ink-soft)]">
                   <ReportHtml html={active.summary} report={report} inline />
@@ -554,8 +567,9 @@ function Block({ block, report }: { block: ReportBlock; report: PrReport }) {
               )
               const cls = 'block rounded-lg border p-3 transition'
               const style = { ...tileStyle(cols, 260, 12), borderColor: hexToRgba(c, 0.35), background: hexToRgba(c, 0.05) }
-              return card.href ? (
-                <a key={i} href={card.href} target="_blank" rel="noopener noreferrer" className={`${cls} hover:-translate-y-px hover:brightness-105`} style={style}>
+              const cardHref = safeHref(card.href)
+              return cardHref ? (
+                <a key={i} href={cardHref} target="_blank" rel="noopener noreferrer" className={`${cls} hover:-translate-y-px hover:brightness-105`} style={style}>
                   {body}
                 </a>
               ) : (
@@ -614,7 +628,7 @@ function Block({ block, report }: { block: ReportBlock; report: PrReport }) {
       return (
         <BlockShell block={block}>
           <div className="flex flex-wrap gap-2 px-3.5 py-3">
-            {block.items.map((l, i) => (
+            {block.items.filter((l) => isSafeUrl(l.href)).map((l, i) => (
               <a key={i} href={l.href} target="_blank" rel="noopener noreferrer" className="rounded-full border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1 text-[11.5px] font-semibold text-[var(--link)] hover:border-[var(--muted)]">
                 {l.label} ↗
               </a>
@@ -628,13 +642,14 @@ function Block({ block, report }: { block: ReportBlock; report: PrReport }) {
           <dl className="grid grid-cols-[minmax(120px,max-content)_1fr] gap-x-4 gap-y-1.5 px-3.5 py-3 text-[12.5px]">
             {block.items.map((kv, i) => {
               const flagged = kv.tone && kv.tone !== 'neutral'
+              const kvHref = safeHref(kv.href)
               return (
                 <div key={i} className="contents">
                   <dt className="text-[var(--muted)]">{kv.label}</dt>
                   <dd className="flex items-center gap-1.5 font-semibold" style={{ color: toneText(kv.tone) }}>
                     {flagged && <span aria-hidden className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: toneColor(kv.tone) }} />}
-                    {kv.href ? (
-                      <a href={kv.href} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--link)' }}>
+                    {kvHref ? (
+                      <a href={kvHref} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--link)' }}>
                         {kv.value} ↗
                       </a>
                     ) : (

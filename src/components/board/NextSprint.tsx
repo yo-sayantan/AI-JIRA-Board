@@ -19,7 +19,7 @@ const byUrgency = (a: Ticket, b: Ticket) =>
   priorityMeta(b.priority).rank - priorityMeta(a.priority).rank ||
   (b.lastUpdate ?? '').localeCompare(a.lastUpdate ?? '')
 
-/** How far off the sprint is. A grooming bucket ("FraudBus READY") carries no dates at all, and a
+/** How far off the sprint is. A grooming bucket ("Team READY") carries no dates at all, and a
  *  `future` sprint whose planned start has slipped is still not started. Working days, like the
  *  header's sprint chip. Kept SHORT — it shares one line with the sprint name. */
 function whenLabel(sp: SprintInfo, now: number): string {
@@ -88,7 +88,7 @@ function Row({ ticket, now, onOpen }: { ticket: Ticket; now: number; onOpen: (ke
         <span className="inline-flex shrink-0 text-[var(--muted)] opacity-70 transition-opacity group-hover:opacity-100">
           <TypeIcon type={effectiveType(ticket)} size={10} />
         </span>
-        {/* Fixed at 104px: FRAUDBUSTE-227 is 14 mono chars ≈ 92px, so real keys never truncate. */}
+        {/* Fixed at 104px: PROJECTKEY-227 is 14 mono chars ≈ 92px, so real keys never truncate. */}
         <span className="w-[104px] shrink-0 truncate font-mono text-[11px] font-semibold tracking-tight text-[var(--muted)] transition-colors group-hover:text-[var(--ink-soft)]">
           {ticket.key}
         </span>
@@ -254,7 +254,7 @@ export const NextSprint = memo(function NextSprint({
                   <div key={g.info.name}>
                     {multi && (
                       // id is index-based, never the sprint name: aria-labelledby is a
-                      // space-separated ID list, and "FraudBus READY" contains a space.
+                      // space-separated ID list, and "Team READY" contains a space.
                       <div id={`jb-ns-g${i}`} className="mt-2 mb-0.5 flex items-baseline gap-1.5 px-3 first:mt-0">
                         <span className="min-w-0 truncate text-[11px] font-semibold text-[var(--ink-soft)]">
                           {g.info.name}

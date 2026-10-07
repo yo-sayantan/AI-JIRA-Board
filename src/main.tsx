@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { MotionConfig } from 'motion/react'
 import App from './App'
+import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { applySettings, loadSettings } from './lib/settings'
 import './styles/index.css'
 
@@ -18,7 +19,9 @@ function mount() {
   createRoot(el).render(
     <StrictMode>
       <MotionConfig reducedMotion="user">
-        <App />
+        <ErrorBoundary label="the board">
+          <App />
+        </ErrorBoundary>
       </MotionConfig>
     </StrictMode>,
   )

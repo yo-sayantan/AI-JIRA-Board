@@ -14,12 +14,13 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import devinfo  # noqa: E402  (needs the path fix above when run from another cwd)
-from _config import identity  # noqa: E402
+from _config import bitbucket_hints, identity, today_str  # noqa: E402
 from _jira import (  # noqa: E402
     BITBUCKET_BASE,
     CONFLUENCE_BASE,
     EXCLUDE_PROJECTS,
     FIELDS,
+    ISSUE_KEY_RE,
     JIRA_BASE,
     REQUIRED_APPROVALS,
     ac_list,
@@ -40,7 +41,7 @@ from _jira import (  # noqa: E402
 )
 from _jira import bb_get as _bb_get  # noqa: E402
 from _sprint import apply_sprint  # noqa: E402
-from datafile import atomic_dump, prepend_status, write_outputs  # noqa: E402
+from datafile import atomic_dump, data_lock, prepend_status, read_json, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
 from raised import build_raised_row, fetch_raised  # noqa: E402
 
@@ -50,19 +51,14 @@ CONFLUENCE_HOST = CONFLUENCE_BASE.split("://")[-1].split("/")[0] if CONFLUENCE_B
 _ME = identity(INTERN)
 USER = {"name": _ME["name"], "accountId": _ME["accountId"], "jiraBase": JIRA_BASE}
 MY_ACCOUNT = _ME["accountId"].upper()
+MY_EMAIL = _ME["email"].upper()
 
-REPO_HINTS = {
-    "FIDM": ["pidclientadm", "preciseid", "preciseid_eks", "pidadmin", "fraudadmin"],
-    "FRAUDBUSTE": ["pidclientadm", "fraudadmin", "preciseid"],
-    "DFMM": ["fars", "as1bizid"],
-    "PMIEN": ["precisematch", "precisematchv2"],
-    "POPD": ["fars"],
-    "NACLEN": ["frdbizid"],
-}
-BB_PROJECT = {
-    "FIDM": "FRAUD", "FRAUDBUSTE": "FRAUD", "DFMM": "FRDBIZID", "PMIEN": "PRECISEMATCH",
-    "POPD": "FARS", "NACLEN": "FRDBIZID",
-}
+# Bitbucket key-scan hints — config → bitbucket.repoHints / bitbucket.projectMap, keyed by Jira
+# project. Both empty by default: a ticket whose project has no entry is never scanned, and
+# no project or repository name is built into the code.
+_BB_HINTS = bitbucket_hints(INTERN)
+REPO_HINTS = _BB_HINTS["repoHints"]
+BB_PROJECT = _BB_HINTS["projectMap"]
 
 BB_OK = True
 
@@ -82,11 +78,15 @@ def bb_get(path, *, mark_down=True):
     try:
         with _BB_SLOTS:
             return _bb_get(path)
-    except Exception:
-        if mark_down:
+    except Exception as e:
+        if mark_down and BB_OK:
             BB_OK = False
+            sys.stderr.write(f"WARN bitbucket unreachable ({path}): {e} — PR data carried forward this run\n")
         raise
 
+
+def _utc_now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def pr_to_obj(pr, bb_proj=None):
     if not pr:
@@ -96,9 +96,9 @@ def pr_to_obj(pr, bb_proj=None):
     from_ref = pr.get("fromRef") or {}
     to_ref = pr.get("toRef") or {}
     repo = from_ref.get("repository") or {}
-    project = bb_proj or (repo.get("project") or {}).get("key", "FRAUD")
+    project = bb_proj or (repo.get("project") or {}).get("key")
     slug = repo.get("slug", "")
-    url = f"{BITBUCKET_BASE}/projects/{project}/repos/{slug}/pull-requests/{pid}" if slug and BITBUCKET_BASE else None
+    url = f"{BITBUCKET_BASE}/projects/{project}/repos/{slug}/pull-requests/{pid}" if project and slug and BITBUCKET_BASE else None
     merged = st == "MERGED"
     declined = st == "DECLINED" or st == "REJECTED"
     reviewers_raw = pr.get("reviewers") or []
@@ -107,7 +107,7 @@ def pr_to_obj(pr, bb_proj=None):
     reviewers = [((r.get("user") or {}).get("displayName")) for r in reviewers_raw if (r.get("user") or {}).get("displayName")]
     # Activity pages are only needed while a PR is still reviewable — merged/declined PRs
     # get fixed stats (saves 1-3 Bitbucket calls per closed PR).
-    if slug and pid and not (merged or declined):
+    if project and slug and pid and not (merged or declined):
         with _BB_SLOTS:  # devinfo calls Bitbucket directly, outside bb_get's cap
             ct, cr, open_c = devinfo.pr_comment_stats(project, slug, pid)
     else:
@@ -122,8 +122,6 @@ def pr_to_obj(pr, bb_proj=None):
         pstate = "changes"
     elif approvals >= REQUIRED_APPROVALS and open_c == 0:
         pstate = "approved"
-    elif st == "OPEN":
-        pstate = "comments"
     else:
         pstate = "comments"
     return {
@@ -141,6 +139,7 @@ def pr_to_obj(pr, bb_proj=None):
         "repo": slug or None,
         "merged": merged,
         "mergedAt": iso(pr.get("closedDate")) if merged else None,
+        "updatedAt": iso(pr.get("updatedDate")),
     }
 
 
@@ -156,9 +155,11 @@ def _pr_identity(p):
 def bb_search_all_prs(key):
     """All PRs referencing this ticket key. The repo×state listings are independent HTTP
     calls, so they run concurrently — wall-clock is one round-trip, not repos×3."""
-    proj_prefix = key.split("-")[0]
-    bb_proj = BB_PROJECT.get(proj_prefix, "FRAUD")
-    repos = REPO_HINTS.get(proj_prefix, ["pidclientadm", "preciseid"])
+    proj_prefix = key.split("-")[0].upper()
+    bb_proj = BB_PROJECT.get(proj_prefix)
+    repos = REPO_HINTS.get(proj_prefix) or []
+    if not bb_proj or not repos:
+        return []  # no hints configured for this project — nothing to scan
     key_u = key.upper()
     key_src = key.replace("-", "_").upper()
     combos = [(slug, state) for slug in repos for state in ("OPEN", "MERGED", "DECLINED")]
@@ -169,7 +170,8 @@ def bb_search_all_prs(key):
             q = urllib.parse.urlencode({"state": state, "limit": 100, "order": "NEWEST"})
             data = bb_get(f"/projects/{bb_proj}/repos/{slug}/pull-requests?{q}", mark_down=False)
             return data.get("values") or []
-        except Exception:
+        except Exception as e:
+            sys.stderr.write(f"WARN bitbucket PR scan {bb_proj}/{slug} ({state}): {e}\n")
             return []
 
     found, seen = [], set()
@@ -204,8 +206,8 @@ def code_for(key, prior=None):
                 prs.append(extra)
                 if extra.get("sourceBranch"):
                     branches.append(extra["sourceBranch"])
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(f"WARN bitbucket PR scan {key}: {e}\n")
     elif dev is None:
         return None
 
@@ -254,12 +256,17 @@ def apply_code(ticket, key, prior=None):
 
 
 def is_mine(assignee):
-    if not assignee:
+    """Is this Jira user me? Exact (case-insensitive) match on the identifier fields; the
+    display name only counts when it contains my id as a whole word — "ABC12" must not match
+    "ABC123", and a substring test used to do exactly that."""
+    if not assignee or not MY_ACCOUNT:
         return False
-    if not MY_ACCOUNT:
-        return False
-    name = (assignee.get("name") or assignee.get("key") or "").upper()
-    return name == MY_ACCOUNT or MY_ACCOUNT in (assignee.get("displayName") or "").upper()
+    for field in ("name", "key", "accountId", "emailAddress"):
+        value = str(assignee.get(field) or "").strip().upper()
+        if value and (value == MY_ACCOUNT or (MY_EMAIL and value == MY_EMAIL)):
+            return True
+    display = str(assignee.get("displayName") or "").upper()
+    return bool(display) and re.search(rf"(?<![A-Z0-9]){re.escape(MY_ACCOUNT)}(?![A-Z0-9])", display) is not None
 
 
 def extract_links(*texts, prior_conf=None, prior_ext=None):
@@ -304,15 +311,16 @@ def build_basic_subtask(si, parent_key, prior=None):
     stands, and its real branches, pull requests and review state. A master ticket is usually
     delivered through other people's sub-tasks, and that review state is precisely what used
     to force a trip to Jira."""
-    sf = si["fields"]
+    sf = si.get("fields") or {}
     sk = si["key"]
-    col = status_column(sf["status"]["name"])
+    status = (sf.get("status") or {}).get("name")
+    col = status_column(status)
     sub = {
         "key": sk,
         "title": sf.get("summary"),
-        "status": sf["status"]["name"],
+        "status": status,
         "column": col,
-        "type": sf["issuetype"]["name"],
+        "type": (sf.get("issuetype") or {}).get("name"),
         "priority": (sf.get("priority") or {}).get("name"),
         "storyPoints": story_points(sf),
         "url": f"{JIRA_BASE}/browse/{sk}",
@@ -341,11 +349,12 @@ def refresh_prs_only(ticket, key):
 
 
 def build_ticket(issue, prior, state_entry, force_refresh=False):
-    f = issue["fields"]
+    f = issue.get("fields") or {}
     key = issue["key"]
-    status = f["status"]["name"]
+    status = (f.get("status") or {}).get("name")
     column = status_column(status)
-    itype = f["issuetype"]["name"]
+    itype = (f.get("issuetype") or {}).get("name")
+    resolved = iso(f.get("resolutiondate")) or (changelog_done_date(issue.get("changelog")) if column == "done" else None)
 
     # ── Unchanged short-circuit — skips the expensive Jira side (comments, links, changelog).
     # Jira bumps `updated` on every edit/comment/transition, so matching (status, updated)
@@ -401,7 +410,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         prs, branches, pr, branch = info["prs"], info["branches"], info["pr"], info["branch"]
 
     update_log = build_update_log(
-        key, f.get("created"), status, f.get("resolutiondate"), issue.get("changelog"), (prior or {}).get("updateLog")
+        key, f.get("created"), status, resolved, issue.get("changelog"), (prior or {}).get("updateLog")
     )
 
     def carry_ai_fields(ticket_obj):
@@ -429,7 +438,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         "latestComment": latest_comment,
         "lastUpdate": iso(f.get("updated")),
         "created": iso(f.get("created")),
-        "resolved": iso(f.get("resolutiondate")) or (changelog_done_date(issue.get("changelog")) if column == "done" else None),
+        "resolved": resolved,
         "done": column == "done",
         "onHold": column == "hold",
         "url": f"{JIRA_BASE}/browse/{key}",
@@ -438,8 +447,8 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
         "epic": epic,
         "parentKey": parent.get("key") if parent else None,
         "labels": f.get("labels") or [],
-        "components": [c["name"] for c in f.get("components") or []],
-        "fixVersions": [v["name"] for v in f.get("fixVersions") or []],
+        "components": [c.get("name") for c in f.get("components") or [] if c.get("name")],
+        "fixVersions": [v.get("name") for v in f.get("fixVersions") or [] if v.get("name")],
         "description": desc_html,
         "acceptanceCriteria": ac_list(f.get("customfield_10700")),
         "comments": comments,
@@ -458,10 +467,10 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
 
     # New assignment
     if not state_entry and not prior:
-        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        day = today_str(INTERN)
         ticket["updateLog"].insert(0, {"when": day, "text": "Assigned — initial brief"})
     elif prev.get("status") != status or prev.get("comments") != comment_count:
-        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        day = today_str(INTERN)
         if prev.get("status") != status:
             ticket["updateLog"].insert(0, {"when": day, "text": status})
         if prev.get("comments") != comment_count and comment_count > (prev.get("comments") or 0):
@@ -479,7 +488,7 @@ def build_subtasks(parent_key, sub_issues, prior_map, state, pool=None):
     def one(si):
         sk = si["key"]
         prior = prior_map.get(sk) or prior_subs.get(sk)
-        if is_mine(si["fields"].get("assignee")):
+        if is_mine((si.get("fields") or {}).get("assignee")):
             full = build_ticket(si, prior, state.get(sk))
             full["parentKey"] = parent_key
             return full
@@ -526,25 +535,27 @@ def _main(existing_path, state_path):
     if not os.environ.get("JIRA_PERSONAL_TOKEN"):
         if not os.path.isfile(existing_path):
             raise SystemExit("No JIRA token and no existing data.json")
-        with open(existing_path) as f:
-            existing = json.load(f)
-        note = f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}: Jira MCP unavailable — showing last known state"
-        out = copy.deepcopy(existing)
-        out["generatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        out["notes"] = [note]
-        status_path = os.path.join(INTERN, "_STATUS.md")
-        old_status = open(status_path).read() if os.path.isfile(status_path) else ""
-        open(status_path, "w").write(f"{note}\n\n{old_status}")
-        write_outputs(out)
-        return out, {"unavailable": True}, [note]
+        # Never invent data: re-stamp the last known dump with a notice, log it, and stop with
+        # the same exit code / error shape as completed_archive so the runner can tell.
+        note = f"{today_str(INTERN)}: Jira unavailable (no token) — showing last known state"
+        with data_lock(INTERN):
+            out = copy.deepcopy(read_json(existing_path, {}) or {})
+            out["generatedAt"] = _utc_now()
+            out["notes"] = [note]
+            write_outputs(out)
+        prepend_status(note)
+        print(json.dumps({"error": "no jira token", "stopped": True, "note": note}, indent=2))
+        raise SystemExit(2)
 
-    existing = json.load(open(existing_path)) if os.path.isfile(existing_path) else {"tickets": [], "completed": []}
+    existing = read_json(existing_path, None) or {"tickets": [], "completed": []}
     completed_preserved = copy.deepcopy(existing.get("completed") or [])
     raised_preserved = copy.deepcopy(existing.get("raised") or [])
     try:
-        state = json.load(open(state_path)) if os.path.isfile(state_path) else {}
-    except Exception:
-        state = {}  # corrupt hidden memory just means "treat everything as changed" — never fatal
+        state = read_json(state_path, {}) or {}
+    except Exception as e:
+        # corrupt hidden memory just means "treat everything as changed" — never fatal
+        sys.stderr.write(f"WARN .state.json unreadable, rebuilding every ticket: {e}\n")
+        state = {}
 
     prior_map = {t["key"]: t for t in existing.get("tickets", [])}
 
@@ -555,15 +566,15 @@ def _main(existing_path, state_path):
     except Exception:
         BB_OK = False
 
-    # Fetch window (-10d) is wider than the board's 3-day "recent win" display window on purpose:
-    # the app hides done tickets after 3 days, and the weekly job archives them — a ticket must
-    # never drop out of tickets[] before it has landed in completed[].
+    # Fetch window (-10d) is wider than the board's "recent win" display window (app.doneBoardDays,
+    # default 5) on purpose: the app hides done tickets after that many days and the weekly job
+    # archives them — a ticket must never drop out of tickets[] before it has landed in completed[].
     # expand=changelog rides along with the search — updateLog and the resolved-date fallback
     # come from this single query instead of one extra GET per ticket.
     set_progress("daily", done=0, total=0, phase="searching")
     jql = "(assignee = currentUser() AND statusCategory != Done) OR (assignee = currentUser() AND statusCategory = Done AND resolved >= -10d)"
     issues = search_jira(jql + " ORDER BY updated DESC", expand="changelog")
-    # Drop excluded projects (config.json → excludeProjects) so they never reach the board.
+    # Drop excluded projects (config → excludeProjects) so they never reach the board.
     if EXCLUDE_PROJECTS:
         issues = [i for i in issues if not is_excluded(i.get("key"))]
     active_keys, issue_map = [], {}
@@ -585,10 +596,11 @@ def _main(existing_path, state_path):
                 "parent in (" + ",".join(active_keys) + ") ORDER BY key ASC", expand="changelog"
             )
             for si in sub_issues:
-                pk = (si["fields"].get("parent") or {}).get("key")
+                pk = ((si.get("fields") or {}).get("parent") or {}).get("key")
                 if pk:
                     subs_by_parent.setdefault(pk, []).append(si)
-        except Exception:
+        except Exception as e:
+            sys.stderr.write(f"WARN sub-task search failed, carrying existing sub-tasks forward: {e}\n")
             subs_by_parent = None
 
     # One parallel dev-status batch covering parents AND every sub-task, before any ticket is
@@ -600,12 +612,14 @@ def _main(existing_path, state_path):
         dev_keys.extend(si["key"] for si in subs)
     try:
         DEV = devinfo.fetch_many(list(dict.fromkeys(dev_keys)), ids=_issue_ids(issues, *(subs_by_parent or {}).values()), workers=WORKERS)
-    except Exception:
+    except Exception as e:
+        sys.stderr.write(f"WARN dev-status batch failed, PR data carried forward: {e}\n")
         DEV = {}
 
     changes = {"new": [], "refreshed": [], "done": []}
     tickets = []
     new_state = {}
+    failed, carried = [], set()
 
     def build_one(key):
         prior = prior_map.get(key)
@@ -629,7 +643,18 @@ def _main(existing_path, state_path):
             set_progress("daily", done=built_count[0], total=total, phase="building", current=key)
 
     def build_tracked(key):
-        ticket = build_one(key)
+        """One bad ticket (odd payload, restricted link, Jira hiccup) must not kill the whole
+        refresh: log it, carry the previous card forward (or skip it when there is none)."""
+        try:
+            ticket = build_one(key)
+        except Exception as e:
+            sys.stderr.write(f"WARN build {key}: {e}\n")
+            prior = prior_map.get(key)
+            ticket = copy.deepcopy(prior) if prior else None
+            with built_lock:
+                failed.append(key)
+                if ticket is not None:
+                    carried.add(key)
         on_built(key)
         return ticket
 
@@ -639,12 +664,20 @@ def _main(existing_path, state_path):
             ThreadPoolExecutor(max_workers=max(1, min(WORKERS, total))) as pool:
         built = list(pool.map(build_tracked, active_keys))
 
+    if active_keys and len(failed) == len(active_keys):
+        print(json.dumps({"error": "every ticket build failed", "failed": failed[:10]}, indent=2))
+        raise SystemExit(1)
+
     for key, ticket in zip(active_keys, built):
+        if ticket is None:
+            continue  # build failed and there was no previous card to keep
         prior = prior_map.get(key)
         prev_state = state.get(key, {})
 
-        if not prev_state and not prior:
-            changes["new"].append(f"{key}: {ticket.get('title', '')[:60]}")
+        if key in carried:
+            pass  # unchanged copy of the previous run — not news
+        elif not prev_state and not prior:
+            changes["new"].append(f"{key}: {(ticket.get('title') or '')[:60]}")
         elif ticket.get("done") and not prev_state.get("done"):
             changes["done"].append(key)
         elif (
@@ -661,33 +694,49 @@ def _main(existing_path, state_path):
 
         tickets.append(ticket)
         new_state[key] = ticket_to_state(ticket)
+        # Nested sub-tasks get their own state too (same as refresh_one), so a later single-ticket
+        # refresh of a sub-task has a baseline instead of logging everything as new.
+        for s in ticket.get("subtasks") or []:
+            if isinstance(s, dict) and s.get("key"):
+                new_state[s["key"]] = ticket_to_state(s)
 
     # Raised-by-me rides along with every daily run — one extra search, no per-ticket calls.
     set_progress("daily", done=total, total=total, phase="raised")
     raised_rows, raised_ok = fetch_raised(raised_preserved)
 
     set_progress("daily", done=total, total=total, phase="writing")
-    notes = [f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}: Daily fetch — Jira REST" + ("" if BB_OK else "; Bitbucket unreachable — PR/branch data carried forward") + ("" if raised_ok else "; raised-tickets search failed — previous list kept") + "."]
+    day = today_str(INTERN)
+    notes = [f"{day}: Daily fetch — Jira REST" + ("" if BB_OK else "; Bitbucket unreachable — PR/branch data carried forward") + ("" if raised_ok else "; raised-tickets search failed — previous list kept") + "."]
     if changes["new"]:
         notes.append("New: " + ", ".join(k.split(":")[0] for k in changes["new"]))
     if changes["done"]:
         notes.append("Marked done: " + ", ".join(changes["done"]))
+    if failed:
+        notes.append("Build failed (previous card kept): " + ", ".join(failed))
 
-    out = {
-        "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "user": USER,
-        "notes": notes,
-        "tickets": tickets,
-        "completed": completed_preserved,
-        "raised": raised_rows,
-        "raisedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if raised_ok else existing.get("raisedAt"),
-    }
-    write_outputs(out)
-    atomic_dump(state_path, new_state)
+    with data_lock(INTERN):
+        # The archive may have rewritten completed[] while this run was talking to Jira — take
+        # the newest copy on disk, not the snapshot from the start of the run (lost-update guard).
+        try:
+            latest = read_json(existing_path, None)
+            if isinstance(latest, dict) and isinstance(latest.get("completed"), list):
+                completed_preserved = latest["completed"]
+        except Exception as e:
+            sys.stderr.write(f"WARN data.json re-read before write failed, keeping the earlier completed[]: {e}\n")
+        out = {
+            "generatedAt": _utc_now(),
+            "user": USER,
+            "notes": notes,
+            "tickets": tickets,
+            "completed": completed_preserved,
+            "raised": raised_rows,
+            "raisedAt": _utc_now() if raised_ok else existing.get("raisedAt"),
+        }
+        write_outputs(out)
+        atomic_dump(state_path, new_state)
 
     # Keep _STATUS.md the audit log for script-driven runs too (the agent used to own this).
     changed = len(changes["new"]) + len(changes["refreshed"]) + len(changes["done"])
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     summary = (
         f"new {len(changes['new'])} · refreshed {len(changes['refreshed'])} · done {len(changes['done'])}"
         if changed else "no new or changed tickets"
@@ -696,6 +745,7 @@ def _main(existing_path, state_path):
         f"{day}: Daily fetch (fast path) — {len(tickets)} active ({summary}); "
         f"completed[] {len(completed_preserved)} preserved unchanged; "
         f"raised[] {len(raised_rows)}" + (" refreshed." if raised_ok else " carried forward (search failed).")
+        + (f" {len(failed)} build(s) failed — previous card kept." if failed else "")
         + ("" if BB_OK else " Bitbucket unreachable — PR data carried forward.")
     )
     set_progress("daily", done=total, total=total, phase="done")
@@ -758,9 +808,11 @@ def refresh_one(key):
     """
     global BB_OK, DEV
     load_env()
-    key = (key or "").strip()
+    key = (key or "").strip().upper()
     if not key:
         raise SystemExit("refresh_one: missing key")
+    if not ISSUE_KEY_RE.fullmatch(key):
+        raise SystemExit("refresh_one: bad key")
     if is_excluded(key):
         raise SystemExit(f"refresh_one: {key} is in excludeProjects — refused")
     if not os.environ.get("JIRA_PERSONAL_TOKEN"):
@@ -768,10 +820,11 @@ def refresh_one(key):
 
     existing_path = os.path.join(INTERN, "data.json")
     state_path = os.path.join(INTERN, ".state.json")
-    data = json.load(open(existing_path)) if os.path.isfile(existing_path) else {"tickets": [], "completed": []}
+    data = read_json(existing_path, None) or {"tickets": [], "completed": []}
     try:
-        state = json.load(open(state_path)) if os.path.isfile(state_path) else {}
-    except Exception:
+        state = read_json(state_path, {}) or {}
+    except Exception as e:
+        sys.stderr.write(f"WARN .state.json unreadable: {e}\n")
         state = {}
 
     prior, prior_where = _find_prior(data, key)
@@ -793,7 +846,8 @@ def refresh_one(key):
         sub_issues = search_jira(f"parent = {key} ORDER BY key ASC", expand="changelog")
         if sub_issues:
             subs_by_parent[key] = sub_issues
-    except Exception:
+    except Exception as e:
+        sys.stderr.write(f"WARN sub-task search for {key} failed, keeping the previous tree: {e}\n")
         subs_by_parent = None
 
     dev_keys = [key]
@@ -808,7 +862,8 @@ def refresh_one(key):
             workers=6,
             enrich_open=False,
         )
-    except Exception:
+    except Exception as e:
+        sys.stderr.write(f"WARN dev-status for {key} failed, PR data carried forward: {e}\n")
         DEV = {}
 
     ticket = build_ticket(issue, prior, state.get(key, {}), force_refresh=True)
@@ -831,34 +886,35 @@ def refresh_one(key):
     if parent and parent.get("key") and not ticket.get("parentKey"):
         ticket["parentKey"] = parent["key"]
 
-    # A ticket I raised keeps its raised[] row current too (status / assignee hand-offs).
-    raised_rows = data.get("raised") or []
-    in_raised = any(r.get("key") == key for r in raised_rows)
-    if in_raised:
-        row = build_raised_row(issue)
-        data["raised"] = [row if r.get("key") == key else r for r in raised_rows]
-
-    if prior is None and in_raised and not is_mine((issue.get("fields") or {}).get("assignee")):
-        # Raised-only ticket owned by someone else: updating its raised row is the whole job.
-        # Falling through to _merge_ticket would APPEND it to tickets[] and plant someone
-        # else's work on my active board.
-        where = "raised"
-    else:
-        where = _merge_ticket(data, ticket)
-    data["generatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    # Touch notes so the dump is visibly fresh even when fields look identical.
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    note = f"{day}: Refreshed {key} (status={ticket.get('status')}, column={ticket.get('column')})."
-    notes = list(data.get("notes") or [])
-    notes = [note] + [n for n in notes if not (isinstance(n, str) and n.startswith(f"{day}: Refreshed {key}"))]
-    data["notes"] = notes[:12]
-
-    write_outputs(data)
-    state[key] = ticket_to_state(ticket)
-    for s in ticket.get("subtasks") or []:
-        if s.get("key"):
-            state[s["key"]] = ticket_to_state(s)
-    atomic_dump(state_path, state)
+    day = today_str(INTERN)
+    with data_lock(INTERN):
+        # Re-read under the lock: the daily fetch or the archive may have written data.json
+        # while Jira was being queried, and merging into the stale copy would undo their work.
+        data = read_json(existing_path, None) or {"tickets": [], "completed": []}
+        raised_rows = data.get("raised") or []
+        in_raised = any(r.get("key") == key for r in raised_rows)
+        if in_raised:
+            row = build_raised_row(issue)
+            data["raised"] = [row if r.get("key") == key else r for r in raised_rows]
+        if prior is None and in_raised and not is_mine((issue.get("fields") or {}).get("assignee")):
+            where = "raised"
+        else:
+            where = _merge_ticket(data, ticket)
+        data["generatedAt"] = _utc_now()
+        note = f"{day}: Refreshed {key} (status={ticket.get('status')}, column={ticket.get('column')})."
+        notes = list(data.get("notes") or [])
+        notes = [note] + [n for n in notes if not (isinstance(n, str) and n.startswith(f"{day}: Refreshed {key}"))]
+        data["notes"] = notes[:12]
+        write_outputs(data)
+        try:
+            state = read_json(state_path, {}) or {}
+        except Exception:
+            state = {}
+        state[key] = ticket_to_state(ticket)
+        for s in ticket.get("subtasks") or []:
+            if s.get("key"):
+                state[s["key"]] = ticket_to_state(s)
+        atomic_dump(state_path, state)
 
     # Optional per-ticket cache (same path the agent refresh wrote).
     cache_dir = os.path.join(INTERN, "cache")
@@ -944,6 +1000,16 @@ if __name__ == "__main__":
                 "notes": notes,
                 "bb_ok": BB_OK,
             }, indent=2))
+    except urllib.error.HTTPError as e:
+        # HTTPError is a URLError subclass — test it first, or an expired PAT (401) is reported
+        # as "unreachable" and the fix (a new token) is never obvious from the log.
+        print(json.dumps({
+            "error": "jira http",
+            "status": e.code,
+            "detail": str(getattr(e, "reason", e)),
+            "durationSec": round(time.monotonic() - t0, 1),
+        }, indent=2))
+        sys.exit(1)
     except urllib.error.URLError as e:
         # DNS / VPN / offline — keep prior data; no multi-page traceback in docker logs.
         print(json.dumps({

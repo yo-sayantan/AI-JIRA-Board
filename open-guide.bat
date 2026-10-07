@@ -9,14 +9,16 @@ REM
 REM  Usage:  double-click this file, or run  open-guide.bat  in a terminal.
 REM ===========================================================================
 
-setlocal
+setlocal EnableDelayedExpansion
 REM %~dp0 = the folder this script lives in (with trailing backslash).
+REM Delayed expansion (!GUIDE!) keeps a path containing ) or & from breaking the
+REM parenthesised block below.
 set "GUIDE=%~dp0docs\index.html"
 
-if not exist "%GUIDE%" (
+if not exist "!GUIDE!" (
   echo.
   echo   [X] Guide not found at:
-  echo       %GUIDE%
+  echo       !GUIDE!
   echo   Run this from inside the repo ^(it expects .\docs\index.html^).
   echo.
   pause
@@ -25,8 +27,8 @@ if not exist "%GUIDE%" (
 
 echo.
 echo   Opening the Setup ^& Deployment guide...
-echo       %GUIDE%
+echo       !GUIDE!
 echo.
 
-start "" "%GUIDE%"
+start "" "!GUIDE!"
 endlocal

@@ -1,0 +1,11 @@
+# Line endings: scripts that run on macOS/Linux (or inside the container) must stay LF —
+# a CRLF checkout on Windows would break `#!/usr/bin/env bash` and every lock-file parse.
+# Windows batch files are the one place CRLF is correct.
+* text=auto
+*.sh text eol=lf
+*.mjs text eol=lf
+*.py text eol=lf
+*.command.template text eol=lf
+*.sh.template text eol=lf
+docker-entrypoint.sh text eol=lf
+*.bat text eol=crlf

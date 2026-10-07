@@ -1,12 +1,16 @@
 name: CI
 
-# Type-check and build on every push / PR to main. This is exactly what the
-# Docker image's build stage runs, so a green check means the image will build.
+# Lint the shell layer, validate config, run the Python tests, type-check and build the
+# board, then prove the Docker image still builds. The build step is exactly what the
+# image's build stage runs, so a green check means the image will build.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -16,11 +20,30 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # Matches the Dockerfile base image (node:26). Vite 8 needs >= 22.12.
+          node-version: 26
           cache: npm
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Shellcheck (entrypoint, launchers, runner scripts)
+        # -S error only: the runners use a few idioms shellcheck flags at warning level on
+        # purpose (sourced files, intentional word splitting), so stylistic findings must
+        # not turn CI red.
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck -S error docker-entrypoint.sh start-jira-board.sh open-guide.sh jira-intern/local-runner/*.sh
+
+      - name: Validate project config
+        run: npm run config:validate
+
+      - name: Python tests
+        run: npm test
 
       - name: Type-check
         run: npm run typecheck
@@ -34,3 +57,6 @@ jobs:
           name: dist
           path: dist/index.html
           if-no-files-found: error
+
+      - name: Docker build smoke test
+        run: docker build -t ci-smoke .

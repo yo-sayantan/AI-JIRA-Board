@@ -67,8 +67,8 @@ export function useReports({ served, enabled, status, toast }: { served: boolean
     if (started.length) toast(plural(started.length, `Generating PR readiness report for ${started[0]}…`, 'Generating # PR readiness reports…'), 'loading')
     if (!finished.length && !enrichedDone) return
     void refreshIndex().then((idx) => {
-      const ready = finished.filter((k) => idx?.reports[k])
-      const failed = finished.filter((k) => !idx?.reports[k])
+      const ready = finished.filter((k) => idx?.reports?.[k])
+      const failed = finished.filter((k) => !idx?.reports?.[k])
       if (ready.length) toast(plural(ready.length, `PR readiness report ready for ${ready[0]}.`, '# PR readiness reports ready.'), 'success')
       if (failed.length) {
         toast(
@@ -95,6 +95,7 @@ export function useReports({ served, enabled, status, toast }: { served: boolean
     async (key: string) => {
       if (!served) return void toast(`Report generation needs the server or Docker — run: bash jira-intern/local-runner/pr-report.sh ${key}`, 'info')
       const start = await startReportGeneration(key)
+      if (start?.queueFull) return void toast('The report queue is full — try again shortly.', 'info')
       if (!start?.ok) return void toast(`Couldn't start the report for ${key} — is the server running?`, 'error')
       announced.current.add(key)
       toast(start.already ? `${key} report is already being generated.` : `Generating PR readiness report for ${key} — running in the background.`, 'loading')
@@ -115,7 +116,9 @@ export function useReports({ served, enabled, status, toast }: { served: boolean
         )
       }
       for (const k of start.queuedKeys) announced.current.add(k)
-      toast(`Queued ${plural(start.queuedKeys.length, 'one PR readiness report', '# PR readiness reports')} — they generate in the background.`, 'loading')
+      const queued = plural(start.queuedKeys.length, 'one PR readiness report', '# PR readiness reports')
+      if (start.full) toast(`Queued ${queued}; the queue is full, run again for the rest.`, 'info')
+      else toast(`Queued ${queued} — they generate in the background.`, 'loading')
       void pollNow()
     },
     [served, toast],

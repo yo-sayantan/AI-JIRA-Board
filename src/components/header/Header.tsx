@@ -228,7 +228,7 @@ export const Header = memo(function Header({
             >
               <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-[var(--ink-soft)]">
                 <CalendarIcon size={10} color={sp.color} />
-                {/* The pill sizes to the NAME — sprint names vary in length ("FraudBus Sprint 13.2"
+                {/* The pill sizes to the NAME — sprint names vary in length ("Team Sprint 13.2"
                     alone needs ~118px, so the old 110px cap clipped every one of them). 280px is a
                     backstop against a pathological name squeezing the search box, not a budget. */}
                 <span className="max-w-[280px] shrink-0 truncate whitespace-nowrap">{sprint.name}</span>
@@ -257,6 +257,7 @@ export const Header = memo(function Header({
             </span>
             <input
               id="jb-search"
+              aria-label="Search tickets"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               type="search"
@@ -340,6 +341,7 @@ export const Header = memo(function Header({
             transition={{ type: 'spring', stiffness: 400, damping: 18 }}
             onClick={toggleTheme}
             aria-label="Toggle theme"
+            aria-pressed={dark}
             className="grid h-9 w-9 place-items-center rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] card-shadow hover:border-[var(--muted)]"
           >
             {dark ? <MoonIcon size={16} /> : <SunIcon size={16} />}

@@ -20,6 +20,16 @@ function rateFor(s: InternStatus | null): number {
 export function useInternStatus(served: boolean, keepAlive: boolean): InternStatus | null {
   const [status, setStatus] = useState<InternStatus | null>(null)
   const rate = served && (keepAlive || hasWork(status)) ? rateFor(status) : Infinity
-  useEffect(() => subscribeStatus((s) => s && setStatus(s), rate), [rate])
+  useEffect(() => {
+    // A failed poll keeps the last status, but a server that stays unreachable must not look
+    // healthy forever: three misses in a row clear it.
+    let misses = 0
+    return subscribeStatus((s) => {
+      if (s) {
+        misses = 0
+        setStatus(s)
+      } else if (++misses >= 3) setStatus(null)
+    }, rate)
+  }, [rate])
   return status
 }

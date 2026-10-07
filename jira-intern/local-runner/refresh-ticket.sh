@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Targeted SINGLE-ticket refresh. Re-fetches ONE Jira ticket and merges it into
 # data.json (then re-syncs data.js). Invoked by serve.mjs  POST /api/refresh-ticket?key=<KEY>.
 #   bash refresh-ticket.sh <KEY>
@@ -6,8 +6,12 @@
 # PRIMARY path: deterministic daily_fetch.py --key (works in Docker; no agent CLI).
 # FALLBACK: cursor-agent prompt (local Mac with the Cursor CLI installed).
 set -o pipefail
-KEY="$1"
-[ -z "$KEY" ] && { echo "usage: refresh-ticket.sh <KEY>"; exit 2; }
+KEY="${1:-}"
+# The key lands in a log file name, a snapshot file name and (fallback path) an agent prompt,
+# so accept only a well-formed Jira key such as ABC-123.
+if ! [[ "$KEY" =~ ^[A-Za-z][A-Za-z0-9]+-[0-9]+$ ]]; then
+  echo "usage: refresh-ticket.sh <TICKET-KEY>   (e.g. ABC-123)" >&2; exit 2
+fi
 
 # shellcheck source=runner-env.sh
 . "$(dirname "${BASH_SOURCE[0]}")/runner-env.sh"
@@ -16,10 +20,14 @@ LOG="$LOG_DIR/refresh-${KEY}-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "$INTERN_DIR/cache"
 
 # This rewrites the SHARED data.json, and our own .refresh.lock keeps two refreshes apart.
-refuse_if_locked "refresh of $KEY" "$INTERN_DIR/.intern.lock" "$INTERN_DIR/.completed.lock" "$INTERN_DIR/.refresh.lock"
 REFRESH_LOCK="$INTERN_DIR/.refresh.lock"
-echo "$$ $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REFRESH_LOCK"
-trap 'rm -f "$REFRESH_LOCK"' EXIT INT TERM
+refuse_if_locked "refresh of $KEY" "$REFRESH_LOCK" "$INTERN_DIR/.intern.lock" "$INTERN_DIR/.completed.lock"
+acquire_lock_or_exit "refresh of $KEY" "$REFRESH_LOCK"
+# INT/TERM exit explicitly (130/143) so an interrupted fast path never falls through to the
+# LLM fallback; the EXIT trap then removes the lock.
+trap 'rm -f "$REFRESH_LOCK"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 cd "$GIT_ROOT"
 # Snapshot for the deterministic aiSummary carry-forward (the fresh single-ticket fetch omits it

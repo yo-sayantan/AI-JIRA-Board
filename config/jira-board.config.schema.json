@@ -23,11 +23,26 @@
       "properties": {
         "jiraBase": { "type": "string" },
         "confluenceBase": { "type": "string" },
-        "bitbucketBase": { "type": "string" }
+        "bitbucketBase": { "type": "string" },
+        "checkmarxBase": { "type": "string", "default": "" },
+        "checkmarxAuthUrl": { "type": "string", "default": "" },
+        "dynatraceTenants": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} }
       },
       "additionalProperties": false
     },
     "excludeProjects": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "bitbucket": {
+      "type": "object",
+      "properties": {
+        "projectMap": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} },
+        "repoHints": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
     "connector": {
       "type": "object",
       "required": ["active"],
@@ -93,8 +108,7 @@
       "required": ["onStart"],
       "properties": {
         "onStart": { "type": "boolean" },
-        "workers": { "type": "integer", "minimum": 1, "maximum": 16 },
-        "intervalSec": { "type": "integer", "minimum": 0 }
+        "workers": { "type": "integer", "minimum": 1, "maximum": 16 }
       },
       "additionalProperties": false
     },

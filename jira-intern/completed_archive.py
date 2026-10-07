@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import devinfo  # noqa: E402  (needs the path fix above when run from another cwd)
 from _jira import (  # noqa: E402
     EXCLUDE_PROJECTS,
+    ISSUE_KEY_RE,
     JIRA_BASE,
     ac_list,
     changelog_done_date,
@@ -43,7 +44,7 @@ from _jira import (  # noqa: E402
     wiki_to_html,
 )
 from _sprint import apply_sprint  # noqa: E402
-from datafile import atomic_write, prepend_status, write_outputs  # noqa: E402
+from datafile import atomic_write, data_lock, dumps, prepend_status, read_json, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
 from raised import refresh_raised_in_place  # noqa: E402
 
@@ -122,15 +123,16 @@ def build_subtask(si, parent_key, dev_map, pr_overrides, mine=True):
     """Compact child row shown under its parent. Carries owner + review state so a master
     ticket's delivery is readable without opening Jira. Only my sub-tickets are ever nested,
     so `mine` defaults True."""
-    sf = si["fields"]
+    sf = si.get("fields") or {}
     sk = si["key"]
-    col = status_column(sf["status"]["name"])
+    status = (sf.get("status") or {}).get("name")
+    col = status_column(status)
     sub = {
         "key": sk,
         "title": sf.get("summary"),
-        "status": sf["status"]["name"],
+        "status": status,
         "column": col,
-        "type": sf["issuetype"]["name"],
+        "type": (sf.get("issuetype") or {}).get("name"),
         "priority": (sf.get("priority") or {}).get("name"),
         "parentKey": parent_key,
         "url": f"{JIRA_BASE}/browse/{sk}",
@@ -147,14 +149,19 @@ def build_subtask(si, parent_key, dev_map, pr_overrides, mine=True):
     return sub
 
 
-def build_completed(issue, prior, dev_map, children, pr_overrides, mine):
+def build_completed(issue, prior, dev_map, children, pr_overrides, mine, inherit_details=True):
     """`mine` = was this ever assigned to me (membership in the mine-search set), NOT the
     current assignee — a ticket I finished and handed off is still my work. Only pure context
-    parents (pulled in solely because I own a sub-ticket under them) are mine=False."""
-    f = issue["fields"]
+    parents (pulled in solely because I own a sub-ticket under them) are mine=False.
+
+    `prior` is the cached row. With `inherit_details` (scoped runs) its AI/link fields are
+    carried over; a full rebuild passes False so those are rebuilt clean — but the cached
+    branch/PR block is ALWAYS the fallback when this run's dev-status lookup failed."""
+    f = issue.get("fields") or {}
     key = issue["key"]
-    status = f["status"]["name"]
+    status = (f.get("status") or {}).get("name")
     column = status_column(status)
+    details = prior if inherit_details else None
 
     # Full comment history is worth an extra request for my own tickets; for a context parent
     # the inline page that came free with the search is plenty.
@@ -175,7 +182,7 @@ def build_completed(issue, prior, dev_map, children, pr_overrides, mine):
     elif parent_key:
         epic = {"key": parent_key, "url": f"{JIRA_BASE}/browse/{parent_key}", "relation": "parent"}
     else:
-        epic = (prior or {}).get("epic")
+        epic = (details or {}).get("epic")
 
     # Nested children are drawn only from my own sub-tickets, so they are all mine.
     subtasks = [build_subtask(si, key, dev_map, pr_overrides, mine=True) for si in children]
@@ -187,7 +194,7 @@ def build_completed(issue, prior, dev_map, children, pr_overrides, mine):
         "title": f.get("summary"),
         "status": status,
         "column": column,
-        "type": f["issuetype"]["name"],
+        "type": (f.get("issuetype") or {}).get("name"),
         "priority": (f.get("priority") or {}).get("name"),
         "storyPoints": story_points(f),
         "commentCount": comment_count,
@@ -205,18 +212,18 @@ def build_completed(issue, prior, dev_map, children, pr_overrides, mine):
         "parentKey": parent_key,
         "parentTitle": parent_title,
         "labels": f.get("labels") or [],
-        "components": [c["name"] for c in f.get("components") or []],
-        "fixVersions": [v["name"] for v in f.get("fixVersions") or []],
+        "components": [c.get("name") for c in f.get("components") or [] if c.get("name")],
+        "fixVersions": [v.get("name") for v in f.get("fixVersions") or [] if v.get("name")],
         "description": light_html(wiki_to_html(f.get("description"))),
         "acceptanceCriteria": ac_list(f.get("customfield_10700")),
         "comments": comments,
         "related": issue_links(f),
-        "confluence": (prior or {}).get("confluence") or [],
-        "externalLinks": (prior or {}).get("externalLinks") or [],
-        "proposedSolution": (prior or {}).get("proposedSolution"),
-        "effortEstimate": (prior or {}).get("effortEstimate"),
-        "openQuestions": (prior or {}).get("openQuestions") or [],
-        "sources": (prior or {}).get("sources") or [{"title": f"Jira {key}", "url": f"{JIRA_BASE}/browse/{key}"}],
+        "confluence": (details or {}).get("confluence") or [],
+        "externalLinks": (details or {}).get("externalLinks") or [],
+        "proposedSolution": (details or {}).get("proposedSolution"),
+        "effortEstimate": (details or {}).get("effortEstimate"),
+        "openQuestions": (details or {}).get("openQuestions") or [],
+        "sources": (details or {}).get("sources") or [{"title": f"Jira {key}", "url": f"{JIRA_BASE}/browse/{key}"}],
         "updateLog": build_update_log(f.get("created"), issue.get("changelog")),
         "subtasks": subtasks,
         "subtaskCount": len(subtasks),
@@ -246,26 +253,35 @@ def completed_entry(t):
     return c
 
 
-def assemble(keys):
-    """Archive rows for every key that has a cache file, newest first."""
+def assemble(keys, fallback=None):
+    """Archive rows for every key that has a cache file, newest first. `fallback` maps keys
+    without a cache file to a row to keep (the previous completed[] entry of a failed build)."""
     rows = []
     for key in keys:
         path = os.path.join(CACHE, f"{key}.json")
-        if not os.path.isfile(path):
-            continue
         try:
-            rows.append(completed_entry(json.load(open(path))))
+            cached = read_json(path, None)
         except Exception as e:
             sys.stderr.write(f"WARN cache read {key}: {e}\n")
+            cached = None
+        if cached is None:
+            cached = (fallback or {}).get(key)
+        if not isinstance(cached, dict) or not cached.get("key"):
+            continue
+        try:
+            rows.append(completed_entry(cached))
+        except Exception as e:
+            sys.stderr.write(f"WARN cache row {key}: {e}\n")
     rows.sort(key=lambda r: (r.get("resolved") or "", r["key"]), reverse=True)
     return rows
 
 
 def merge_completed_only(completed_list):
     """Replace completed[] and nothing else — tickets[] belongs to the daily fetch."""
-    data = json.loads(open(DATA_JSON, "r", encoding="utf-8").read())
-    data["completed"] = completed_list
-    write_outputs(data)
+    with data_lock(INTERN):
+        data = read_json(DATA_JSON, None) or {"tickets": [], "completed": []}
+        data["completed"] = completed_list
+        write_outputs(data)
 
 
 def _refresh_raised():
@@ -290,7 +306,7 @@ def _scope():
         scope = "all"
     elif scope == "since" and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
         scope = "all"
-    elif scope == "key" and not re.fullmatch(r"[A-Z][A-Z0-9]+-\d+", key):
+    elif scope == "key" and not ISSUE_KEY_RE.fullmatch(key):
         scope = "all"
     elif scope not in ("all", "year", "since", "key"):
         scope = "all"
@@ -299,25 +315,58 @@ def _scope():
 
 def upsert_completed(rows):
     """Replace only these keys inside completed[]. A full rebuild still uses merge_completed_only."""
-    data = json.loads(open(DATA_JSON, "r", encoding="utf-8").read())
-    by = {}
-    for row in data.get("completed") or []:
-        if isinstance(row, dict) and row.get("key"):
+    with data_lock(INTERN):
+        data = read_json(DATA_JSON, None) or {"tickets": [], "completed": []}
+        by = {}
+        for row in data.get("completed") or []:
+            if isinstance(row, dict) and row.get("key"):
+                by[row["key"]] = row
+        for row in rows:
             by[row["key"]] = row
-    for row in rows:
-        by[row["key"]] = row
-    for row in rows:
-        parent = by.get(row.get("parentKey") or "")
-        if not parent or parent.get("key") in {r["key"] for r in rows}:
-            continue
-        subs = [s for s in (parent.get("subtasks") or []) if isinstance(s, dict)]
-        subs = [row if s.get("key") == row["key"] else s for s in subs]
-        if not any(s.get("key") == row["key"] for s in subs):
-            subs.append(row)
-        parent["subtasks"] = subs
-        parent["subtaskCount"] = len(subs)
-    data["completed"] = sorted(by.values(), key=lambda r: (r.get("resolved") or "", r.get("key") or ""), reverse=True)
-    write_outputs(data)
+        for row in rows:
+            parent = by.get(row.get("parentKey") or "")
+            if not parent or parent.get("key") in {r["key"] for r in rows}:
+                continue
+            subs = [s for s in (parent.get("subtasks") or []) if isinstance(s, dict)]
+            subs = [row if s.get("key") == row["key"] else s for s in subs]
+            if not any(s.get("key") == row["key"] for s in subs):
+                subs.append(row)
+            parent["subtasks"] = subs
+            parent["subtaskCount"] = len(subs)
+        data["completed"] = sorted(by.values(), key=lambda r: (r.get("resolved") or "", r.get("key") or ""), reverse=True)
+        write_outputs(data)
+
+
+def _membership(keys):
+    """Which of `keys` were ever assigned to me — one explicit JQL per 100 keys. Used by scoped
+    runs, whose search result set is not a membership set (scope=key returns the key itself
+    whether or not it was ever mine)."""
+    member = set()
+    keys = sorted({k for k in keys if k})
+    for i in range(0, len(keys), 100):
+        chunk = keys[i : i + 100]
+        jql = "key in (" + ",".join(chunk) + ") AND (assignee was currentUser() OR assignee = currentUser())"
+        member.update(issue["key"] for issue in search_jira(jql, fields="summary") if issue.get("key"))
+    return member
+
+
+def mine_flags(keys, priors, mine_keys, scoped):
+    """key → mine for every key being rebuilt. A full run's search IS the membership set; a
+    scoped run trusts the cached row's flag and asks Jira only for keys with no cache."""
+    if not scoped:
+        return {k: k in mine_keys for k in keys}
+    flags, unknown = {}, []
+    for k in keys:
+        cached = priors.get(k)
+        if isinstance(cached, dict) and isinstance(cached.get("mine"), bool):
+            flags[k] = cached["mine"]
+        else:
+            unknown.append(k)
+    if unknown:
+        member = _membership(unknown)
+        for k in unknown:
+            flags[k] = k in member
+    return flags
 
 
 def main():
@@ -342,7 +391,21 @@ def _main(ts):
         return 1
 
     pr_overrides_path = os.path.join(INTERN, ".pr_overrides.json")
-    pr_overrides = json.load(open(pr_overrides_path)) if os.path.isfile(pr_overrides_path) else {}
+    try:
+        pr_overrides = read_json(pr_overrides_path, {}) or {}
+    except Exception as e:
+        sys.stderr.write(f"WARN .pr_overrides.json unreadable, ignored: {e}\n")
+        pr_overrides = {}
+    # Previous completed[] rows: the fallback for a key whose build fails and has no cache file.
+    try:
+        existing_rows = {
+            row["key"]: row
+            for row in (read_json(DATA_JSON, {}) or {}).get("completed") or []
+            if isinstance(row, dict) and row.get("key")
+        }
+    except Exception as e:
+        sys.stderr.write(f"WARN data.json unreadable for fallback rows: {e}\n")
+        existing_rows = {}
 
     # ── 1. Everything ever assigned to me — standalone tickets AND my sub-tickets.
     # `was` catches work reassigned away from me after I finished it.
@@ -362,13 +425,13 @@ def _main(ts):
     else:
         jql = base_jql + " ORDER BY resolved DESC"
     mine = search_jira(jql, expand="changelog")
-    # Drop excluded projects (config.json → excludeProjects) up front, so their context parents
+    # Drop excluded projects (config → excludeProjects) up front, so their context parents
     # are never pulled in and they never reach completed[].
     if EXCLUDE_PROJECTS:
         mine = [i for i in mine if not is_excluded(i["key"])]
     issues = {i["key"]: i for i in mine}
     mine_keys = set(issues)  # capture BEFORE adding context parents
-    parent_keys = {(i["fields"].get("parent") or {}).get("key") for i in mine}
+    parent_keys = {((i.get("fields") or {}).get("parent") or {}).get("key") for i in mine}
     parent_keys.discard(None)
 
     # ── 2. Pull in the PARENT of each of my sub-tickets, for lineage/context only — even when
@@ -381,22 +444,25 @@ def _main(ts):
     # ── 3. Nest ONLY my own sub-tickets under their parent (they are already in `mine`).
     children_by_parent = {}
     for key in mine_keys:
-        pk = (issues[key]["fields"].get("parent") or {}).get("key")
+        pk = ((issues[key].get("fields") or {}).get("parent") or {}).get("key")
         if pk:
             children_by_parent.setdefault(pk, []).append(issues[key])
 
     # ── 4. Only closed work belongs in the archive (and never an excluded project).
     done_keys = [k for k, i in issues.items() if is_done(i) and not is_excluded(k)]
-    done_keys.sort(key=lambda k: issues[k]["fields"].get("resolutiondate") or "", reverse=True)
+    done_keys.sort(key=lambda k: (issues[k].get("fields") or {}).get("resolutiondate") or "", reverse=True)
 
     # ── 5. Every menu action is an explicit refresh of its result set: Jira is the source of
-    # truth, so every matching ticket is rebuilt. A scoped run still reads the cached row as
-    # the fallback for fields an auxiliary lookup (e.g. dev-status) fails to return; a full
-    # rebuild starts clean so no stale details are inherited.
+    # truth, so every matching ticket is rebuilt. The cached row is always loaded: it is the
+    # fallback for the branch/PR block when dev-status fails for a key, and on a scoped run its
+    # AI/link details are inherited too. A full rebuild rebuilds those details clean.
     clean_rebuild = scope == "all"
     stale = done_keys[:MAX_FETCH]
-    priors = {} if clean_rebuild else {key: _read_cache(key) for key in stale}
+    priors = {key: _read_cache(key) for key in stale}
     total = len(stale) or 1
+    # `mine` per rebuilt key — the scoped search result is not a membership set (see mine_flags).
+    set_progress("archive", done=0, total=total, phase="membership", pct=5)
+    mine_by_key = mine_flags(stale, priors, mine_keys, scoped)
 
     # ── 6. One parallel dev-status batch for the rebuilt tickets AND their children, so no
     # ticket build has to make its own branch/PR calls.
@@ -409,34 +475,33 @@ def _main(ts):
         weighted = 5 + (50 * done / phase_total if phase_total else 50)
         set_progress("archive", done=done, total=phase_total, phase="devinfo", current=key, pct=weighted)
 
-    dev_map = (
-        devinfo.fetch_many(
-            sorted(dev_targets),
-            ids={k: issues[k]["id"] for k in dev_targets if k in issues},
-            workers=WORKERS,
-            on_progress=dev_progress,
-        )
-        if dev_targets
-        else {}
-    )
+    dev_map = {}
+    if dev_targets:
+        try:
+            dev_map = devinfo.fetch_many(
+                sorted(dev_targets),
+                ids={k: issues[k]["id"] for k in dev_targets if k in issues and issues[k].get("id")},
+                workers=WORKERS,
+                on_progress=dev_progress,
+            )
+        except Exception as e:
+            # Every key then counts as "lookup failed" → cached branch/PR blocks are kept.
+            sys.stderr.write(f"WARN dev-status batch failed, PR data carried forward: {e}\n")
+            dev_map = {}
 
     newly_cached, failed = [], []
     pending = 0
 
     def build(key):
+        """Rebuild one cache file. atomic_write replaces the old file in one step, so there
+        is no pre-delete: a failed build leaves the previous row in place instead of a hole."""
         try:
-            # A full rebuild must not inherit stale ticket details. Remove each old cache
-            # immediately before replacing it, after Jira and dev-status have been fetched.
-            if clean_rebuild:
-                try:
-                    os.remove(os.path.join(CACHE, f"{key}.json"))
-                except FileNotFoundError:
-                    pass
             ticket = build_completed(
                 issues[key], priors.get(key), dev_map, children_by_parent.get(key, []),
-                pr_overrides, key in mine_keys,
+                pr_overrides, mine_by_key.get(key, key in mine_keys),
+                inherit_details=not clean_rebuild,
             )
-            atomic_write(os.path.join(CACHE, f"{key}.json"), json.dumps(ticket, indent=2))
+            atomic_write(os.path.join(CACHE, f"{key}.json"), dumps(ticket))
             return key, None
         except Exception as e:
             return key, e
@@ -453,7 +518,7 @@ def _main(ts):
                 newly_cached.append(key)
                 pending += 1
                 if pending >= FLUSH_EVERY:
-                    partial = assemble(done_keys)
+                    partial = assemble(done_keys, fallback=existing_rows)
                     if scoped:
                         upsert_completed(partial)
                     else:
@@ -463,7 +528,8 @@ def _main(ts):
             set_progress("archive", done=done_n, total=total, phase="building", current=key, pct=55 + 43 * done_n / total)
 
     set_progress("archive", done=total, total=total, phase="writing", pct=99)
-    rows = assemble(done_keys)
+    # Failed keys keep their previous row: the untouched cache file, else the old completed[] entry.
+    rows = assemble(done_keys, fallback={k: existing_rows[k] for k in failed if k in existing_rows})
     if scoped:
         upsert_completed(rows)
     else:
@@ -502,12 +568,24 @@ def _main(ts):
         "skipped_over_max_fetch": len(done_keys) - len(stale),
         "failed": failed[:10],
     }, indent=2))
-    return 0
+    # Exit 4 = "partial": the rows are already merged (previous entry kept for every failed
+    # key), so the shell runner logs a warning but must NOT fall back to the LLM agent.
+    # 1 is reserved for "nothing usable was produced" (search failed, no token, HTTP error).
+    return 4 if failed else 0
 
 
 if __name__ == "__main__":
     try:
         sys.exit(main() or 0)
+    except urllib.error.HTTPError as e:
+        # HTTPError subclasses URLError — test it first so an expired PAT (401) is not
+        # reported as "jira unreachable".
+        print(json.dumps({
+            "error": "jira http",
+            "status": e.code,
+            "detail": str(getattr(e, "reason", e)),
+        }, indent=2))
+        sys.exit(1)
     except urllib.error.URLError as e:
         print(json.dumps({
             "error": "jira unreachable",

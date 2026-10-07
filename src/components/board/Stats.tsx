@@ -57,6 +57,7 @@ export const Stats = memo(function Stats({
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <button
         onClick={() => onSelect(null)}
+        aria-pressed={active === null}
         className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all ${
           active === null
             ? 'border-transparent bg-[var(--ink)] text-[var(--bg)]'

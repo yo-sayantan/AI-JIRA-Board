@@ -9,9 +9,16 @@
   "endpoints": {
     "jiraBase": "https://jira.your-company.example",
     "confluenceBase": "https://confluence.your-company.example",
-    "bitbucketBase": "https://bitbucket.your-company.example"
+    "bitbucketBase": "https://bitbucket.your-company.example",
+    "checkmarxBase": "",
+    "checkmarxAuthUrl": "",
+    "dynatraceTenants": { "prod": "", "uat": "", "dev": "" }
   },
   "excludeProjects": [],
+  "bitbucket": {
+    "projectMap": {},
+    "repoHints": {}
+  },
   "connector": {
     "active": "cursor",
     "cursor": {
