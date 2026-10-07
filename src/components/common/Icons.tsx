@@ -341,6 +341,17 @@ export function TrophyIcon({ size = 16, className = '', glint = false }: IP & { 
   )
 }
 
+/** Raised-by-me: a megaphone — "I called this out". */
+export function MegaphoneIcon({ size = 14, className = '', color = 'currentColor' }: IP) {
+  return (
+    <svg {...svg(size, className)}>
+      <path d="M4 10v4a1.5 1.5 0 0 0 1.5 1.5H8L15 20V4L8 8.5H5.5A1.5 1.5 0 0 0 4 10z" stroke={color} strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M18 9.5a3.4 3.4 0 0 1 0 5" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M8.5 15.8l1 4.2" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function PersonIcon({ size = 11, className = '', color = 'currentColor' }: IP) {
   return (
     <svg {...svg(size, className)}>

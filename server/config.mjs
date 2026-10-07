@@ -22,6 +22,7 @@ export const PATHS = {
   dailyScript: join(RUNNER, 'run-intern.sh'),
   archiveScript: join(RUNNER, 'update-completed.sh'),
   refreshScript: join(RUNNER, 'refresh-ticket.sh'),
+  raisedScript: join(RUNNER, 'refresh-raised.sh'),
   modelCatalog: join(ROOT, 'ai-intern', 'models.json'),
 }
 

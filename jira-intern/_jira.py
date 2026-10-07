@@ -198,6 +198,46 @@ def changelog_done_date(changelog):
     return iso(max(dates)) if dates else None
 
 
+def build_update_log(key, created, status, resolved, changelog, prior_log=None):
+    """Status lifecycle: newest first; text = new status name only; earliest = Opened.
+    Uses the changelog that came back with the search (expand=changelog) — no extra call."""
+    opened_day = (iso(created) or "")[:10] or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    hist = (changelog or {}).get("histories") or []
+    transitions = []
+    for h in sorted(hist, key=lambda x: x.get("created", "")):
+        day = iso(h.get("created"))[:10] if h.get("created") else opened_day
+        for item in h.get("items") or []:
+            if item.get("field") == "status":
+                to_st = item.get("toString")
+                if to_st:
+                    transitions.append((day, to_st))
+    # dedupe consecutive same status
+    deduped = []
+    prev = None
+    for day, st in transitions:
+        if st != prev:
+            deduped.append({"when": day, "text": st})
+            prev = st
+    entries = list(reversed(deduped))
+    if not entries or entries[-1]["text"] != "Opened":
+        entries.append({"when": opened_day, "text": "Opened"})
+
+    if status_column(status) == "done":
+        done_day = (iso(resolved) or "")[:10] or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if not any(e.get("text", "").startswith("Marked DONE") for e in entries):
+            entries.insert(0, {"when": done_day, "text": f"Marked DONE — {done_day}"})
+
+    # merge prior custom entries (Assigned — initial brief, etc.)
+    if prior_log:
+        prior_texts = {e.get("text") for e in entries}
+        for e in prior_log:
+            t = e.get("text") or ""
+            if t.startswith("Assigned") or t.startswith("Marked DONE") or t.startswith("Refreshed"):
+                if t not in prior_texts:
+                    entries.insert(0, e)
+    return entries
+
+
 _LIGHT_TAGS = {"p", "b", "ul", "li", "code", "a", "i", "h3"}
 
 

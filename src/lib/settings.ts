@@ -101,6 +101,14 @@ export const FEATURES = [
       'Keeps the gold Completed counter and the full archive of closed tickets. Turn off for a board that only ever shows work in flight.',
   },
   {
+    key: 'raisedTickets',
+    default: true,
+    label: 'Raised by me',
+    hint: 'Tickets you reported, and who holds them',
+    detail:
+      'Adds the rose Raised chip beside Completed, listing every ticket you reported (sub-tickets you cut under your own work are excluded): its current status, who it is assigned to now, and every hand-off since you raised it.',
+  },
+  {
     key: 'animations',
     default: true,
     label: 'Motion & animations',

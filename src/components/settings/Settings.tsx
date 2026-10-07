@@ -6,7 +6,7 @@ import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel
 import fallbackCatalog from '../../../ai-intern/models.json'
 import { hexToRgba } from '../../lib/format'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
-import { CalendarIcon, DocIcon, DownloadIcon, MoonIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from '../common/Icons'
+import { CalendarIcon, DocIcon, DownloadIcon, MegaphoneIcon, MoonIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from '../common/Icons'
 
 const AI = '#a855f7'
 
@@ -206,7 +206,7 @@ function internTone(ai: AiInternStatus | null | undefined): string {
 }
 
 /** Board sections first, then content, then behaviour — so the 3-column grid reads by row. */
-const FEATURE_ORDER: FeatureKey[] = ['nextSprint', 'onHold', 'completedArchive', 'prReports', 'aiBriefs', 'shortcuts', 'reloadActive', 'autoRefresh', 'animations']
+const FEATURE_ORDER: FeatureKey[] = ['nextSprint', 'onHold', 'completedArchive', 'raisedTickets', 'prReports', 'aiBriefs', 'shortcuts', 'reloadActive', 'autoRefresh', 'animations']
 const ORDERED_FEATURES = [...FEATURES].sort((a, b) => {
   const rank = (k: FeatureKey) => (FEATURE_ORDER.includes(k) ? FEATURE_ORDER.indexOf(k) : FEATURE_ORDER.length)
   return rank(a.key) - rank(b.key)
@@ -438,6 +438,7 @@ const FEATURE_STYLE: Record<FeatureKey, { color: string; icon: (c: string) => Re
   prReports: { color: '#a855f7', icon: (c) => <DocIcon size={13} color={c} /> },
   nextSprint: { color: '#2684ff', icon: (c) => <CalendarIcon size={13} color={c} /> },
   completedArchive: { color: '#b45309', icon: () => <TrophyIcon size={13} /> },
+  raisedTickets: { color: '#f43f5e', icon: (c) => <MegaphoneIcon size={13} color={c} /> },
   animations: { color: '#ec4899', icon: (c) => <SparkleIcon size={13} color={c} /> },
   shortcuts: { color: '#14b8a6', icon: (c) => <SearchIcon size={13} color={c} /> },
   autoRefresh: { color: '#10b981', icon: (c) => <RefreshIcon size={13} color={c} /> },

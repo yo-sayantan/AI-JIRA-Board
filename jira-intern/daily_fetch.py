@@ -23,6 +23,7 @@ from _jira import (  # noqa: E402
     JIRA_BASE,
     REQUIRED_APPROVALS,
     ac_list,
+    build_update_log,
     changelog_done_date,
     comments_for,
     is_excluded,
@@ -41,6 +42,7 @@ from _jira import bb_get as _bb_get  # noqa: E402
 from _sprint import apply_sprint  # noqa: E402
 from datafile import atomic_dump, prepend_status, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
+from raised import build_raised_row, fetch_raised  # noqa: E402
 
 INTERN = os.path.dirname(os.path.abspath(__file__))
 # Host-only form, used to recognise Confluence links among a ticket's remote links.
@@ -84,46 +86,6 @@ def bb_get(path, *, mark_down=True):
         if mark_down:
             BB_OK = False
         raise
-
-
-def build_update_log(key, created, status, resolved, changelog, prior_log=None):
-    """Status lifecycle: newest first; text = new status name only; earliest = Opened.
-    Uses the changelog that came back with the search (expand=changelog) — no extra call."""
-    opened_day = (iso(created) or "")[:10] or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    hist = (changelog or {}).get("histories") or []
-    transitions = []
-    for h in sorted(hist, key=lambda x: x.get("created", "")):
-        day = iso(h.get("created"))[:10] if h.get("created") else opened_day
-        for item in h.get("items") or []:
-            if item.get("field") == "status":
-                to_st = item.get("toString")
-                if to_st:
-                    transitions.append((day, to_st))
-    # dedupe consecutive same status
-    deduped = []
-    prev = None
-    for day, st in transitions:
-        if st != prev:
-            deduped.append({"when": day, "text": st})
-            prev = st
-    entries = list(reversed(deduped))
-    if not entries or entries[-1]["text"] != "Opened":
-        entries.append({"when": opened_day, "text": "Opened"})
-
-    if status_column(status) == "done":
-        done_day = (iso(resolved) or "")[:10] or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        if not any(e.get("text", "").startswith("Marked DONE") for e in entries):
-            entries.insert(0, {"when": done_day, "text": f"Marked DONE — {done_day}"})
-
-    # merge prior custom entries (Assigned — initial brief, etc.)
-    if prior_log:
-        prior_texts = {e.get("text") for e in entries}
-        for e in prior_log:
-            t = e.get("text") or ""
-            if t.startswith("Assigned") or t.startswith("Marked DONE") or t.startswith("Refreshed"):
-                if t not in prior_texts:
-                    entries.insert(0, e)
-    return entries
 
 
 def pr_to_obj(pr, bb_proj=None):
@@ -578,6 +540,7 @@ def _main(existing_path, state_path):
 
     existing = json.load(open(existing_path)) if os.path.isfile(existing_path) else {"tickets": [], "completed": []}
     completed_preserved = copy.deepcopy(existing.get("completed") or [])
+    raised_preserved = copy.deepcopy(existing.get("raised") or [])
     try:
         state = json.load(open(state_path)) if os.path.isfile(state_path) else {}
     except Exception:
@@ -699,8 +662,12 @@ def _main(existing_path, state_path):
         tickets.append(ticket)
         new_state[key] = ticket_to_state(ticket)
 
+    # Raised-by-me rides along with every daily run — one extra search, no per-ticket calls.
+    set_progress("daily", done=total, total=total, phase="raised")
+    raised_rows, raised_ok = fetch_raised(raised_preserved)
+
     set_progress("daily", done=total, total=total, phase="writing")
-    notes = [f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}: Daily fetch — Jira REST" + ("" if BB_OK else "; Bitbucket unreachable — PR/branch data carried forward") + "."]
+    notes = [f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}: Daily fetch — Jira REST" + ("" if BB_OK else "; Bitbucket unreachable — PR/branch data carried forward") + ("" if raised_ok else "; raised-tickets search failed — previous list kept") + "."]
     if changes["new"]:
         notes.append("New: " + ", ".join(k.split(":")[0] for k in changes["new"]))
     if changes["done"]:
@@ -712,6 +679,7 @@ def _main(existing_path, state_path):
         "notes": notes,
         "tickets": tickets,
         "completed": completed_preserved,
+        "raised": raised_rows,
     }
     write_outputs(out)
     atomic_dump(state_path, new_state)
@@ -725,7 +693,8 @@ def _main(existing_path, state_path):
     )
     prepend_status(
         f"{day}: Daily fetch (fast path) — {len(tickets)} active ({summary}); "
-        f"completed[] {len(completed_preserved)} preserved unchanged."
+        f"completed[] {len(completed_preserved)} preserved unchanged; "
+        f"raised[] {len(raised_rows)}" + (" refreshed." if raised_ok else " carried forward (search failed).")
         + ("" if BB_OK else " Bitbucket unreachable — PR data carried forward.")
     )
     set_progress("daily", done=total, total=total, phase="done")
@@ -861,7 +830,20 @@ def refresh_one(key):
     if parent and parent.get("key") and not ticket.get("parentKey"):
         ticket["parentKey"] = parent["key"]
 
-    where = _merge_ticket(data, ticket)
+    # A ticket I raised keeps its raised[] row current too (status / assignee hand-offs).
+    raised_rows = data.get("raised") or []
+    in_raised = any(r.get("key") == key for r in raised_rows)
+    if in_raised:
+        row = build_raised_row(issue)
+        data["raised"] = [row if r.get("key") == key else r for r in raised_rows]
+
+    if prior is None and in_raised and not is_mine((issue.get("fields") or {}).get("assignee")):
+        # Raised-only ticket owned by someone else: updating its raised row is the whole job.
+        # Falling through to _merge_ticket would APPEND it to tickets[] and plant someone
+        # else's work on my active board.
+        where = "raised"
+    else:
+        where = _merge_ticket(data, ticket)
     data["generatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Touch notes so the dump is visibly fresh even when fields look identical.
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -886,16 +868,53 @@ def refresh_one(key):
     return data, ticket, where
 
 
+def refresh_raised_only():
+    """Re-fetch ONLY raised[] and merge it into data.json / data.js.
+
+    Backs the Raised view's own refresh button (local-runner/refresh-raised.sh): tickets I
+    reported but don't work are invisible to the normal board refresh, so this is the one
+    cheap pull that keeps that list current without touching tickets[] or completed[].
+    """
+    load_env()
+    if not os.environ.get("JIRA_PERSONAL_TOKEN"):
+        raise SystemExit("refresh_raised: JIRA_PERSONAL_TOKEN missing")
+    existing_path = os.path.join(INTERN, "data.json")
+    data = json.load(open(existing_path)) if os.path.isfile(existing_path) else {"tickets": [], "completed": []}
+    before = len(data.get("raised") or [])
+    rows, ok = fetch_raised(data.get("raised") or [])
+    if not ok:
+        raise SystemExit("refresh_raised: Jira search failed — kept the previous list")
+    data["raised"] = rows
+    data["generatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    note = f"{day}: Refreshed raised tickets ({len(rows)})."
+    notes = [note] + [n for n in (data.get("notes") or []) if not (isinstance(n, str) and n.startswith(f"{day}: Refreshed raised tickets"))]
+    data["notes"] = notes[:12]
+    write_outputs(data)
+    prepend_status(f"{day}: Raised-only refresh — {len(rows)} tickets reported by me ({before} before).")
+    return data, rows
+
+
 if __name__ == "__main__":
     import argparse
 
-    ap = argparse.ArgumentParser(description="Daily jira-intern fetch (or --key for one ticket)")
+    ap = argparse.ArgumentParser(description="Daily jira-intern fetch (or --key for one ticket, --raised for the raised-by-me list)")
     ap.add_argument("--key", help="Refresh a single ticket and merge into data.json")
+    ap.add_argument("--raised", action="store_true", help="Refresh only the raised-by-me list and merge into data.json")
     args = ap.parse_args()
 
     t0 = time.monotonic()
     try:
-        if args.key:
+        if args.raised:
+            out, rows = refresh_raised_only()
+            print(json.dumps({
+                "mode": "refresh_raised",
+                "raised": len(rows),
+                "open": sum(1 for r in rows if not r.get("done")),
+                "generatedAt": out["generatedAt"],
+                "durationSec": round(time.monotonic() - t0, 1),
+            }, indent=2))
+        elif args.key:
             out, ticket, where = refresh_one(args.key)
             print(json.dumps({
                 "mode": "refresh_one",
@@ -915,6 +934,7 @@ if __name__ == "__main__":
                 "durationSec": round(time.monotonic() - t0, 1),
                 "tickets": len(out["tickets"]),
                 "completed": len(out["completed"]),
+                "raised": len(out.get("raised") or []),
                 "keys": [t["key"] for t in out["tickets"]],
                 "changes": changes,
                 "changedCount": changed_count,

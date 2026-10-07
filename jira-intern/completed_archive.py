@@ -45,6 +45,7 @@ from _jira import (  # noqa: E402
 from _sprint import apply_sprint  # noqa: E402
 from datafile import atomic_write, prepend_status, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
+from raised import refresh_raised_in_place  # noqa: E402
 
 INTERN = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(INTERN, "cache")
@@ -267,6 +268,18 @@ def merge_completed_only(completed_list):
     write_outputs(data)
 
 
+def _refresh_raised():
+    """Re-fetch raised[] into data.json → (ok, count). Failure keeps the previous list."""
+    try:
+        data = json.loads(open(DATA_JSON, "r", encoding="utf-8").read())
+        ok = refresh_raised_in_place(data)
+        if ok:
+            write_outputs(data)
+        return ok, len(data.get("raised") or [])
+    except Exception:
+        return False, 0
+
+
 def _scope():
     """all | year | since | key, from the board menu. Anything else is a full archive."""
     scope = (os.environ.get("ARCHIVE_SCOPE") or "all").strip().lower()
@@ -457,6 +470,11 @@ def _main(ts):
         merge_completed_only(rows)
     completed = rows
 
+    # The rebuild is the "refresh my history" action, so the raised-by-me list (tickets I
+    # REPORTED, for the board's Raised view) rides along — one extra search on a long run.
+    set_progress("archive", done=total, total=total, phase="raised", pct=99)
+    raised_ok, raised_count = _refresh_raised()
+
     mine_count = sum(1 for r in completed if r.get("mine"))
     context_count = len(completed) - mine_count
     sub_count = sum(1 for r in completed if r.get("parentKey"))
@@ -465,12 +483,15 @@ def _main(ts):
         f"({mine_count} mine + {context_count} parent tickets I have a sub-ticket under; "
         f"{sub_count} of the rows are sub-tickets). {len(newly_cached)} rebuilt this run, "
         f"{len(done_keys) - len(stale)} skipped over maxFetch, {len(failed)} failed. "
-        f"Jira dev-status; merged completed[] only — tickets[] untouched."
+        f"Jira dev-status; merged completed[] — tickets[] untouched. "
+        + (f"raised[] refreshed ({raised_count})." if raised_ok else "raised[] carried forward (search failed).")
     )
     prepend_status(note)
     set_progress("archive", done=total, total=total, phase="done", pct=100)
     print(json.dumps({
         "completed_in_archive": len(completed),
+        "raised": raised_count,
+        "raised_refreshed": raised_ok,
         "mine": mine_count,
         "context_parents": context_count,
         "subtasks": sub_count,

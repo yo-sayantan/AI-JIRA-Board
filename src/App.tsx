@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ColumnKey } from './types'
 import { RUN_COMMAND, aiModelLabel, enrichJobsRunning, isServed } from './lib/runner'
-import { countMyCompleted, countTicketsWithPr, hasActiveWork, indexByKey, splitBoard } from './lib/boardView'
+import { countMyCompleted, countRaised, countTicketsWithPr, hasActiveWork, indexByKey, splitBoard } from './lib/boardView'
 import { freshness } from './lib/format'
 import { parseQuery } from './lib/search'
 import { useBoardData } from './hooks/useBoardData'
@@ -25,6 +25,7 @@ import { EmptyState } from './components/board/EmptyState'
 import { FunEmptyBoard } from './components/board/FunEmptyBoard'
 import { StaleBanner } from './components/board/StaleBanner'
 import { CompletedOverlay } from './components/completed/Completed'
+import { RaisedOverlay } from './components/raised/Raised'
 import { TicketDetail } from './components/ticket/TicketDetail'
 import { PrReportOverlay } from './components/reports/PrReport'
 import { SettingsPanel } from './components/settings/Settings'
@@ -44,6 +45,7 @@ export default function App() {
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [completedOpen, setCompletedOpen] = useState(false)
+  const [raisedOpen, setRaisedOpen] = useState(false)
   const [query, setQuery] = useState('')
   // One selection drives the chip row: a column filters the board, 'next' reveals the Next Sprint
   // bar, 'all' reveals everything expanded. Picking any chip clears the others.
@@ -56,13 +58,14 @@ export default function App() {
 
   const byKey = useMemo(() => indexByKey(data), [data])
   const drawers = useDrawerStack(byKey)
-  useScrollLock(drawers.open || completedOpen)
-  useShortcuts(features.shortcuts && !drawers.open && !completedOpen, jobs.refreshBoard)
+  useScrollLock(drawers.open || completedOpen || raisedOpen)
+  useShortcuts(features.shortcuts && !drawers.open && !completedOpen && !raisedOpen, jobs.refreshBoard)
 
   const terms = useMemo(() => parseQuery(query), [query])
   const view = useMemo(() => splitBoard(data.tickets, terms, now, features.onHold), [data.tickets, terms, now, features.onHold])
   const hasAnyActive = useMemo(() => hasActiveWork(data.tickets, now, features.onHold), [data.tickets, now, features.onHold])
   const myCompletedCount = useMemo(() => countMyCompleted(data), [data])
+  const raisedCount = useMemo(() => countRaised(data), [data])
   const ticketsWithPr = useMemo(() => countTicketsWithPr(data), [data])
   const doneOnBoard = useMemo(() => new Set(data.tickets.filter((t) => t.column === 'done').map((t) => t.key)), [data.tickets])
   const fr = freshness(data.generatedAt, now)
@@ -104,6 +107,8 @@ export default function App() {
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
   const openCompleted = useCallback(() => setCompletedOpen(true), [])
   const closeCompleted = useCallback(() => setCompletedOpen(false), [])
+  const openRaised = useCallback(() => setRaisedOpen(true), [])
+  const closeRaised = useCallback(() => setRaisedOpen(false), [])
   const clearSearch = useCallback(() => {
     setQuery('')
     setSel(null)
@@ -167,10 +172,12 @@ export default function App() {
       <Stats
         tickets={view.board}
         completedCount={features.completedArchive ? myCompletedCount : null}
+        raisedCount={features.raisedTickets && raisedCount.total > 0 ? raisedCount : null}
         nextSprintCount={features.nextSprint ? view.nextSprint.length : 0}
         active={sel}
         onSelect={setSel}
         onOpenCompleted={features.completedArchive ? openCompleted : undefined}
+        onOpenRaised={features.raisedTickets ? openRaised : undefined}
       />
 
       {!hasAnyActive ? (
@@ -253,6 +260,17 @@ export default function App() {
       </AnimatePresence>
 
       <CompletedOverlay open={completedOpen} onClose={closeCompleted} items={data.completed} onOpen={drawers.openTicket} pauseEsc={drawers.open} />
+
+      <RaisedOverlay
+        open={raisedOpen}
+        onClose={closeRaised}
+        items={data.raised ?? []}
+        onOpen={drawers.openTicket}
+        user={data.user}
+        onRefresh={served ? jobs.refreshRaised : undefined}
+        refreshing={jobs.running === 'raised'}
+        pauseEsc={drawers.open}
+      />
 
       <PrReportOverlay
         report={reports.openReport}

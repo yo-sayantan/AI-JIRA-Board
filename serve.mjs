@@ -8,7 +8,7 @@ import { createServer } from 'node:http'
 import { stat } from 'node:fs/promises'
 import { BOARD_PATH, DATE_RE, HOST, KEY_RE, PATHS, PORT, ROOT, YEAR_RE } from './server/config.mjs'
 import { createStaticHandler, json, readBody } from './server/http.mjs'
-import { runStatus, startArchive, startDaily, stopArchive, ticketRefresh } from './server/jobs.mjs'
+import { runStatus, startArchive, startDaily, startRaised, stopArchive, ticketRefresh } from './server/jobs.mjs'
 import { externalGenerating, readReport, reportQueue, reportsIndex, resolveReportKeys, stopReports } from './server/reports.mjs'
 import { aiStatus, enrichingKeys, localCatalog, proxyAi } from './server/ai.mjs'
 import { readBoardSettings, updateBoardSettings } from './server/settings.mjs'
@@ -88,6 +88,13 @@ const routes = {
   'POST /api/run-archive/stop': async (req, res) => {
     await stopArchive()
     json(res, 200, { ok: true, stopped: true })
+  },
+
+  // Raised-by-me only — the refresh button inside the Raised view. One quick JQL search.
+  'POST /api/run-raised': async (req, res) => {
+    const runAt = await startRaised()
+    if (!runAt) return json(res, 409, { ok: false, running: true })
+    json(res, 202, { ok: true, started: true, runAt })
   },
 
   // Already active or queued is an idempotent success, so the UI can keep watching.

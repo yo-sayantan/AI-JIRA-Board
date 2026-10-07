@@ -1,4 +1,4 @@
-import { completedToTicket, type JiraData, type Ticket } from '../types'
+import { completedToTicket, raisedToTicket, type JiraData, type Ticket } from '../types'
 import { isNextSprint, prListOf } from './format'
 import { matches, type Term } from './search'
 
@@ -37,7 +37,9 @@ export function hasActiveWork(tickets: Ticket[], now: number, onHoldSection: boo
 export function indexByKey(data: JiraData): Map<string, Ticket> {
   const index = new Map<string, Ticket>()
   const nested: Ticket[] = []
-  for (const t of [...data.tickets, ...data.completed.map(completedToTicket)]) {
+  // Raised rows come LAST: a ticket that is also on the board / in the archive keeps its
+  // richer object (code, comments, subtasks) — the compact raised row is only a fallback.
+  for (const t of [...data.tickets, ...data.completed.map(completedToTicket), ...(data.raised ?? []).map(raisedToTicket)]) {
     if (!index.has(t.key)) index.set(t.key, t)
     if (t.subtasks?.length) nested.push(...t.subtasks)
   }
@@ -64,4 +66,10 @@ export function countTicketsWithPr(data: JiraData): number {
 
 export function countMyCompleted(data: JiraData): number {
   return data.completed.filter((c) => c.mine !== false && !c.parentKey).length
+}
+
+/** The Raised chip shows open/total: "still needs fixing" is the number that matters. */
+export function countRaised(data: JiraData): { total: number; open: number } {
+  const rows = data.raised ?? []
+  return { total: rows.length, open: rows.filter((r) => !(r.done ?? r.column === 'done')).length }
 }
