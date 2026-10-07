@@ -64,6 +64,9 @@ COPY config ./config
 # The Setup & Deployment guide, served at /docs/index.html — this is what the board's
 # help (?) button opens, so it must exist inside the image, not just in the repo.
 COPY docs ./docs
+# The guide links to /setup/README.md (the secrets/config checklist) and its templates;
+# serve.mjs allows /setup/, so the files must be in the image or those links 404.
+COPY setup ./setup
 COPY ai-intern/models.json ./ai-intern/models.json
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh \
