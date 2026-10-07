@@ -46,12 +46,12 @@ function Section({
   className?: string
 }) {
   return (
-    <section className={`min-w-0 ${className}`}>
-      <div className="mb-1.5 flex h-4 items-center gap-3">
+    <section className={`flex min-w-0 flex-col rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] p-3 ${className}`}>
+      <div className="mb-2 flex h-4 items-center gap-3">
         <h3 className="shrink-0 text-[10.5px] font-bold uppercase tracking-wider text-[var(--muted)]">{title}</h3>
         {aside && <div className="ml-auto flex min-w-0 items-center text-[10.5px]">{aside}</div>}
       </div>
-      {children}
+      <div className="min-w-0 flex-1">{children}</div>
     </section>
   )
 }
@@ -374,8 +374,8 @@ export function SettingsPanel({
               </button>
             </header>
 
-            <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-4 px-4 pb-4 pt-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <div className="flex min-w-0 flex-col gap-4">
+            <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] gap-3 px-4 pb-4 pt-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="flex min-w-0 flex-col gap-3">
                 <Section title="Appearance">
                   <Segmented
                     label="Appearance"
@@ -403,6 +403,20 @@ export function SettingsPanel({
                     <p className={`absolute inset-0 flex items-center truncate text-[11.5px] text-[var(--muted)] ${settings.themeMode === 'schedule' ? 'invisible' : ''}`}>
                       {APPEARANCE.find((m) => m.key === appearanceKey(settings))?.hint}
                     </p>
+                  </div>
+                </Section>
+
+                <Section title="Notifications">
+                  <div className="grid grid-cols-2 gap-x-3">
+                    <label className="flex h-8 min-w-0 items-center gap-2 text-[11.5px] font-semibold text-[var(--ink-soft)]">
+                      <span className="shrink-0">Close after</span>
+                      <NumberBox label="Seconds a notification stays" hint="Seconds a notification stays before it closes itself" limit="toastSeconds" value={settings.toastSeconds} onChange={(v) => set('toastSeconds', v)} className="w-[4.75rem]" />
+                      <span className="shrink-0 font-normal text-[var(--muted)]">sec</span>
+                    </label>
+                    <label className="flex h-8 min-w-0 items-center gap-2 text-[11.5px] font-semibold text-[var(--ink-soft)]">
+                      <span className="shrink-0">Show at most</span>
+                      <NumberBox label="Notifications on screen" hint="More than this wait their turn and appear as earlier ones close" limit="toastMax" value={settings.toastMax} onChange={(v) => set('toastMax', v)} className="w-[4.75rem]" />
+                    </label>
                   </div>
                 </Section>
 
@@ -435,8 +449,9 @@ export function SettingsPanel({
                 </Section>
               </div>
 
-              <div className="flex min-w-0 flex-col gap-4">
+              <div className="flex min-w-0 flex-col">
                 <Section
+                  className="h-full"
                   title="AI"
                   aside={
                     aiLevelSynced ? (
@@ -464,19 +479,6 @@ export function SettingsPanel({
                   </div>
                 </Section>
 
-                <Section title="Notifications">
-                  <div className="grid grid-cols-2 gap-x-3">
-                    <label className="flex h-8 min-w-0 items-center gap-2 text-[11.5px] font-semibold text-[var(--ink-soft)]">
-                      <span className="shrink-0">Close after</span>
-                      <NumberBox label="Seconds a notification stays" hint="Seconds a notification stays before it closes itself" limit="toastSeconds" value={settings.toastSeconds} onChange={(v) => set('toastSeconds', v)} className="w-[4.75rem]" />
-                      <span className="shrink-0 font-normal text-[var(--muted)]">sec</span>
-                    </label>
-                    <label className="flex h-8 min-w-0 items-center gap-2 text-[11.5px] font-semibold text-[var(--ink-soft)]">
-                      <span className="shrink-0">Show at most</span>
-                      <NumberBox label="Notifications on screen" hint="More than this wait their turn and appear as earlier ones close" limit="toastMax" value={settings.toastMax} onChange={(v) => set('toastMax', v)} className="w-[4.75rem]" />
-                    </label>
-                  </div>
-                </Section>
               </div>
 
               <Section
@@ -806,7 +808,7 @@ function AiInternControls({
         )}
       </div>
 
-      <div className="flex min-h-[10.5rem] min-w-0 flex-col gap-1.5">
+      <div className="flex min-h-[6.5rem] min-w-0 flex-col gap-1.5">
       {settings.aiBackend !== 'cloud' && (
         <OllamaStatusRow enabled={settings.ollamaEnabled} info={aiStatus?.container ?? null} showList={settings.showLocalModels} onShowList={(v) => set('showLocalModels', v)} />
       )}
