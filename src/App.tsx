@@ -264,6 +264,8 @@ export default function App() {
         user={data.user}
         onRefresh={served ? jobs.refreshRaised : undefined}
         refreshing={jobs.running === 'raised'}
+        fetchedAt={data.raisedAt ?? null}
+        briefsEnabled={features.aiBriefs}
         pauseEsc={drawers.open}
       />
 

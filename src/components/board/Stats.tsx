@@ -5,7 +5,8 @@ import type { ColumnKey, Ticket } from '../../types'
 import { hexToRgba } from '../../lib/format'
 import { MegaphoneIcon, TrophyIcon, TicketGlyph } from '../common/Icons'
 
-const RAISED = '#f43f5e' // identity colour of the Raised-by-me view
+// Identity of the Raised-by-me view — indigo, deliberately not a red/alarm family.
+const RAISED = '#6366f1'
 
 /**
  * What the top chip row currently has selected. A column key filters the board to that
@@ -146,24 +147,29 @@ export const Stats = memo(function Stats({
 
       {(completedCount != null || raisedCount != null) && (
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {/* Deliberately quieter than the gold Completed trophy: thin rose outline, no sheen.
-              open/total because "still needs fixing" is the number this view exists for. */}
+          {/* A raised key beside the gold trophy: indigo gradient face, inner bevel, solid
+              ledge — it presses down on tap. open/total because "still needs fixing" is the
+              number this view exists for. */}
           {raisedCount != null && (
             <motion.button
-              whileHover={{ scale: 1.03, y: -1 }}
-              whileTap={{ scale: 0.96 }}
+              whileHover={{ y: -1, scale: 1.02 }}
+              whileTap={{ y: 2, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 400, damping: 22 }}
               onClick={onOpenRaised}
-              title={`Tickets you raised (sub-tickets excluded) — ${raisedCount.open} of ${raisedCount.total} still open. See each one's status and who holds it now.`}
-              className="inline-flex items-center gap-1.5 rounded-full border px-3.5 py-[7.5px] text-[12.5px] font-bold transition-colors"
-              style={{ borderColor: hexToRgba(RAISED, 0.45), color: RAISED, background: hexToRgba(RAISED, 0.07) }}
+              title={`Tickets you raised (sub-tickets excluded) — ${raisedCount.open} of ${raisedCount.total} still open. See each one's status, who holds it now, and every hand-off.`}
+              className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-extrabold text-white transition-[filter] hover:brightness-[1.06]"
+              style={{
+                background: 'linear-gradient(180deg, #818cf8, #6366f1 55%, #4f46e5)',
+                boxShadow: `inset 0 1.5px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(0,0,0,0.18), 0 4px 0 #3730a3, 0 10px 18px -8px ${hexToRgba(RAISED, 0.6)}`,
+                textShadow: '0 1px 2px rgba(0,0,0,0.35)',
+              }}
             >
-              <MegaphoneIcon size={14} color={RAISED} />
+              <MegaphoneIcon size={14} color="#fff" />
               Raised{' '}
               <b className="tabular-nums">
                 <AnimatedNumber value={raisedCount.open} />
               </b>
-              <span className="-ml-0.5 text-[11px] font-semibold tabular-nums opacity-60">/ {raisedCount.total}</span>
+              <span className="-ml-0.5 text-[11px] font-bold tabular-nums opacity-75">/ {raisedCount.total}</span>
             </motion.button>
           )}
 

@@ -680,6 +680,7 @@ def _main(existing_path, state_path):
         "tickets": tickets,
         "completed": completed_preserved,
         "raised": raised_rows,
+        "raisedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if raised_ok else existing.get("raisedAt"),
     }
     write_outputs(out)
     atomic_dump(state_path, new_state)
@@ -885,7 +886,9 @@ def refresh_raised_only():
     if not ok:
         raise SystemExit("refresh_raised: Jira search failed — kept the previous list")
     data["raised"] = rows
-    data["generatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    data["raisedAt"] = now_iso
+    data["generatedAt"] = now_iso
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     note = f"{day}: Refreshed raised tickets ({len(rows)})."
     notes = [note] + [n for n in (data.get("notes") or []) if not (isinstance(n, str) and n.startswith(f"{day}: Refreshed raised tickets"))]
