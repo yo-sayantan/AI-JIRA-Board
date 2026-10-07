@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ACTIVE_CADENCE, AI_LEVELS, BOARD_CADENCE, FEATURES, LIMITS, clampSetting, type AiCloudProvider, type FeatureKey, type Settings } from '../../lib/settings'
 import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice, type OllamaContainerInfo } from '../../lib/runner'
@@ -51,7 +50,7 @@ function Section({
         <h3 className="shrink-0 text-[10.5px] font-bold uppercase tracking-wider text-[var(--muted)]">{title}</h3>
         {aside && <div className="ml-auto flex min-w-0 items-center text-[10.5px]">{aside}</div>}
       </div>
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
     </section>
   )
 }
@@ -293,7 +292,6 @@ export function SettingsPanel({
   const [draft, setDraft] = useState(saved)
   const wasOpen = useRef(false)
   const panelRef = useRef<HTMLElement>(null)
-  const [pricesOpen, setPricesOpen] = useState(false)
   useDialogFocus(open, panelRef)
   useEffect(() => {
     if (open && !wasOpen.current) setDraft(saved)
@@ -464,18 +462,23 @@ export function SettingsPanel({
                     )
                   }
                 >
-                  <AiLevelPicker value={settings.aiLevel} onChange={(v) => set('aiLevel', v)} />
-                  <p className="mt-1 h-4 truncate text-[11px] leading-4 text-[var(--muted)]">
-                    {AI_LEVELS.find((l) => l.key === settings.aiLevel)?.hint} · applies from the next report
-                  </p>
-                  <div className="mt-2">
-                    {aiLevelSynced ? (
-                      <AiInternControls settings={settings} onChange={onChange} aiStatus={aiStatus} pricesOpen={pricesOpen} onTogglePrices={() => setPricesOpen((v) => !v)} panelRef={panelRef} />
-                    ) : (
-                      <p className="grid h-[108px] place-items-center rounded-lg border border-dashed border-[var(--line)] px-3 text-center text-[11.5px] text-[var(--muted)]">
-                        Local or Cloud AI and the model picker need AI-Intern running.
+                  {/* Groups spread over the card's full height so the column never shows a dead area. */}
+                  <div className="flex h-full flex-col gap-4">
+                    <div>
+                      <AiLevelPicker value={settings.aiLevel} onChange={(v) => set('aiLevel', v)} />
+                      <p className="mt-1.5 h-4 truncate text-[11px] leading-4 text-[var(--muted)]">
+                        {AI_LEVELS.find((l) => l.key === settings.aiLevel)?.hint} · applies from the next report
                       </p>
-                    )}
+                    </div>
+                    <div className="flex flex-1 flex-col">
+                      {aiLevelSynced ? (
+                        <AiInternControls settings={settings} onChange={onChange} aiStatus={aiStatus} />
+                      ) : (
+                        <p className="grid flex-1 place-items-center rounded-lg border border-dashed border-[var(--line)] px-3 text-center text-[11.5px] text-[var(--muted)]">
+                          Local or Cloud AI and the model picker need AI-Intern running.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </Section>
 
@@ -732,16 +735,10 @@ function AiInternControls({
   settings,
   onChange,
   aiStatus,
-  pricesOpen,
-  onTogglePrices,
-  panelRef,
 }: {
   settings: Settings
   onChange: (next: Settings) => void
   aiStatus?: AiInternStatus | null
-  pricesOpen: boolean
-  onTogglePrices: () => void
-  panelRef: RefObject<HTMLElement | null>
 }) {
   const fallback = (fallbackCatalog.models ?? []) as AiCatalogModel[]
   const [catalog, setCatalog] = useState<AiCatalogModel[]>(aiStatus?.catalog?.models?.length ? aiStatus.catalog.models : fallback)
@@ -775,7 +772,7 @@ function AiInternControls({
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value })
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex h-full flex-col gap-3">
       <div className="grid grid-cols-2 gap-1.5">
         <Segmented
           label="AI backend"
@@ -808,14 +805,14 @@ function AiInternControls({
         )}
       </div>
 
-      <div className="flex min-h-[6.5rem] min-w-0 flex-col gap-1.5">
+      <div className="flex min-h-[6.5rem] min-w-0 flex-1 flex-col justify-evenly gap-3">
       {settings.aiBackend !== 'cloud' && (
         <OllamaStatusRow enabled={settings.ollamaEnabled} info={aiStatus?.container ?? null} showList={settings.showLocalModels} onShowList={(v) => set('showLocalModels', v)} />
       )}
 
       {settings.aiBackend === 'cloud' ? (
 
-          <CloudModelPicker settings={settings} onChange={onChange} pricesOpen={pricesOpen} onTogglePrices={onTogglePrices} panelRef={panelRef} />
+          <CloudModelPicker settings={settings} onChange={onChange} />
         ) : (
           <>
           {settings.showLocalModels && (
@@ -861,94 +858,6 @@ const CLOUD_EFFORTS: { id: Settings['aiCloudEffort']; label: string }[] = [
 
 /** Standard (non-fast) list rates, USD per 1M tokens. Medium bills at these rates.
  *  Source: cursor.com/docs/models-and-pricing. Only models at or under $10 output. */
-const CURSOR_RATES: Record<string, { input: string; cache: string; output: string }> = {
-  'gpt-5.6-luna': { input: '$0.20', cache: '$0.02', output: '$1.20' },
-  'composer-2.5': { input: '$0.50', cache: '$0.20', output: '$2.50' },
-  'gemini-3-flash': { input: '$0.50', cache: '$0.05', output: '$3' },
-  'kimi-k2.7-code': { input: '$0.95', cache: '$0.19', output: '$4' },
-  'glm-5.2': { input: '$1.40', cache: '$0.26', output: '$4.40' },
-  'grok-4.7': { input: '$2', cache: '$0.50', output: '$6' },
-  'grok-4.6': { input: '$2', cache: '$0.50', output: '$6' },
-  'gemini-3.6-flash': { input: '$1.50', cache: '$0.15', output: '$7.50' },
-  'claude-sonnet-5': { input: '$2', cache: '$0.20', output: '$10' },
-}
-
-function CursorPriceCard({
-  anchor,
-  models,
-  onClose,
-}: {
-  anchor: RefObject<HTMLElement | null>
-  models: CloudModelChoice[]
-  onClose: () => void
-}) {
-  const [box, setBox] = useState<{ top: number; left: number; maxH: number } | null>(null)
-  useLayoutEffect(() => {
-    const place = () => {
-      const el = anchor.current
-      if (!el) return
-      const r = el.getBoundingClientRect()
-      const width = Math.min(400, window.innerWidth - 16)
-      const gap = 12
-      const fitsRight = window.innerWidth - r.right - gap >= width
-      const left = fitsRight ? r.right + gap : Math.max(8, r.left - gap - width)
-      const top = Math.max(8, r.top)
-      setBox({ top, left, maxH: Math.max(160, window.innerHeight - top - 8) })
-    }
-    place()
-    window.addEventListener('resize', place)
-    window.visualViewport?.addEventListener('resize', place)
-    window.visualViewport?.addEventListener('scroll', place)
-    return () => {
-      window.removeEventListener('resize', place)
-      window.visualViewport?.removeEventListener('resize', place)
-      window.visualViewport?.removeEventListener('scroll', place)
-    }
-  }, [anchor, models])
-  if (!box) return null
-  return createPortal(
-    <div
-      className="fixed z-[120] w-[min(92vw,400px)] overflow-auto rounded-xl border border-[var(--line)] bg-[var(--surface-solid)] p-2.5 shadow-2xl"
-      style={{ top: box.top, left: box.left, maxHeight: box.maxH }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold text-[var(--ink)]">Estimate · medium · standard speed</span>
-        <button type="button" onClick={onClose} className="text-[12px] text-[var(--muted)] hover:text-[var(--ink)]" aria-label="Close prices">
-          ×
-        </button>
-      </div>
-      <table className="w-full border-collapse text-[10.5px]">
-        <thead>
-          <tr className="text-left text-[var(--muted)]">
-            <th className="pb-1 pr-2 font-semibold">Model</th>
-            <th className="pb-1 pr-2 font-semibold">Input</th>
-            <th className="pb-1 pr-2 font-semibold">Cache read</th>
-            <th className="pb-1 font-semibold">Output</th>
-          </tr>
-        </thead>
-        <tbody>
-          {models.map((m) => {
-            const rate = CURSOR_RATES[m.id]
-            return (
-              <tr key={m.id} className="border-t border-[var(--line)] text-[var(--ink-soft)]">
-                <td className="py-1 pr-2 font-medium text-[var(--ink)]">{m.label}</td>
-                <td className="py-1 pr-2 tabular-nums">{rate?.input ?? '—'}</td>
-                <td className="py-1 pr-2 tabular-nums">{rate?.cache ?? '—'}</td>
-                <td className="py-1 tabular-nums">{rate?.output ?? '—'}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      <p className="mt-1.5 text-[10px] leading-snug text-[var(--muted)]">
-        USD per 1M tokens. Low uses less tokens than Medium.
-      </p>
-    </div>,
-    document.body,
-  )
-}
-
 const CLOUD_PROVIDER_INFO: Record<
   AiCloudProvider,
   { label: string; missingKey: string; about: string; prefer: (models: CloudModelChoice[]) => CloudModelChoice }
@@ -976,15 +885,9 @@ const CLOUD_PROVIDER_INFO: Record<
 function CloudModelPicker({
   settings,
   onChange,
-  pricesOpen,
-  onTogglePrices,
-  panelRef,
 }: {
   settings: Settings
   onChange: (s: Settings) => void
-  pricesOpen: boolean
-  onTogglePrices: () => void
-  panelRef: RefObject<HTMLElement | null>
 }) {
   const provider = cloudProviderOf(settings)
   const info = CLOUD_PROVIDER_INFO[provider]
@@ -1051,19 +954,16 @@ function CloudModelPicker({
             ))}
           </select>
         )}
-        {provider === 'cursor' && (
-          <button
-            type="button"
-            onClick={onTogglePrices}
-            aria-expanded={pricesOpen}
-            aria-label="Show Cursor model prices"
-            title="Price estimate per model"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--line)] text-[12px] font-bold italic text-[var(--muted)] hover:border-[var(--muted)] hover:text-[var(--ink)]"
-          >
-            i
-          </button>
-        )}
-        {provider === 'cursor' && pricesOpen && <CursorPriceCard anchor={panelRef} models={models} onClose={onTogglePrices} />}
+        <a
+          href={guideUrl('ai-cloud-prices')}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Cloud model prices and notes — opens the guide"
+          title="Cloud model prices and notes — opens the guide"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--line)] text-[12px] font-bold italic text-[var(--ink-soft)] hover:border-[var(--muted)] hover:text-[var(--ink)]"
+        >
+          i
+        </a>
       </div>
       <p className="h-8 line-clamp-2 text-[10.5px] leading-4 text-[var(--muted)]" title={hint}>
         {hint}
