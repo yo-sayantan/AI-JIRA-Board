@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getServerSettings, saveServerSettings } from '../lib/runner'
+import { getServerSettings, saveServerSettings, type OllamaAction } from '../lib/runner'
 import {
   applySettings,
   loadSettings,
@@ -15,7 +15,7 @@ import {
  * Board settings: persisted locally, applied to <html>, and in served mode synced with the server
  * so scheduled and background jobs honour the same AI and cadence choices.
  */
-export function useBoardSettings(served: boolean, now: number) {
+export function useBoardSettings(served: boolean, now: number, onOllama?: (action: OllamaAction) => void) {
   const [settings, setSettings] = useState<Settings>(loadSettings)
   // `ready` opens the Settings panel once the first GET settles, success or not. `synced` is true
   // only after a GET succeeded: until then a POST would overwrite the server with this browser's guess.
@@ -25,6 +25,8 @@ export function useBoardSettings(served: boolean, now: number) {
   const settingsRef = useRef(settings)
   settingsRef.current = settings
   const lastSent = useRef<string | null>(null)
+  const onOllamaRef = useRef(onOllama)
+  onOllamaRef.current = onOllama
   const dark = useMemo(() => resolveDark(settings, new Date(now)), [settings, now])
 
   useEffect(() => saveSettings(settings), [settings])
@@ -46,8 +48,11 @@ export function useBoardSettings(served: boolean, now: number) {
   useEffect(() => {
     if (!served || !synced || lastSent.current === serverJson) return
     lastSent.current = serverJson
-    void saveServerSettings(JSON.parse(serverJson) as ServerSettings).then((ok) => {
-      if (ok) return
+    void saveServerSettings(JSON.parse(serverJson) as ServerSettings).then((result) => {
+      if (result) {
+        if (result !== 'unchanged') onOllamaRef.current?.(result)
+        return
+      }
       lastSent.current = null
       setSaveFailed((n) => n + 1)
     })

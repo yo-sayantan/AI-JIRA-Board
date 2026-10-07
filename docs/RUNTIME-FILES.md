@@ -28,7 +28,7 @@ these files. All of them are git-ignored; none is ever needed in a commit.
 | `reports/.status.json` | `pr_report.py status-add/remove` (runners, worker) | `server/reports.mjs externalGenerating`, `sync-reports.mjs` | `{ generating: { KEY: { pid, startedAt } } }` — who is building what; dead PIDs and rows older than 25 min are ignored. |
 | `reports/.base-<KEY>.json` | AI worker | AI worker | Snapshot of the deterministic base while enriching; restored on failure, deleted after. |
 | `reports/index.js` | `local-runner/sync-reports.mjs` | the browser on `file://` | `window.__JIRA_PR_REPORTS__` — every report inlined, plus `generating`. |
-| `models/*.gguf` | you | Ollama (by hand, see the offline guide) | Hand-dropped model weights. |
+| `models/` | Ollama (pulls), you (`*.gguf`) | `server/ollama.mjs` (gates the container), Ollama (`/root/.ollama`) | Ollama's whole store plus hand-dropped weights. The AI-Ollama container runs only when Settings' toggle is on **and** this holds a model. |
 
 Paths the Node server knows are listed in `server/config.mjs` `PATHS`; the Python side builds the
 same names from `INTERN = dirname(__file__)`.

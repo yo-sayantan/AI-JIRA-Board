@@ -38,6 +38,13 @@ export interface Settings {
   aiUseHostOllama: boolean
   /** PR readiness reports the AI intern builds at once. */
   reportParallel: number
+  /**
+   * Settings toggle for the AI-Ollama Docker container. Even when on, the container only runs
+   * while jira-intern/models/ holds a model (the server enforces that).
+   */
+  ollamaEnabled: boolean
+  /** Show the local-model list in the AI section (display only; the container is a Feature). */
+  showLocalModels: boolean
   /** Tickets the Completed-archive rebuild fetches at once. */
   archiveParallel: number
   /** Tickets the dashboard refresh builds at once. */
@@ -214,6 +221,7 @@ const SERVER_FIELDS = {
   aiCloudProvider: oneOf<AiCloudProvider>(['claude', 'cursor', 'gemini']),
   aiCloudEffort: oneOf<AiCloudEffort>(['low', 'medium']),
   aiUseHostOllama: bool,
+  ollamaEnabled: bool,
   reportParallel: bounded('reportParallel'),
   archiveParallel: bounded('archiveParallel'),
   refreshParallel: bounded('refreshParallel'),
@@ -250,6 +258,7 @@ const LOCAL_FIELDS = {
   dayEnd: hour,
   toastSeconds: bounded('toastSeconds'),
   toastMax: bounded('toastMax'),
+  showLocalModels: bool,
 } satisfies { [K in Exclude<keyof Settings, ServerKey | 'features'>]: Parse<Settings[K]> }
 
 export const AI_LEVELS: {
@@ -306,6 +315,8 @@ export const DEFAULT_SETTINGS: Settings = {
   aiCloudModel: APP_CONFIG.ai?.cloudModel ?? '',
   aiCloudEffort: APP_CONFIG.ai?.cloudEffort ?? 'low',
   aiUseHostOllama: APP_CONFIG.ai?.useHostOllama ?? false,
+  ollamaEnabled: APP_CONFIG.ai?.ollamaEnabled ?? false,
+  showLocalModels: true,
   reportParallel: clampSetting('reportParallel', APP_CONFIG.ai?.parallel, 4),
   archiveParallel: clampSetting('archiveParallel', APP_CONFIG.archive?.workers, 8),
   refreshParallel: clampSetting('refreshParallel', APP_CONFIG.refresh?.workers, 8),

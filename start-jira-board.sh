@@ -140,10 +140,31 @@ deploy() {
   ok "Image built (dist: ${DIST_SOURCE})"
 
   log "Deploying container '${CONTAINER_NAME}' on port ${PORT}…"
+  # AI-Ollama only boots when local AI is enabled in Settings AND models are known to exist
+  # (server/ollama.mjs reads jira-intern/.settings.json + .ollama-state.json). Otherwise the
+  # container is created but left stopped, so the board can start it later on demand.
+  # One-time migration: models pulled into the old named volume move into jira-intern/models/.
+  mkdir -p jira-intern/models
+  if [ ! -d jira-intern/models/models ] && ! ls jira-intern/models/*.gguf >/dev/null 2>&1 && docker volume inspect jira-board_jira-ai-models >/dev/null 2>&1; then
+    log "Moving models from the old jira-ai-models volume into jira-intern/models/…"
+    docker run --rm -v jira-board_jira-ai-models:/from -v "$REPO_DIR/jira-intern/models":/to --entrypoint sh ollama/ollama -c 'cp -a /from/. /to/' \
+      && ok "Models migrated (the old volume is left in place; remove it with: docker volume rm jira-board_jira-ai-models)" \
+      || log "Model migration failed — Ollama starts with an empty store"
+  fi
+  OLLAMA_WANTED=no
+  if command -v node >/dev/null 2>&1; then
+    OLLAMA_WANTED="$(node server/ollama.mjs wanted 2>/dev/null || echo no)"
+  fi
   # --force-recreate: even if the container already exists with the same config, replace it.
   # --remove-orphans: drop stray services from older compose files.
-  docker compose up -d --force-recreate --remove-orphans
-  ok "Container started"
+  if [ "$OLLAMA_WANTED" = "yes" ]; then
+    docker compose up -d --force-recreate --remove-orphans
+    ok "Containers started (AI-Ollama included)"
+  else
+    docker compose create --force-recreate ollama >/dev/null 2>&1 || true
+    docker compose up -d --force-recreate --remove-orphans --no-deps jira-board jira-ai
+    ok "Containers started — AI-Ollama left stopped (toggle off in Settings, or no model in jira-intern/models/)"
+  fi
 }
 
 # ── 4. Health check + open the board ──────────────────────────────────────────

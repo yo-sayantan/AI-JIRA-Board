@@ -18,6 +18,15 @@ cp setup/config.example.json      ~/.ai/config.json           # add your name + 
 bash start-jira-board.sh                                      # build, deploy, open :4321
 ```
 
+## 🧠 Local AI (the AI-Ollama container)
+
+The `AI-Ollama` container is **off by default on every boot and deploy** and only runs while **both** hold:
+
+1. **Settings → AI → "AI-Ollama container" is on**, and
+2. **`jira-intern/models/` contains a model** — a model pulled from the Settings list (that directory *is* Ollama's store), or a `.gguf` file you place there yourself (then register it once: `docker exec AI-Ollama ollama create <tag> -f /root/.ollama/Modelfile`, see `jira-intern/models/README.md`).
+
+Turn the toggle on and the container starts within seconds (if a model is present — otherwise the board tells you what is missing); turn it off and it stops. Cloud AI never needs it. Details: [`docs/RUNTIME.md`](docs/RUNTIME.md#ai-ollama-lifecycle).
+
 ## 📚 All documentation lives in [`docs/`](docs/)
 
 | Start here | |

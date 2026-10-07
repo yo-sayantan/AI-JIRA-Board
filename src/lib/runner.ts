@@ -130,6 +130,21 @@ export interface AiInternStatus {
   queuedKeys?: string[]
   queued?: number
   error?: string
+  /** The AI-Ollama Docker container, as seen by the board server. */
+  container?: OllamaContainerInfo
+}
+
+export interface OllamaContainerInfo {
+  /** Settings toggle. */
+  enabled: boolean
+  /** False when the board has no Docker socket — the container then just follows compose. */
+  available: boolean
+  exists: boolean
+  running: boolean
+  /** Where models must be placed (host path). */
+  modelsDir: string
+  /** Models found there: pulled Ollama models and loose .gguf files. */
+  models: string[]
 }
 
 /** How many enrich-report jobs the AI intern is running right now (queued ones excluded). */
@@ -209,16 +224,21 @@ export async function startReportGeneration(key: string): Promise<ReportStart | 
 }
 
 /** Push the settings the server-side jobs honour; everything else stays in localStorage. */
-export async function saveServerSettings(patch: ServerSettings): Promise<boolean> {
+export type OllamaAction = 'starting' | 'stopping' | 'no-models' | 'unchanged'
+
+/** Resolves with what the server did to the AI-Ollama container, or null when the save failed. */
+export async function saveServerSettings(patch: ServerSettings): Promise<OllamaAction | null> {
   try {
     const r = await fetchWithTimeout('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     })
-    return r.ok
+    if (!r.ok) return null
+    const body = (await r.json().catch(() => null)) as { ollama?: OllamaAction } | null
+    return body?.ollama === 'starting' || body?.ollama === 'stopping' || body?.ollama === 'no-models' ? body.ollama : 'unchanged'
   } catch {
-    return false
+    return null
   }
 }
 
