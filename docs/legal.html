@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Same help-&-support favicon as the guide. -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
+    <title>My Jira Board — Policies, Privacy &amp; Accessibility</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #eef1f7; --bg2: #e6eaf3; --card: #ffffff; --ink: #131722; --soft: #43506a; --muted: #74809a;
+        --line: rgba(20, 28, 48, 0.12); --line2: rgba(20, 28, 48, 0.07);
+        --brand: #6d5bd0; --brand2: #3b82f6; --accent: #ec4899;
+        --ok: #16a34a; --warn: #b45309;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #11141a; --bg2: #161a21; --card: #1b1f27; --ink: #f3f6fb; --soft: #d4dbe8; --muted: #9da7b8;
+          --line: rgba(255, 255, 255, 0.14); --line2: rgba(255, 255, 255, 0.07);
+          --ok: #4ade80; --warn: #fbbf24;
+        }
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; scroll-padding-top: 68px; }
+      body {
+        margin: 0; background: var(--bg); color: var(--ink); line-height: 1.68;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      nav.top {
+        position: sticky; top: 0; z-index: 50; backdrop-filter: blur(14px);
+        background: color-mix(in srgb, var(--bg) 82%, transparent);
+        border-bottom: 1px solid var(--line); padding: 10px 20px;
+      }
+      nav.top .inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      nav.top .brand { font-weight: 800; font-size: 14px; margin-right: 6px; letter-spacing: -0.01em; }
+      nav.top a {
+        font-size: 12.5px; font-weight: 600; color: var(--soft); text-decoration: none;
+        padding: 5px 10px; border-radius: 999px; border: 1px solid transparent;
+      }
+      nav.top a:hover { border-color: var(--line); background: var(--card); color: var(--ink); }
+
+      header.hero {
+        text-align: center; padding: 52px 20px 30px;
+        background: radial-gradient(1100px 380px at 50% -130px, rgba(109, 91, 208, 0.28), transparent 70%);
+      }
+      .logo {
+        width: 56px; height: 56px; border-radius: 16px; display: inline-grid; place-items: center;
+        background: linear-gradient(135deg, var(--brand), var(--brand2)); font-size: 27px; color: #fff;
+        box-shadow: 0 12px 30px -10px rgba(109, 91, 208, 0.6); margin-bottom: 14px; font-weight: 800;
+      }
+      h1 { font-size: 30px; margin: 0 0 8px; letter-spacing: -0.025em; }
+      .sub { color: var(--muted); font-size: 15px; max-width: 660px; margin: 0 auto; }
+      .stamp { display: inline-block; margin-top: 14px; font-size: 12px; font-weight: 700; color: var(--soft);
+        border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 72%, transparent);
+        border-radius: 999px; padding: 5px 13px; }
+
+      .layout { max-width: 1280px; margin: 0 auto; padding: 0 24px 90px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 44px; align-items: start; }
+      main.content { min-width: 0; }
+      aside.toc { display: none; }
+      @media (min-width: 1080px) {
+        .layout { grid-template-columns: 210px minmax(0, 1fr); }
+        aside.toc { display: block; position: sticky; top: 72px; align-self: start; max-height: calc(100vh - 92px); overflow-y: auto; padding: 22px 0 24px; }
+      }
+      .toc .toc-h { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 0 0 8px 13px; }
+      .toc a { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); text-decoration: none; padding: 5px 12px; border-left: 2px solid var(--line2); transition: color 0.15s, border-color 0.15s; }
+      .toc a:hover { color: var(--ink); border-left-color: var(--line); }
+      .toc a.on { color: var(--brand2); border-left-color: var(--brand2); background: color-mix(in srgb, var(--brand2) 7%, transparent); }
+
+      h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); margin: 46px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line2); }
+      h3 { font-size: 16px; margin: 18px 0 4px; }
+      .card {
+        background: var(--card); border: 1px solid var(--line); border-radius: 15px;
+        padding: 18px 22px; margin: 12px 0;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 32px -24px rgba(16, 24, 40, 0.4);
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+      }
+      .card:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 18px 42px -26px rgba(16, 24, 40, 0.5); }
+      .card > :first-child { margin-top: 0; }
+      .card > :last-child { margin-bottom: 0; }
+      p { margin: 8px 0; color: var(--soft); }
+      .small { font-size: 13px; color: var(--muted); }
+      ul { color: var(--soft); padding-left: 20px; margin: 8px 0; }
+      li { margin: 4px 0; }
+      a { color: var(--brand2); }
+      b { color: var(--ink); }
+      code.inl { background: var(--line2); padding: 1.5px 6px; border-radius: 6px; font-size: 0.88em; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+      table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 10px 0; }
+      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+      th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+      td { color: var(--soft); }
+      .note { border-left: 3px solid var(--brand2); background: color-mix(in srgb, var(--brand2) 8%, transparent); border-radius: 0 10px 10px 0; padding: 11px 15px; margin: 12px 0; font-size: 13.8px; color: var(--soft); }
+      .note.ok { border-left-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+      .note.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 11%, transparent); }
+      .pill { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+      .pill.no { color: var(--muted); background: var(--line2); }
+
+      footer.site { border-top: 1px solid var(--line); margin-top: 60px; padding: 26px 24px 34px; }
+      footer.site .inner { max-width: 1280px; margin: 0 auto; text-align: center; }
+      footer.site .links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-bottom: 10px; }
+      footer.site .links a { font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: none; }
+      footer.site .links a:hover { color: var(--ink); }
+      footer.site .tag { font-size: 12.5px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <nav class="top">
+      <div class="inner">
+        <span class="brand">🎫 My Jira Board</span>
+        <a href="index.html">← Setup guide</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#data">Your data</a>
+        <a href="#cookies">Cookies</a>
+        <a href="#terms">Terms</a>
+        <a href="#embeds">Embeds</a>
+        <a href="#a11y">Accessibility</a>
+        <a href="#contact">Contact</a>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div class="logo">§</div>
+      <h1>Policies, Privacy &amp; Accessibility</h1>
+      <p class="sub">My Jira Board is a <b>self-hosted</b>, open-source tool. These policies describe — honestly and
+        specifically — what this software does with data on <b>your</b> machine. There is no company behind it,
+        no server of ours, and no analytics.</p>
+      <span class="stamp">Last updated · 7 October 2026</span>
+    </header>
+
+    <div class="layout">
+      <aside class="toc" aria-label="On this page">
+        <p class="toc-h">On this page</p>
+        <a href="#privacy">Privacy Policy</a>
+        <a href="#data">Data we collect &amp; store</a>
+        <a href="#cookies">Cookie Policy</a>
+        <a href="#terms">Terms &amp; Conditions</a>
+        <a href="#embeds">Third-party embeds</a>
+        <a href="#a11y">Alt text &amp; colour contrast</a>
+        <a href="#contact">Contact us</a>
+      </aside>
+
+      <main class="content">
+
+      <!-- ── PRIVACY ─────────────────────────────────────────────── -->
+      <h2 id="privacy">Privacy Policy</h2>
+      <div class="card">
+        <p><b>The short version:</b> everything runs on your computer. This application has no backend of its
+          own, sends nothing to the project's authors, and contains no analytics, telemetry, crash reporting,
+          advertising or tracking of any kind.</p>
+        <h3>Who is responsible</h3>
+        <p>You install and run My Jira Board yourself (Docker on your machine, or a local Node server). You are
+          the operator of your own instance: the data it holds is yours, fetched with your own credentials, and
+          it never leaves your machine except for the calls <i>you</i> configure (described in
+          <a href="#embeds">outbound connections</a>).</p>
+        <h3>What we — the project authors — receive</h3>
+        <p><b>Nothing.</b> The software makes no request to any server operated by this project. The only way the
+          authors ever learn anything about your usage is if you choose to open a GitHub issue.</p>
+        <h3>Other people's data on your board</h3>
+        <p>Jira tickets naturally contain names of colleagues (assignees, reporters, reviewers, commenters). The
+          board only mirrors data your Jira account can already see, under your employer's existing Jira terms
+          and access controls. It adds no new collection — but the local copy is your responsibility: keep the
+          machine it runs on appropriately protected, and treat exports of
+          <code class="inl">jira-intern/data.json</code> like you would a Jira export.</p>
+        <h3>Where processing happens</h3>
+        <ul>
+          <li><b>Fetching &amp; rendering</b> — entirely local (your machine / your Docker VM).</li>
+          <li><b>AI briefs &amp; PR reports</b> — optional. With a <b>local</b> model (Ollama), ticket text never
+            leaves your machine. With a <b>cloud</b> model, the ticket text being summarised is sent to the
+            provider you selected, under your own API key and that provider's privacy terms. Set
+            Settings&nbsp;→&nbsp;AI&nbsp;usage to <b>None</b> and no AI processing happens at all.</li>
+        </ul>
+        <h3>Your rights, practically</h3>
+        <p>Because everything is a plain file on your disk, every data-protection right is a file operation you
+          can perform yourself — see <a href="#data">deleting your data</a>. Nothing needs to be requested from
+          anyone.</p>
+      </div>
+
+      <!-- ── DATA ────────────────────────────────────────────────── -->
+      <h2 id="data">What data we collect, process and store</h2>
+      <div class="card">
+        <p>"Collect" here always means <b>your instance fetching, with your tokens, onto your disk</b>. This is
+          the complete inventory — there is no other store.</p>
+        <table>
+          <tr><th>Data</th><th>Where it lives</th><th>Why</th><th>Sent anywhere?</th></tr>
+          <tr>
+            <td>Jira tickets you can see: keys, titles, descriptions, statuses, comments, assignee/reporter
+              names, sprints, labels, links</td>
+            <td><code class="inl">jira-intern/data.json</code> / <code class="inl">data.js</code>,
+              per-ticket <code class="inl">cache/</code></td>
+            <td>Rendering your board, the Completed archive and the Raised-by-me view</td>
+            <td><span class="pill no">No</span> (only to a cloud AI provider if you enable one)</td>
+          </tr>
+          <tr>
+            <td>Bitbucket code data: branch names, PR titles, reviewers, approval states</td>
+            <td>Same files, plus <code class="inl">reports/</code> for PR-readiness reports</td>
+            <td>PR badges and ship/no-ship reports</td>
+            <td><span class="pill no">No</span> (same AI exception)</td>
+          </tr>
+          <tr>
+            <td>Your credentials: Jira/Bitbucket/Confluence personal access tokens, optional AI API keys</td>
+            <td><code class="inl">~/.cursor/mcp-secrets.env</code> — <b>outside the repository</b>, mounted
+              read-only into the container</td>
+            <td>Authenticating the fetches you run</td>
+            <td>Only to the matching service (your Jira, your Bitbucket, your chosen AI provider) over TLS —
+              never elsewhere, never logged, never committed</td>
+          </tr>
+          <tr>
+            <td>Your identity settings: display name, account id, company URLs</td>
+            <td><code class="inl">~/.ai/config.json</code> — outside the repository</td>
+            <td>Matching "assigned to me" / "raised by me"</td>
+            <td><span class="pill no">No</span></td>
+          </tr>
+          <tr>
+            <td>Run logs (timestamps, ticket keys, fetch outcomes)</td>
+            <td><code class="inl">jira-intern/logs/</code>, <code class="inl">_STATUS.md</code></td>
+            <td>Troubleshooting your own runs</td>
+            <td><span class="pill no">No</span></td>
+          </tr>
+          <tr>
+            <td>UI preferences (theme, feature toggles, parallelism, archived keys)</td>
+            <td>Your browser's <code class="inl">localStorage</code> + <code class="inl">jira-intern/.settings.json</code></td>
+            <td>Remembering your choices</td>
+            <td><span class="pill no">No</span></td>
+          </tr>
+        </table>
+        <h3>Retention</h3>
+        <p>Nothing expires on its own — files persist until you delete them, so your Completed archive can span
+          years. That is a feature, and it is entirely under your control.</p>
+        <h3>Deleting your data</h3>
+        <ul>
+          <li>All fetched data: delete <code class="inl">jira-intern/data.json</code>,
+            <code class="inl">data.js</code>, <code class="inl">cache/</code>, <code class="inl">reports/</code>,
+            <code class="inl">logs/</code> (or <code class="inl">docker compose down</code> and remove the folder).</li>
+          <li>Credentials: delete <code class="inl">~/.cursor/mcp-secrets.env</code> and revoke the tokens in
+            Jira/Bitbucket — revocation kills any copy instantly.</li>
+          <li>Browser state: clear site data for <code class="inl">localhost:4321</code>.</li>
+          <li>AI models &amp; queues: <code class="inl">docker volume rm jira-ai-models</code>.</li>
+        </ul>
+      </div>
+
+      <!-- ── COOKIES ─────────────────────────────────────────────── -->
+      <h2 id="cookies">Cookie Policy</h2>
+      <div class="card">
+        <p><b>This application sets no cookies. None.</b> There is no consent banner because there is nothing to
+          consent to: no advertising cookies, no analytics cookies, no third-party cookies, no fingerprinting.</p>
+        <p>What it uses instead is your browser's <b>localStorage</b> — plain key-value storage that never leaves
+          your browser, is never transmitted with requests, and is readable only by pages on the same origin
+          (your own <code class="inl">localhost</code>):</p>
+        <table>
+          <tr><th>Key</th><th>Holds</th><th>Lifetime</th></tr>
+          <tr><td><code class="inl">jb-settings</code></td><td>Theme policy, feature toggles, AI level, parallelism, toast prefs</td><td>Until you clear it</td></tr>
+          <tr><td><code class="inl">jb-archived</code></td><td>Ticket keys you manually moved to Completed</td><td>Pruned automatically as tickets leave the dump</td></tr>
+          <tr><td><code class="inl">jb-completed-show-context</code></td><td>The Completed view's "Mine only" toggle</td><td>Until you clear it</td></tr>
+          <tr><td><code class="inl">jb-guide-os</code></td><td>Which OS tab you picked in the setup guide</td><td>Until you clear it</td></tr>
+        </table>
+        <p class="small">Clearing: browser settings → site data for <code class="inl">localhost:4321</code> →
+          remove. The board falls back to defaults on next load, losing nothing but preferences.</p>
+      </div>
+
+      <!-- ── TERMS ───────────────────────────────────────────────── -->
+      <h2 id="terms">Terms &amp; Conditions</h2>
+      <div class="card">
+        <h3>Licence</h3>
+        <p>My Jira Board is open-source software released under the <b>MIT License</b> (see the
+          <code class="inl">LICENSE</code> file in the repository). You may use, copy, modify and redistribute it,
+          provided the licence notice is preserved.</p>
+        <h3>No warranty</h3>
+        <p>The software is provided <b>“as is”, without warranty of any kind</b>, express or implied, including
+          merchantability, fitness for a particular purpose and non-infringement. In no event shall the authors be
+          liable for any claim, damages or other liability arising from the software or its use — the standard MIT
+          terms apply verbatim.</p>
+        <h3>Your responsibilities</h3>
+        <ul>
+          <li><b>Follow your employer's policies.</b> The board mirrors company Jira/Bitbucket data using tokens
+            issued to you. Creating tokens, where you run the board, and who can reach the machine that hosts it
+            are governed by your organisation's security policies — comply with them.</li>
+          <li><b>Guard your tokens.</b> Keep <code class="inl">~/.cursor/mcp-secrets.env</code> private
+            (<code class="inl">chmod 600</code>), never commit it, and revoke tokens you no longer need.</li>
+          <li><b>Cloud AI is your call.</b> Enabling a cloud model sends ticket text to that provider under your
+            key and their terms. If your employer forbids that, use a local model or AI level
+            <b>None</b>.</li>
+          <li><b>Don't expose it publicly.</b> The board is designed for <code class="inl">localhost</code>. If
+            you choose to bind it to a reachable interface, securing access is on you.</li>
+        </ul>
+        <h3>Trademarks</h3>
+        <p>Jira, Confluence and Bitbucket are trademarks of Atlassian Pty Ltd. This is an independent, personal
+          project — <b>not affiliated with, endorsed by, or supported by Atlassian</b> (or any AI provider it can
+          optionally talk to).</p>
+        <h3>Changes</h3>
+        <p>These documents live in the repository (<code class="inl">docs/legal.html</code>) and change only via
+          commits — the full history of every revision is in Git.</p>
+      </div>
+
+      <!-- ── EMBEDS ──────────────────────────────────────────────── -->
+      <h2 id="embeds">Third-party embeds &amp; outbound connections</h2>
+      <div class="card">
+        <p><b>There are no third-party embeds.</b> No CDN scripts, no web fonts fetched from font services, no
+          iframes, no social widgets, no map or video embeds, no remote images. The board is a single
+          self-contained HTML file; this guide and these policies are plain local pages. If your machine is
+          offline, every page still renders.</p>
+        <h3>Outbound connections the software can make — complete list</h3>
+        <table>
+          <tr><th>Destination</th><th>When</th><th>What is sent</th></tr>
+          <tr><td>Your company's Jira / Bitbucket / Confluence</td><td>Every fetch you run or schedule</td><td>Your token (auth header) + the queries for your tickets</td></tr>
+          <tr><td>Your chosen cloud AI provider (Cursor / Anthropic / Google)</td><td>Only if you enable a cloud model in Settings</td><td>Your API key + the ticket text being summarised</td></tr>
+          <tr><td>ollama.com / huggingface.co</td><td>Only when you click to download a local model</td><td>A plain file download request</td></tr>
+          <tr><td>Docker Hub / npm registry</td><td>Build &amp; install time only</td><td>Standard package/image pulls</td></tr>
+        </table>
+        <p class="small">The documentation contains ordinary <b>outbound links</b> (Docker, Git, Ollama, Hugging
+          Face, GitHub). Following a link is a normal page visit governed by that site's own policies — nothing is
+          loaded from them until you click.</p>
+      </div>
+
+      <!-- ── ACCESSIBILITY ───────────────────────────────────────── -->
+      <h2 id="a11y">Accessibility — alt text &amp; colour contrast</h2>
+      <div class="card">
+        <p>The board aims for <b>WCAG 2.1 AA</b>. Accessibility work that is already in place:</p>
+        <h3>Alt text &amp; semantics</h3>
+        <ul>
+          <li>Informative graphics carry a text alternative — e.g. the setup guide's architecture diagram is an
+            SVG with <code class="inl">role="img"</code> and a full <code class="inl">aria-label</code>
+            description; purely decorative flourishes are marked <code class="inl">aria-hidden</code>.</li>
+          <li>Icon-only buttons (theme toggle, settings, close, expand) all carry
+            <code class="inl">aria-label</code>s; toggles expose <code class="inl">aria-pressed</code> /
+            <code class="inl">aria-expanded</code>, overlays use <code class="inl">role="dialog"</code> with
+            focus management, and busy buttons set <code class="inl">aria-busy</code>.</li>
+          <li>The board renders no raster images at all — everything is text, SVG and CSS, so nothing can be
+            missing alt text silently.</li>
+        </ul>
+        <h3>Colour &amp; contrast</h3>
+        <ul>
+          <li>Light and dark themes both target AA contrast for text (4.5:1 body, 3:1 large/bold text); muted
+            text is reserved for secondary information, never sole-source content.</li>
+          <li><b>Colour is never the only signal:</b> every status pill carries its label text, priorities pair
+            colour with a distinct glyph and tooltip, and PR states include text badges — so the board remains
+            usable with colour-vision deficiency.</li>
+          <li>Both themes honour your OS preference automatically and can be fixed or scheduled manually.</li>
+        </ul>
+        <h3>Motion &amp; input</h3>
+        <ul>
+          <li>Settings → <b>Motion &amp; animations</b> disables all transitions (equivalent to
+            <code class="inl">prefers-reduced-motion</code>); guide animations also respect the OS setting.</li>
+          <li>Keyboard: <code class="inl">/</code> focuses search, <code class="inl">r</code> refreshes,
+            <code class="inl">Esc</code> closes the top layer only; shortcuts never fire while typing and can be
+            switched off entirely.</li>
+        </ul>
+        <div class="note warn"><b>Known gaps (honest list):</b> the kanban columns are not yet fully traversable
+          as a single keyboard grid, and some dense rail labels fall below AA at very small zoom levels. Found
+          something else? Please <a href="#contact">report it</a> — accessibility issues are treated as bugs,
+          not feature requests.</div>
+      </div>
+
+      <!-- ── CONTACT ─────────────────────────────────────────────── -->
+      <h2 id="contact">Contact us</h2>
+      <div class="card">
+        <p>This is an open-source project — the repository is the front door, and issues are read by the
+          maintainer:</p>
+        <ul>
+          <li><b>Bug reports &amp; feature requests:</b>
+            <a href="https://github.com/yo-sayantan/AI-JIRA-Board/issues">github.com/yo-sayantan/AI-JIRA-Board/issues</a></li>
+          <li><b>Questions &amp; discussions:</b> open an issue with the <code class="inl">question</code> label.</li>
+          <li><b>Security concerns</b> (a leaked token pattern, a dependency CVE): please flag it as an issue
+            immediately — the repository is scanned before every commit, and reports are prioritised.</li>
+          <li><b>Privacy or accessibility feedback:</b> same channel; reference the section of this page.</li>
+        </ul>
+        <p class="small">Running your own fork inside a company? Your internal operator (whoever deployed it) is
+          the right first contact for data questions about that instance — they hold its files.</p>
+      </div>
+
+      </main>
+    </div>
+
+    <footer class="site">
+      <div class="inner">
+        <div class="links">
+          <a href="index.html">Setup guide</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#data">Your data</a>
+          <a href="#cookies">Cookies</a>
+          <a href="#terms">Terms</a>
+          <a href="#embeds">Embeds</a>
+          <a href="#a11y">Accessibility</a>
+          <a href="#contact">Contact</a>
+        </div>
+        <div class="tag">My Jira Board · self-hosted &amp; open source (MIT) · no cookies, no tracking, no telemetry</div>
+      </div>
+    </footer>
+
+    <script>
+      // Sidebar scroll-spy — same behaviour as the setup guide.
+      (function () {
+        var links = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+        if (!links.length || !('IntersectionObserver' in window)) return;
+        var byId = {};
+        links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+        var active = null;
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en) {
+            if (!en.isIntersecting) return;
+            if (active) active.classList.remove('on');
+            active = byId[en.target.id];
+            if (active) active.classList.add('on');
+          });
+        }, { rootMargin: '-64px 0px -72% 0px' });
+        links.forEach(function (a) {
+          var sec = document.getElementById(a.getAttribute('href').slice(1));
+          if (sec) io.observe(sec);
+        });
+      })();
+    </script>
+  </body>
+</html>
