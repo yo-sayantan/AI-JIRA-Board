@@ -275,6 +275,7 @@
         <a href="#ai-intern">AI Intern</a>
         <a href="#ai-ollama">Host Ollama</a>
         <a href="#ai-model-files">GGUF models</a>
+        <a href="#ai-cloud-prices">Cloud prices</a>
         <a href="#run">Other ways to run</a>
         <a href="#trouble">Troubleshooting</a>
         <a href="#faq">FAQ</a>
@@ -628,7 +629,7 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
           Local models are a <b>dropdown</b>. If the chosen tag is already on disk, that is enough.
           If it is not, the download icon beside the list queues a pull. The <b>?</b> next to the list
           opens the matching section below: Host Ollama when that checkbox is on, otherwise the GGUF
-          download / place / trigger path.</p>
+          download / place / trigger path. For Cloud AI the <b>i</b> button opens the <a href="#ai-cloud-prices">price table</a>.</p>
         <p class="small">The catalog of every local LLM (tags + download links) is
           <code class="inl">ai-intern/models.json</code> — add a row there when a new model is released.
           Jump: <a href="#ai-ollama">Host Ollama</a> · <a href="#ai-model-files">GGUF files</a>.</p>
@@ -746,6 +747,35 @@ ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
         <b>Not verified</b> until dedicated REST is added.</div>
 
       <!-- ── RUN WITHOUT DOCKER ───────────────────────────────────── -->
+      <h2 id="ai-cloud-prices">Cloud AI — model prices</h2>
+      <div class="card">
+        <h3>What a report costs, per model</h3>
+        <p class="small">The <b>i</b> button beside the cloud model list in Settings opens this table. Rates are
+          <b>USD per 1 million tokens</b> at standard speed; <b>Low</b> effort uses fewer tokens than <b>Medium</b>.
+          The Cursor list is deliberately a value shortlist — capable models at or under $10 output per 1M tokens
+          (<code class="inl">_CURSOR_KEEP</code> in <code class="inl">ai-intern/worker.py</code>). Update both
+          places when Cursor changes its pricing.</p>
+        <table>
+          <thead>
+            <tr><th>Model</th><th>Id</th><th>Input</th><th>Cache read</th><th>Output</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>GPT-5.6 Luna</b></td><td><code class="inl">gpt-5.6-luna</code></td><td>$0.20</td><td>$0.02</td><td>$1.20</td></tr>
+            <tr><td><b>Composer 2.5</b></td><td><code class="inl">composer-2.5</code></td><td>$0.50</td><td>$0.20</td><td>$2.50</td></tr>
+            <tr><td><b>Gemini 3 Flash</b></td><td><code class="inl">gemini-3-flash</code></td><td>$0.50</td><td>$0.05</td><td>$3</td></tr>
+            <tr><td><b>Kimi K2.7 Code</b></td><td><code class="inl">kimi-k2.7-code</code></td><td>$0.95</td><td>$0.19</td><td>$4</td></tr>
+            <tr><td><b>GLM 5.2</b></td><td><code class="inl">glm-5.2</code></td><td>$1.40</td><td>$0.26</td><td>$4.40</td></tr>
+            <tr><td><b>Grok 4.7</b></td><td><code class="inl">grok-4.7</code></td><td>$2</td><td>$0.50</td><td>$6</td></tr>
+            <tr><td><b>Grok 4.6</b></td><td><code class="inl">grok-4.6</code></td><td>$2</td><td>$0.50</td><td>$6</td></tr>
+            <tr><td><b>Gemini 3.6 Flash</b></td><td><code class="inl">gemini-3.6-flash</code></td><td>$1.50</td><td>$0.15</td><td>$7.50</td></tr>
+            <tr><td><b>Claude Sonnet 5</b></td><td><code class="inl">claude-sonnet-5</code></td><td>$2</td><td>$0.20</td><td>$10</td></tr>
+          </tbody>
+        </table>
+        <p class="small"><b>Claude</b> — Haiku only (Opus and Sonnet are left off the list); billed by Anthropic at
+          console.anthropic.com. <b>Gemini</b> — Flash models from your Google API key (Pro and Ultra left off); billed
+          at aistudio.google.com. Keys live in <code class="inl">~/.cursor/mcp-secrets.env</code>.</p>
+      </div>
+
       <h2 id="run">Other ways to run</h2>
       <div class="grid">
         <div class="card" style="margin: 0">
