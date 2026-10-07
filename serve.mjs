@@ -72,7 +72,7 @@ import { externalGenerating, readReport, reportQueue, reportsIndex, resolveRepor
 import { aiStatus, enrichingKeys, localCatalog, proxyAi } from './server/ai.mjs'
 import { readBoardSettings, updateBoardSettings } from './server/settings.mjs'
 import { startScheduler } from './server/schedule.mjs'
-import { ensureOllamaReady, ollamaWanted, probeModels, reconcileOllama } from './server/ollama.mjs'
+import { MODELS_DIR_LABEL, ensureOllamaReady, ollamaInfo, ollamaWanted, reconcileOllama } from './server/ollama.mjs'
 
 const serveStatic = createStaticHandler(
   ROOT,
@@ -242,11 +242,12 @@ const routes = {
       const { settings, error } = await updateBoardSettings(patch)
       if (error) return json(res, 400, { ok: false, error })
       const after = await readBoardSettings()
-      // The Ollama container follows the AI settings: on when local AI is wanted, off otherwise.
+      // The AI-Ollama container follows its Settings toggle (and the models directory).
       // Answered immediately; Docker takes its time in the background.
       let ollama = 'unchanged'
-      if (ollamaWanted(before) !== ollamaWanted(after)) {
-        ollama = ollamaWanted(after) ? 'starting' : 'stopping'
+      if (!!before.ollamaEnabled !== !!after.ollamaEnabled) {
+        if (!after.ollamaEnabled) ollama = 'stopping'
+        else ollama = (await ollamaWanted(after)) ? 'starting' : 'no-models'
         reconcileOllama(after).then((r) => console.log(`[ollama] settings → ${r}`), () => {})
       }
       json(res, 200, { ok: true, settings, ollama })
@@ -257,7 +258,8 @@ const routes = {
   },
 
   'GET /api/ai-status': async (req, res) => {
-    json(res, 200, await aiStatus())
+    const [ai, settings] = await Promise.all([aiStatus(), readBoardSettings()])
+    json(res, 200, { ...ai, container: await ollamaInfo(settings) })
   },
 
   'GET /api/ai-models': async (req, res) => {
@@ -270,8 +272,11 @@ const routes = {
   // Pulling a model needs the container up — start it on demand (a stopped Ollama has no models).
   'POST /api/ai-models/pull': async (req, res) => {
     const settings = await readBoardSettings()
-    if (!settings.aiUseHostOllama && !(await ensureOllamaReady())) {
-      return json(res, 503, { ok: false, down: true, error: 'AI-Ollama container is not available' })
+    if (!settings.aiUseHostOllama && !(await ensureOllamaReady(settings))) {
+      const error = settings.ollamaEnabled
+        ? 'AI-Ollama container is not available'
+        : 'Turn on the AI-Ollama container in Settings first'
+      return json(res, 503, { ok: false, down: true, error })
     }
     return proxyAi(req, res, '/api/models/pull')
   },
@@ -279,12 +284,14 @@ const routes = {
 
   // One call carries everything the board polls for: run state, queues, reports, AI intern.
   'GET /api/intern-status': async (req, res) => {
-    const [run, dataModified, ai, generating] = await Promise.all([
+    const [run, dataModified, ai, generating, settings] = await Promise.all([
       runStatus(),
       stat(PATHS.data).then((s) => s.mtimeMs, () => null),
       aiStatus(),
       reportsGenerating(),
+      readBoardSettings(),
     ])
+    const container = await ollamaInfo(settings)
     json(res, 200, {
       ...run,
       dataModified,
@@ -292,7 +299,7 @@ const routes = {
       refreshExits: Object.fromEntries(ticketRefresh.exits),
       reportsGenerating: generating,
       reportsEnriching: [...new Set(enrichingKeys(ai))],
-      ai,
+      ai: { ...ai, container },
     })
   },
 }
@@ -420,10 +427,8 @@ server.listen(PORT, HOST, () => {
   console.log(`\n  🎫  My Jira Board  →  http://${shown}:${PORT}${BOARD_PATH}`)
   console.log(`      Live Refresh enabled (runs the intern). Press Ctrl+C to stop.\n`)
   startScheduler().catch((e) => console.error('[schedule] failed to start', e))
-  // Ollama follows the saved AI settings; a boot also honours "no models → stay off".
+  // AI-Ollama follows its Settings toggle, and only runs when jira-intern/models/ holds a model.
   readBoardSettings()
-    .then((s) => reconcileOllama(s, { boot: true }))
-    .then((r) => console.log(`[ollama] boot → ${r}`), (e) => console.error('[ollama] boot reconcile failed', e))
-  // Remember whether models exist, so the next deploy knows whether to start the container.
-  setInterval(() => void probeModels(), 5 * 60_000).unref()
+    .then(reconcileOllama)
+    .then((r) => console.log(`[ollama] boot → ${r} (models dir: ${MODELS_DIR_LABEL})`), (e) => console.error('[ollama] boot reconcile failed', e))
 })

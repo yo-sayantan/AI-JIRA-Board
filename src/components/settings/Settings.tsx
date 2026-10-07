@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject }
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { ACTIVE_CADENCE, AI_LEVELS, BOARD_CADENCE, FEATURES, LIMITS, clampSetting, type AiCloudProvider, type FeatureKey, type Settings } from '../../lib/settings'
-import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice } from '../../lib/runner'
+import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice, type OllamaContainerInfo } from '../../lib/runner'
 import fallbackCatalog from '../../../ai-intern/models.json'
 import { hexToRgba } from '../../lib/format'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
@@ -211,6 +211,48 @@ const ORDERED_FEATURES = [...FEATURES].sort((a, b) => {
   const rank = (k: FeatureKey) => (FEATURE_ORDER.includes(k) ? FEATURE_ORDER.indexOf(k) : FEATURE_ORDER.length)
   return rank(a.key) - rank(b.key)
 })
+
+/**
+ * The AI-Ollama container switch. The server only runs the container while this is on AND
+ * jira-intern/models/ holds a model, so the row also shows what it found there.
+ */
+function OllamaContainerToggle({ enabled, info, onChange }: { enabled: boolean; info: OllamaContainerInfo | null; onChange: (v: boolean) => void }) {
+  const dir = info?.modelsDir ?? 'jira-intern/models/'
+  const models = info?.models ?? []
+  const state = !info
+    ? null
+    : !info.available
+      ? { text: 'Docker socket not mounted — container follows compose', color: '#94a3b8' }
+      : info.running
+        ? { text: 'container running', color: '#22c55e' }
+        : !enabled
+          ? { text: 'container stopped (toggle off)', color: '#94a3b8' }
+          : models.length === 0
+            ? { text: `container stopped — no model in ${dir}`, color: '#f59e0b' }
+            : { text: 'container starting…', color: '#3b82f6' }
+  const title = [
+    'Runs the AI-Ollama Docker container (local models on CPU in the Docker VM).',
+    `It only starts when this is ON and ${dir} contains a model — either one pulled from the list below, or a .gguf file you place there yourself.`,
+    'Turning it off stops the container at once; it stays off across restarts and deploys until you turn it on again.',
+    models.length ? `Found: ${models.join(', ')}` : `Nothing found in ${dir} yet.`,
+  ].join('\n')
+  return (
+    <label
+      className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[11.5px] font-semibold text-[var(--ink-soft)]"
+      title={title}
+    >
+      <input type="checkbox" checked={enabled} onChange={(e) => onChange(e.target.checked)} />
+      <span className="shrink-0">AI-Ollama container</span>
+      <span className="ml-auto flex min-w-0 items-center gap-1.5 text-[10.5px] font-medium text-[var(--muted)]">
+        {state && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />}
+        <span className="truncate">
+          {state ? state.text : 'needs the local server'}
+          {models.length > 0 && ` · ${models.length} model${models.length === 1 ? '' : 's'} in ${dir}`}
+        </span>
+      </span>
+    </label>
+  )
+}
 
 export function SettingsPanel({
   open,
@@ -693,7 +735,7 @@ function AiInternControls({
         <Segmented
           label="AI backend"
           options={[
-            { key: 'local', label: 'Local AI', hint: 'Ollama in Docker (CPU) or on this Mac (Metal). Slow, no tokens. The AI-Ollama container starts when you pick this and stops when you leave it.' },
+            { key: 'local', label: 'Local AI', hint: 'Ollama in Docker (CPU) or on this Mac (Metal). Slow, no tokens. Needs the AI-Ollama container (toggle below) or Host Ollama.' },
             { key: 'cloud', label: 'Cloud AI', hint: 'Claude, Cursor, or Gemini. Keys stay in ~/.cursor/mcp-secrets.env.' },
           ]}
           value={settings.aiBackend}
@@ -720,6 +762,8 @@ function AiInternControls({
           </label>
         )}
       </div>
+
+      <OllamaContainerToggle enabled={settings.ollamaEnabled} info={aiStatus?.container ?? null} onChange={(v) => set('ollamaEnabled', v)} />
 
       {settings.aiBackend === 'cloud' ? (
 

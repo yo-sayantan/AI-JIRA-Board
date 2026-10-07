@@ -1,16 +1,18 @@
-// AI-Ollama lifecycle: the Ollama container only runs while something can use it.
+// AI-Ollama lifecycle. The container runs only while BOTH hold:
 //
-//   wanted   = aiLevel ≠ none  AND  aiBackend = local  AND  not "host Ollama"
-//   has models — remembered in jira-intern/.ollama-state.json from the last time Ollama answered
+//   1. Settings → "AI-Ollama container" is on            (ollamaEnabled)
+//   2. jira-intern/models/ contains a model               (a pulled Ollama model under
+//      models/manifests/, or a hand-dropped *.gguf — see jira-intern/models/README.md)
 //
-// Boot / deploy: start only when wanted AND models are known to exist (unknown counts as yes,
-// so a fresh install can pull its first model). Settings change: wanted → start, otherwise stop.
-// A model pull starts it on demand. Containers are driven through the Docker Engine API on the
-// mounted socket; without the socket every call reports 'unavailable' and the board carries on.
+// That directory IS Ollama's store (docker-compose.yml binds it to /root/.ollama), so a pull
+// from Settings lands there and counts next time. The board drives the container through the
+// Docker Engine API on the mounted socket; without the socket every action reports
+// 'unavailable' and Ollama simply follows compose.
 //
 //   node server/ollama.mjs wanted      → prints "yes" / "no" for start-jira-board.sh
 import { request } from 'node:http'
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { PATHS } from './config.mjs'
 import { readBoardSettings } from './settings.mjs'
 
@@ -19,39 +21,45 @@ const CONTAINER = process.env.OLLAMA_CONTAINER || 'AI-Ollama'
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://ollama:11434'
 const STOP_GRACE_S = 10
 const READY_WAIT_MS = 45_000
+const INSPECT_TTL_MS = 5000
 
-export function ollamaWanted(settings) {
-  return settings.aiLevel !== 'none' && settings.aiBackend !== 'cloud' && !settings.aiUseHostOllama
-}
+/** Where models must be placed, as the user sees it (host path relative to the repo). */
+export const MODELS_DIR_LABEL = 'jira-intern/models/'
 
-// ── model memory ─────────────────────────────────────────────────────────────
+// ── models directory ─────────────────────────────────────────────────────────
 
-async function readState() {
+async function walkManifests(dir, depth = 0) {
+  if (depth > 4) return []
+  let entries
   try {
-    const s = JSON.parse(await readFile(PATHS.ollamaState, 'utf8'))
-    return typeof s?.hasModels === 'boolean' ? s : {}
+    entries = await readdir(dir, { withFileTypes: true })
   } catch {
-    return {}
+    return []
   }
+  const out = []
+  for (const e of entries) {
+    if (e.isDirectory()) out.push(...(await walkManifests(join(dir, e.name), depth + 1)))
+    else if (depth >= 2) out.push(`${dir.split('/').slice(-1)[0]}:${e.name}`) // library/<name>/<tag>
+  }
+  return out
 }
 
-async function remember(hasModels, models) {
-  const tmp = `${PATHS.ollamaState}.${process.pid}.tmp`
-  await writeFile(tmp, JSON.stringify({ hasModels, models, at: new Date().toISOString() }, null, 2) + '\n').catch(() => {})
-  await rename(tmp, PATHS.ollamaState).catch(() => {})
-}
-
-/** Ask the container's Ollama for its tags; null when it is not answering. */
-export async function probeModels(timeoutMs = 3000) {
+/** Model names found in jira-intern/models/: Ollama manifests plus loose *.gguf files. */
+export async function modelsInDir() {
+  const names = await walkManifests(join(PATHS.modelsDir, 'models', 'manifests'))
   try {
-    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(timeoutMs) })
-    const body = await r.json()
-    const models = Array.isArray(body?.models) ? body.models.map((m) => m?.name).filter(Boolean) : []
-    await remember(models.length > 0, models)
-    return models
+    for (const e of await readdir(PATHS.modelsDir, { withFileTypes: true })) {
+      if (e.isFile() && /\.gguf$/i.test(e.name)) names.push(e.name)
+    }
   } catch {
-    return null
+    /* no directory yet */
   }
+  return [...new Set(names)]
+}
+
+export async function ollamaWanted(settings) {
+  if (!settings.ollamaEnabled) return false
+  return (await modelsInDir()).length > 0
 }
 
 // ── Docker Engine API over the socket ────────────────────────────────────────
@@ -69,18 +77,27 @@ function docker(method, path) {
   })
 }
 
-/** { available, exists, running } for the Ollama container. */
-export async function ollamaContainer() {
+const inspectCache = { at: 0, value: null }
+
+/** { available, exists, running } for the Ollama container (cached a few seconds for polling). */
+export async function ollamaContainer({ fresh = false } = {}) {
+  if (!fresh && inspectCache.value && Date.now() - inspectCache.at < INSPECT_TTL_MS) return inspectCache.value
   const r = await docker('GET', `/containers/${CONTAINER}/json`)
-  if (r.status === 0) return { available: false, exists: false, running: false }
-  if (r.status === 404) return { available: true, exists: false, running: false }
-  let running = false
-  try {
-    running = !!JSON.parse(r.body)?.State?.Running
-  } catch {
-    /* treat as stopped */
+  let value
+  if (r.status === 0) value = { available: false, exists: false, running: false }
+  else if (r.status === 404) value = { available: true, exists: false, running: false }
+  else {
+    let running = false
+    try {
+      running = !!JSON.parse(r.body)?.State?.Running
+    } catch {
+      /* treat as stopped */
+    }
+    value = { available: true, exists: r.status === 200, running }
   }
-  return { available: true, exists: r.status === 200, running }
+  inspectCache.value = value
+  inspectCache.at = Date.now()
+  return value
 }
 
 let chain = Promise.resolve()
@@ -90,78 +107,81 @@ const serial = (fn) => {
   return run
 }
 
-/** Start the container if it is not running. 'started' | 'running' | 'unavailable' */
+/** 'started' | 'running' | 'unavailable' */
 export function startOllama() {
   return serial(async () => {
-    const c = await ollamaContainer()
+    const c = await ollamaContainer({ fresh: true })
     if (!c.available || !c.exists) return 'unavailable'
     if (c.running) return 'running'
     const r = await docker('POST', `/containers/${CONTAINER}/start`)
+    inspectCache.at = 0
     const ok = r.status === 204 || r.status === 304
     console.log(`[ollama] start → ${ok ? 'ok' : `HTTP ${r.status}`}`)
     return ok ? 'started' : 'unavailable'
   })
 }
 
-/** Stop the container if it is running. 'stopped' | 'idle' | 'unavailable' */
+/** 'stopped' | 'idle' | 'unavailable' */
 export function stopOllama() {
   return serial(async () => {
-    const c = await ollamaContainer()
+    const c = await ollamaContainer({ fresh: true })
     if (!c.available || !c.exists) return 'unavailable'
     if (!c.running) return 'idle'
     const r = await docker('POST', `/containers/${CONTAINER}/stop?t=${STOP_GRACE_S}`)
+    inspectCache.at = 0
     const ok = r.status === 204 || r.status === 304
     console.log(`[ollama] stop → ${ok ? 'ok' : `HTTP ${r.status}`}`)
     return ok ? 'stopped' : 'unavailable'
   })
 }
 
-/** Start Ollama (if wanted and possible) and wait until it answers, for an on-demand pull. */
-export async function ensureOllamaReady() {
-  const started = await startOllama()
-  if (started === 'unavailable') return false
+async function answering(timeoutMs = 2000) {
+  try {
+    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(timeoutMs) })
+    return r.ok
+  } catch {
+    return false
+  }
+}
+
+/** Start the container (toggle permitting) and wait until Ollama answers — for a model pull. */
+export async function ensureOllamaReady(settings) {
+  if (!settings.ollamaEnabled) return false
+  if ((await startOllama()) === 'unavailable') return false
   const until = Date.now() + READY_WAIT_MS
   while (Date.now() < until) {
-    if ((await probeModels(2000)) !== null) return true
+    if (await answering()) return true
     await new Promise((r) => setTimeout(r, 1500))
   }
   return false
 }
 
 /**
- * Bring the container in line with the settings.
- *  `boot: true` (server start / deploy) also honours the no-models rule.
- * Returns what happened: 'started' | 'stopped' | 'unchanged' | 'no-models' | 'unavailable'.
+ * Bring the container in line with the toggle and the models directory.
+ * Returns 'started' | 'stopped' | 'unchanged' | 'no-models' | 'unavailable'.
  */
-export async function reconcileOllama(settings, { boot = false } = {}) {
-  if (!ollamaWanted(settings)) {
+export async function reconcileOllama(settings) {
+  if (!settings.ollamaEnabled) {
     const r = await stopOllama()
     return r === 'stopped' ? 'stopped' : r === 'idle' ? 'unchanged' : 'unavailable'
   }
-  if (boot && (await readState()).hasModels === false) {
-    const c = await ollamaContainer()
-    if (c.running) {
-      // It is up anyway (compose started it): confirm models are still absent before stopping.
-      const models = await probeModels()
-      if (models && models.length > 0) return 'unchanged'
-      await stopOllama()
-    }
-    console.log('[ollama] not started: no local models installed (pull one from Settings to start it)')
-    return 'no-models'
+  if ((await modelsInDir()).length === 0) {
+    const r = await stopOllama()
+    console.log(`[ollama] not started: ${MODELS_DIR_LABEL} has no model (pull one or drop a .gguf there)`)
+    return r === 'unavailable' ? 'unavailable' : 'no-models'
   }
   const r = await startOllama()
   return r === 'started' ? 'started' : r === 'running' ? 'unchanged' : 'unavailable'
 }
 
-/** Deploy-time answer for start-jira-board.sh — same rule as a boot reconcile, read from disk. */
-export async function ollamaWantedOnDeploy() {
-  const settings = await readBoardSettings()
-  if (!ollamaWanted(settings)) return false
-  return (await readState()).hasModels !== false
+/** What the board reports about the container, for Settings. */
+export async function ollamaInfo(settings) {
+  const [container, models] = await Promise.all([ollamaContainer(), modelsInDir()])
+  return { enabled: !!settings.ollamaEnabled, ...container, modelsDir: MODELS_DIR_LABEL, models }
 }
 
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()) && process.argv[2] === 'wanted') {
-  ollamaWantedOnDeploy().then((w) => {
-    console.log(w ? 'yes' : 'no')
-  }, () => console.log('yes'))
+if (process.argv[2] === 'wanted' && process.argv[1]?.endsWith('ollama.mjs')) {
+  readBoardSettings()
+    .then(ollamaWanted)
+    .then((w) => console.log(w ? 'yes' : 'no'), () => console.log('no'))
 }

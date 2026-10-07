@@ -73,6 +73,7 @@
     "cloudModel": "",
     "cloudEffort": "low",
     "useHostOllama": false,
+    "ollamaEnabled": false,
     "parallel": 4
   },
   "timeouts": {

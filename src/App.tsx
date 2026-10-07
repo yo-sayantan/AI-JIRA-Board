@@ -41,7 +41,14 @@ export default function App() {
   // announce the Ollama container starting/stopping), so the announcement goes through a ref.
   const toastRef = useRef<ToastFn | null>(null)
   const { settings, setSettings, ready: settingsReady, dark, toggleTheme, saveFailed } = useBoardSettings(served, now, (action) =>
-    toastRef.current?.(action === 'starting' ? 'Local AI on — starting the AI-Ollama container…' : 'Local AI off — stopping the AI-Ollama container.', 'info'),
+    toastRef.current?.(
+      action === 'starting'
+        ? 'Starting the AI-Ollama container…'
+        : action === 'stopping'
+          ? 'Stopping the AI-Ollama container.'
+          : 'AI-Ollama stays off: put a model in jira-intern/models/ first (pull one, or drop a .gguf there).',
+      action === 'no-models' ? 'error' : 'info',
+    ),
   )
   const { features } = settings
   const { toasts, toast, dismiss } = useToasts(settings.toastSeconds, settings.toastMax)

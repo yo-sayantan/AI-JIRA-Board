@@ -46,6 +46,7 @@ export interface AppRuntimeConfig {
     cloudModel?: string
     cloudEffort?: 'low' | 'medium'
     useHostOllama?: boolean
+    ollamaEnabled?: boolean
   }
   branding?: {
     tagline?: string

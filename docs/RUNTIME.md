@@ -97,16 +97,19 @@ HOST (your machine)
 
 ## AI-Ollama lifecycle
 
-The Ollama container only runs while something can use it (`server/ollama.mjs`):
+The Ollama container runs only while **both** conditions hold (`server/ollama.mjs`):
 
-| Moment | Rule |
+1. Settings → AI → **AI-Ollama container** is on (`ollamaEnabled`, saved in `jira-intern/.settings.json`; default from `config.ai.ollamaEnabled`).
+2. **`jira-intern/models/` contains a model** — an Ollama manifest under `models/manifests/` (a pull from Settings lands there, because `docker-compose.yml` binds that directory to the container's `/root/.ollama`) or a loose `*.gguf` file.
+
+| Moment | Behaviour |
 |---|---|
-| Deploy (`start-jira-board.sh`) | `node server/ollama.mjs wanted` → **yes** only when `aiLevel ≠ none`, `aiBackend = local` and host Ollama is off, AND the last probe saw at least one model (`jira-intern/.ollama-state.json`; unknown counts as yes so a first install can pull). Otherwise the container is *created but left stopped* and `jira-board`/`jira-ai` come up with `--no-deps`. |
-| Board server boot | Same rule, via the Docker socket: stops a running Ollama that is not wanted (or has no models), starts a wanted one. |
-| Settings change | Local AI switched on → start; switched off / cloud / host Ollama → stop. The board toasts what it did. |
-| Model pull | Starts the container on demand and waits for it to answer before proxying the pull. |
+| Deploy (`start-jira-board.sh`) | `node server/ollama.mjs wanted` → **yes** only when both hold. Otherwise the container is *created but left stopped* and `jira-board`/`jira-ai` come up with `--no-deps`. A one-time migration copies models from the old `jira-ai-models` volume when the directory is still empty. |
+| Board server boot | Same rule via the Docker socket: stops a running Ollama that is not wanted, starts a wanted one. |
+| Toggle flipped | On → start (or `no-models`, surfaced as an error toast naming the directory); off → stop. The toggle row shows the live container state and the models found. |
+| Model pull | Starts the container on demand (toggle permitting) and waits for it to answer before proxying the pull. |
 
 Control goes through the Docker Engine API on `/var/run/docker.sock` (mounted in `docker-compose.yml`,
 with `group_add: "${DOCKER_GID:-0}"` so the unprivileged `node` user may use it). Without the socket every
-action reports `unavailable` and Ollama simply follows compose. `restart: unless-stopped` keeps a stopped
-Ollama stopped across Docker restarts.
+action reports `unavailable`, the Settings row says so, and Ollama simply follows compose.
+`restart: unless-stopped` keeps a stopped Ollama stopped across Docker restarts.

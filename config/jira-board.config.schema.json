@@ -95,6 +95,7 @@
         "cloudModel": { "type": "string" },
         "cloudEffort": { "enum": ["low", "medium"] },
         "useHostOllama": { "type": "boolean" },
+        "ollamaEnabled": { "type": "boolean" },
         "parallel": { "type": "integer", "minimum": 1, "maximum": 6 }
       },
       "additionalProperties": false
