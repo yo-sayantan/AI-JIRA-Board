@@ -411,7 +411,7 @@ export function SettingsPanel({
                     </label>
                     <label className="flex h-8 min-w-0 items-center gap-2 text-[11.5px] font-semibold text-[var(--ink-soft)]">
                       <span className="shrink-0">Show at most</span>
-                      <NumberBox label="Notifications on screen" hint="When more arrive, the oldest close first" limit="toastMax" value={settings.toastMax} onChange={(v) => set('toastMax', v)} className="w-[4.75rem]" />
+                      <NumberBox label="Notifications on screen" hint="More than this wait their turn and appear as earlier ones close" limit="toastMax" value={settings.toastMax} onChange={(v) => set('toastMax', v)} className="w-[4.75rem]" />
                     </label>
                   </div>
                 </Section>
