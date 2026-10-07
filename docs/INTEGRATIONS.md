@@ -65,6 +65,7 @@ LLM-agent fallback may read Confluence through MCP (policy string from `config.m
 | `POST /api/run-archive?scope=all|year|since|key&…` | Start the archive rebuild. `POST /api/run-archive/stop` kills it. |
 | `POST /api/run-raised` | Start the raised-by-me refresh. |
 | `POST /api/refresh-ticket?key=K` | Queue a single-ticket refresh (FIFO, idempotent). |
+| `POST /api/move-ticket?key=K&to=todo\|prog\|rev\|qa\|done` | Transition the ticket in Jira (`transition.py`). Replies with the gate verdict: `{ok, moved, status, warnings}` / `{ok:false, blocked, reason}` / `{ok:false, error}`. On a real move, queues a refresh of that ticket. |
 | `GET /api/intern-status` | THE poll: run state + job type (daily/archive/raised/external), lastExit, progress, refresh queue, report queues, AI status. |
 | `GET /api/reports` · `GET /api/reports/<KEY>` · `POST /api/report?key=K` · `POST /api/reports/bulk?scope=…` · `POST /api/reports/stop` | PR-report index / one report / generate one / bulk / stop. |
 | `GET|POST /api/settings` | Machine-wide settings (mirrored to `.settings.json`). |

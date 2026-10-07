@@ -20,6 +20,8 @@ export const Board = memo(function Board({
   onArchive,
   onRefreshTicket,
   refreshingKeys,
+  onMove,
+  movingKeys,
 }: {
   tickets: Ticket[]
   now: number
@@ -28,6 +30,9 @@ export const Board = memo(function Board({
   onArchive?: (key: string) => void
   onRefreshTicket?: (key: string) => void
   refreshingKeys?: ReadonlySet<string>
+  /** Drag-and-drop status change, written through to Jira. */
+  onMove?: (key: string, to: ColumnKey) => void
+  movingKeys?: ReadonlySet<string>
 }) {
   const byColumn = useMemo(() => {
     const groups = new Map<ColumnKey, Ticket[]>(BOARD_COLUMNS.map((c) => [c.key, []]))
@@ -50,6 +55,8 @@ export const Board = memo(function Board({
           // Per-ticket refresh only for in-flight columns (the card also guards on column).
           onRefreshTicket={meta.key === 'done' ? undefined : onRefreshTicket}
           refreshingKeys={refreshingKeys}
+          onMove={onMove}
+          movingKeys={movingKeys}
         />
       ))}
     </div>

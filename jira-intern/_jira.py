@@ -94,11 +94,12 @@ def get_json(url, headers, timeout, retries=4):
     raise last
 
 
-def jira_get(path, timeout=120):
+def jira_get(path, timeout=120, retries=4):
     return get_json(
         JIRA_BASE + path,
         {"Authorization": f"Bearer {os.environ['JIRA_PERSONAL_TOKEN']}", "Accept": "application/json"},
         timeout=timeout,
+        retries=retries,
     )
 
 

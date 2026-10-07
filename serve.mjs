@@ -8,7 +8,7 @@ import { createServer } from 'node:http'
 import { stat } from 'node:fs/promises'
 import { BOARD_PATH, DATE_RE, HOST, KEY_RE, PATHS, PORT, ROOT, YEAR_RE } from './server/config.mjs'
 import { createStaticHandler, json, readBody } from './server/http.mjs'
-import { runStatus, startArchive, startDaily, startRaised, stopArchive, ticketRefresh } from './server/jobs.mjs'
+import { MOVE_TARGETS, moveTicket, runStatus, startArchive, startDaily, startRaised, stopArchive, ticketRefresh } from './server/jobs.mjs'
 import { externalGenerating, readReport, reportQueue, reportsIndex, resolveReportKeys, stopReports } from './server/reports.mjs'
 import { aiStatus, enrichingKeys, localCatalog, proxyAi } from './server/ai.mjs'
 import { readBoardSettings, updateBoardSettings } from './server/settings.mjs'
@@ -111,6 +111,17 @@ const routes = {
       position: pending.indexOf(key),
       pending,
     })
+  },
+
+  // Drag-and-drop: move a ticket to another column IN JIRA. Answers once Jira has, with the gate
+  // verdict (moved / blocked / error) — the board moved the card optimistically and bounces it back
+  // on anything but ok.
+  'POST /api/move-ticket': async (req, res, url) => {
+    const key = param(url, 'key').toUpperCase()
+    const to = param(url, 'to').toLowerCase()
+    if (!KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
+    if (!MOVE_TARGETS.has(to)) return json(res, 400, { ok: false, error: 'bad target' })
+    json(res, 200, { key, to, ...(await moveTicket(key, to)) })
   },
 
   'GET /api/reports': async (req, res) => {

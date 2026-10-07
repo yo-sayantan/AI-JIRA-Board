@@ -115,7 +115,7 @@ def pick_transition(transitions, target):
 
 
 def move(key, target):
-    issue = jira_get(f"/rest/api/2/issue/{key}?fields=status,subtasks,issuelinks,issuetype,summary", timeout=30)
+    issue = jira_get(f"/rest/api/2/issue/{key}?fields=status,subtasks,issuelinks,issuetype,summary", timeout=30, retries=1)
     fields = issue["fields"]
     current = fields["status"]["name"]
     if status_column(current) == target:
@@ -125,7 +125,7 @@ def move(key, target):
     if blocker:
         return {"ok": False, "blocked": True, "reason": blocker}
 
-    transitions = jira_get(f"/rest/api/2/issue/{key}/transitions", timeout=30).get("transitions") or []
+    transitions = jira_get(f"/rest/api/2/issue/{key}/transitions", timeout=30, retries=1).get("transitions") or []
     chosen = pick_transition(transitions, target)
     if not chosen:
         return {"ok": False, "error": f"Jira offers no transition from “{current}” to {target} for {key}."}

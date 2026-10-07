@@ -12,6 +12,7 @@ import { useInternJobs } from './hooks/useInternJobs'
 import { useInternStatus } from './hooks/useInternStatus'
 import { useScrollLock, useShortcuts } from './hooks/usePageEffects'
 import { useReports } from './hooks/useReports'
+import { useTicketMoves } from './hooks/useTicketMoves'
 import { useToasts } from './hooks/useToasts'
 import { Header } from './components/header/Header'
 import type { ReportsMenuProps } from './components/header/ReportsMenu'
@@ -40,6 +41,7 @@ export default function App() {
   const { toasts, toast, dismiss } = useToasts(settings.toastSeconds, settings.toastMax)
   const { data, source, userArchived, reload, archive, restoreArchived } = useBoardData(served)
   const jobs = useInternJobs({ served, toast, dismiss, reload })
+  const moves = useTicketMoves({ served, toast, reload })
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [completedOpen, setCompletedOpen] = useState(false)
@@ -55,12 +57,21 @@ export default function App() {
   const reports = useReports({ served, enabled: features.prReports, status, toast })
 
   const byKey = useMemo(() => indexByKey(data), [data])
+  // Dropped cards show in their new column at once; Jira confirms (or refuses) in the background.
+  const boardTickets = useMemo(() => moves.applyOverrides(data.tickets), [moves, data.tickets])
+  const moveTicket = useCallback(
+    (key: string, to: ColumnKey) => {
+      const t = byKey.get(key)
+      if (t) void moves.moveTicket(t, to)
+    },
+    [byKey, moves],
+  )
   const drawers = useDrawerStack(byKey)
   useScrollLock(drawers.open || completedOpen || raisedOpen)
   useShortcuts(features.shortcuts && !drawers.open && !completedOpen && !raisedOpen, jobs.refreshBoard)
 
   const terms = useMemo(() => parseQuery(query), [query])
-  const view = useMemo(() => splitBoard(data.tickets, terms, now, features.onHold), [data.tickets, terms, now, features.onHold])
+  const view = useMemo(() => splitBoard(boardTickets, terms, now, features.onHold), [boardTickets, terms, now, features.onHold])
   const hasAnyActive = useMemo(() => hasActiveWork(data.tickets, now, features.onHold), [data.tickets, now, features.onHold])
   const myCompletedCount = useMemo(() => countMyCompleted(data), [data])
   const raisedCount = useMemo(() => countRaised(data), [data])
@@ -198,6 +209,8 @@ export default function App() {
           onArchive={archiveTicket}
           onRefreshTicket={jobs.refreshTicket}
           refreshingKeys={jobs.refreshingKeys}
+          onMove={features.dragMove ? moveTicket : undefined}
+          movingKeys={moves.movingKeys}
         />
       )}
 

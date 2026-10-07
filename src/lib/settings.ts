@@ -140,6 +140,14 @@ export const FEATURES = [
     detail: 'Shows the generated brief on the ticket page. Off hides it. Reports and the intern keep running.',
   },
   {
+    key: 'dragMove',
+    default: true,
+    label: 'Drag to change status',
+    hint: 'Drop a card in another column to move it in Jira',
+    detail:
+      'Drag a card to To Do, In Progress, In Review, QA or Done and the ticket is transitioned in Jira in the background. In Review warns when there is no pull request and QA when there is no QA ticket; Done is refused — the card slides back — until every PR is merged and the QA ticket is done. Needs the local server.',
+  },
+  {
     key: 'onHold',
     default: true,
     label: 'On Hold section',

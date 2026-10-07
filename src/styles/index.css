@@ -166,6 +166,10 @@ select.jb-field:disabled {
   border-color: color-mix(in srgb, var(--card-accent) 46%, var(--line));
   background-color: color-mix(in srgb, var(--card-accent) 8%, var(--surface-solid));
 }
+/* While its ghost is being dragged, the card left behind fades so the drop target reads clearly. */
+.ticket-card-dragging {
+  opacity: 0.35;
+}
 .ticket-card-wash,
 .ticket-card-glow,
 .ticket-card-edge {
