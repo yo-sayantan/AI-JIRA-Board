@@ -49,22 +49,22 @@ function archiveScope(url) {
 /** Ticket keys for a bulk report run, or an error message. */
 async function bulkReportKeys(url) {
   const scope = param(url, 'scope') || 'all'
-  if (scope === 'keys') {
-    return {
-      keys: param(url, 'keys')
-        .split(',')
-        .map((s) => s.trim().toUpperCase())
-        .filter((s) => KEY_RE.test(s)),
-    }
-  }
   const year = param(url, 'year')
   const since = param(url, 'since')
   if (scope === 'year' && !YEAR_RE.test(year)) return { error: 'bad year' }
   if (scope === 'since' && !DATE_RE.test(since)) return { error: 'bad since date' }
+  // An explicit list (the dashboard's cards) still goes through needs-report, so tickets
+  // without a PR are skipped and current reports are left alone unless forced.
+  const keys =
+    scope === 'keys'
+      ? [...new Set(param(url, 'keys').split(',').map((s) => s.trim().toUpperCase()).filter((s) => KEY_RE.test(s)))]
+      : null
+  if (keys && (keys.length === 0 || keys.length > 500)) return { error: 'bad keys' }
   return {
     keys: await resolveReportKeys({
       year: scope === 'year' ? year : null,
       since: scope === 'since' ? since : null,
+      keys,
       force: url.searchParams.get('force') === '1',
     }),
   }

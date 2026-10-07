@@ -63,6 +63,8 @@ export interface ReportsMenuProps {
   withPrCount: number
   /** How many of those already have a report on disk. */
   reportCount: number
+  /** Dashboard cards (open + the Done column) that have a pull request. */
+  board: { keys: string[]; open: number; done: number }
   onBulk: (target: ReportScope, force: boolean) => void
   onOne: (key: string) => void
   onStop: () => void
@@ -72,8 +74,8 @@ export interface ReportsMenuProps {
   modelLabel?: string | null
 }
 
-/** Batch entry point for PR Readiness Reports: every ticket with a pull request, a time window, or one ticket. */
-export function ReportsMenu({ served, generating, withPrCount, reportCount, onBulk, onOne, onStop, runningCount = 0, modelLabel }: ReportsMenuProps) {
+/** Batch entry point for PR Readiness Reports: every ticket with a pull request, the dashboard's tickets, a time window, or one ticket. */
+export function ReportsMenu({ served, generating, withPrCount, reportCount, board, onBulk, onOne, onStop, runningCount = 0, modelLabel }: ReportsMenuProps) {
   const [force, setForce] = useState(false)
   const [peak, setPeak] = useState(0)
   const busy = generating.size
@@ -102,7 +104,7 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
           title={
             busy
               ? `${busy} PR readiness report${busy === 1 ? '' : 's'} generating in the background — click for options`
-              : 'Generate PR Readiness Reports — all tickets with a pull request, a time window, or one ticket'
+              : "Generate PR Readiness Reports — all tickets with a pull request, the dashboard's tickets, a time window, or one ticket"
           }
           className="grid h-9 w-9 place-items-center rounded-xl border bg-[var(--surface-solid)] card-shadow hover:border-[var(--muted)]"
           style={{ borderColor: busy ? hexToRgba(AI, 0.5) : 'var(--line)' }}
@@ -124,6 +126,16 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, onBu
         defaultWindowDays: APP_CONFIG.reports?.defaultWindowDays ?? 30,
         sinceAria: 'Generate reports for tickets since this date, YYYY-MM-DD',
         keyAria: 'Ticket key to generate a report for',
+        extra: [
+          {
+            label: 'Tickets on the dashboard',
+            hint: board.keys.length
+              ? `${board.keys.length} with a PR · ${board.open} open · ${board.done} completed`
+              : 'No ticket on the dashboard has a pull request',
+            disabled: board.keys.length === 0,
+            onClick: () => onBulk({ scope: 'keys', keys: board.keys }, force),
+          },
+        ],
       }}
       onPick={pick}
       footer={

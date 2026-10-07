@@ -48,10 +48,11 @@ export async function stopReports() {
  * Which tickets a bulk run should cover. pr_report.py owns that rule (PR present, fingerprint
  * stale), so we ask it. Spawned with an argument array over pre-validated values, never a shell.
  */
-export function resolveReportKeys({ year, since, force }) {
+export function resolveReportKeys({ year, since, keys, force }) {
   const args = [PATHS.reportPy, 'needs-report']
   if (year) args.push('--year', String(year))
   if (since) args.push('--since', since)
+  if (keys) args.push('--keys', keys.join(','))
   if (force) args.push('--force')
   return new Promise((resolve) => {
     let out = ''
