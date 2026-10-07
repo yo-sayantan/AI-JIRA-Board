@@ -631,8 +631,8 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
           Max is the product name for the stored value <code class="inl">full</code> (longest timeout).
           Local models are a <b>dropdown</b>. If the chosen tag is already on disk, that is enough.
           If it is not, the download icon beside the list queues a pull. The <b>?</b> next to the list
-          opens the matching section below: Host Ollama when that checkbox is on, otherwise the GGUF
-          download / place / trigger path. For Cloud AI the <b>i</b> button opens the <a href="#ai-cloud-prices">price table</a>.</p>
+          opens <a href="#ai-model-files">GGUF models</a> — download a file, place it, register it. For Cloud AI
+          the <b>i</b> next to the model list opens <a href="#ai-cloud-prices">Cloud prices</a>.</p>
         <p class="small">The catalog of every local LLM (tags + download links) is
           <code class="inl">ai-intern/models.json</code> — add a row there when a new model is released.
           Jump: <a href="#ai-ollama">Host Ollama</a> · <a href="#ai-model-files">GGUF files</a>.</p>
@@ -708,20 +708,21 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
       </div>
       <div class="step">
         <div class="step-h"><span class="num">2</span><h3>Where to place it</h3></div>
-        <p class="small">Save the file in <code class="inl">jira-intern/models/</code> (git-ignored) or
-          Downloads. Ollama will not see it there until you register it.</p>
+        <p class="small">Save the file in <code class="inl">jira-intern/models/</code> (git-ignored). That
+          directory <i>is</i> the AI-Ollama container's model store (<code class="inl">/root/.ollama</code>), and a
+          model there is what lets the container start — with Settings → Features → <b>AI-Ollama container</b> on.
+          Ollama still will not list it until you register it.</p>
         <pre><button class="copy">Copy</button>mkdir -p jira-intern/models
 # move the downloaded .gguf in here, e.g.
 # mv ~/Downloads/qwen2.5-coder-7b-instruct-q4_k_m.gguf jira-intern/models/</pre>
       </div>
       <div class="step">
         <div class="step-h"><span class="num">3</span><h3>Register the tag (how to trigger)</h3></div>
-        <p class="small"><b>In-container</b> (Host Ollama <b>off</b>) — copy into the Ollama container, then create
-          with the Settings tag:</p>
-        <pre><button class="copy">Copy</button>docker cp jira-intern/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf AI-Ollama:/tmp/model.gguf
-docker exec AI-Ollama sh -c 'printf "FROM /tmp/model.gguf\n" &gt; /tmp/Modelfile &amp;&amp; ollama create qwen2.5-coder:7b -f /tmp/Modelfile'</pre>
-        <p class="small">Created blobs live on volume <code class="inl">jira-ai-models</code>
-          (<code class="inl">/root/.ollama</code> inside the container).</p>
+        <p class="small"><b>In-container</b> (Host Ollama <b>off</b>) — the file is already inside the container at
+          <code class="inl">/root/.ollama/</code>; create it with the Settings tag:</p>
+        <pre><button class="copy">Copy</button>docker exec AI-Ollama sh -c 'printf "FROM /root/.ollama/qwen2.5-coder-7b-instruct-q4_k_m.gguf\n" &gt; /root/.ollama/Modelfile &amp;&amp; ollama create qwen2.5-coder:7b -f /root/.ollama/Modelfile'</pre>
+        <p class="small">The created model lands in <code class="inl">jira-intern/models/</code> on this machine, so it
+          survives container rebuilds and redeploys.</p>
         <p class="small"><b>Host Ollama</b> — same file, then:</p>
         <pre><button class="copy">Copy</button>cat &gt; /tmp/Modelfile &lt;&lt;'EOF'
 FROM /absolute/path/to/qwen2.5-coder-7b-instruct-q4_k_m.gguf

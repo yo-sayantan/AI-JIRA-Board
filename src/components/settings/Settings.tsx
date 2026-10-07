@@ -1044,19 +1044,11 @@ function LocalModelPicker({
           </button>
         )}
         <a
-          href={guideUrl(settings.aiUseHostOllama ? 'ai-ollama' : 'ai-model-files')}
+          href={guideUrl('ai-model-files')}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={
-            settings.aiUseHostOllama
-              ? 'Host Ollama setup — install, pull, and where models live'
-              : 'Download a model file, where to place it, and how to register it'
-          }
-          title={
-            settings.aiUseHostOllama
-              ? 'Host Ollama setup — install, pull, and where models live'
-              : 'Download a model file, where to place it, and how to register it'
-          }
+          aria-label="GGUF models — download a model file, place it and register it (opens the guide)"
+          title="GGUF models — download a model file, place it and register it (opens the guide)"
           className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:border-[var(--muted)] hover:text-[var(--ink)]"
         >
           <QuestionIcon size={14} />
