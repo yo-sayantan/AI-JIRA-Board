@@ -209,7 +209,7 @@ function shellenv() {
   out.push(`AGENT_BIN=${shq(conn.bin)}`)
   out.push(`AGENT_BIN_FALLBACKS=${shq((conn.binFallbacks || []).map(untilde).join(':'))}`)
   out.push(`AGENT_PROMPT_FLAG=${shq(conn.promptFlag ?? '-p')}`)
-  // NOTE: args are space-joined — individual args must not contain spaces (documented in CONFIG.md).
+  // NOTE: args are space-joined — individual args must not contain spaces (documented in docs/CONFIG.md).
   out.push(`AGENT_EXTRA_ARGS=${shq((conn.extraArgs || []).join(' '))}`)
   out.push(`AGENT_MODEL_FLAG=${shq(conn.modelFlag ?? '--model')}`)
   out.push(`AGENT_SECRETS=${shq(untilde(conn.secretsFile ?? ''))}`)

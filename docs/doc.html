@@ -128,7 +128,10 @@
         ['ARCHITECTURE.md', '🏗️ Architecture'],
         ['USAGE.md', '🧭 Usage'],
         ['DEPLOYMENT.md', '🚀 Deployment'],
-        ['setup/README.md', '⚙️ Setup'],
+        ['SETUP.md', '⚙️ Setup'],
+        ['CONFIG.md', '🧩 Config'],
+        ['INTERN.md', '🐍 Intern'],
+        ['OVERVIEW.md', '📖 Overview'],
       ];
       var param = new URLSearchParams(location.search).get('f') || 'AGENTS.md';
       var entry = DOCS.filter(function (d) { return d[0] === param; })[0] || DOCS[0];
@@ -143,7 +146,7 @@
         a.textContent = d[1];
         nav.appendChild(a);
       });
-      var rawPath = file.indexOf('setup/') === 0 ? '../' + file : file;
+      var rawPath = file; // every document lives in docs/ beside this viewer
       document.getElementById('rawlink').href = rawPath;
 
       function esc(s) {

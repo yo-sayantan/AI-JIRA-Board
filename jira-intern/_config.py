@@ -8,7 +8,7 @@ Resolution order:
   1. <repo>/config/jira-board.config.json — complete tracked defaults
   2. $AI_CONFIG_FILE or ~/.ai/config.json — optional sparse personal override
 
-See setup/README.md for how to create ~/.ai/config.json.
+See docs/SETUP.md for how to create ~/.ai/config.json.
 """
 import copy
 import json

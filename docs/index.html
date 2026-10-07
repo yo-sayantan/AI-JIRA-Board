@@ -530,7 +530,7 @@ chmod 600 ~/.ai/config.json</pre>
 Copy-Item "setup\config.example.json" "$HOME\.ai\config.json"</pre>
         <p class="small">Edit it — your <b>name exactly as Jira shows it</b> (that's how "assigned to me"
           matches), your company URLs, and the footer branding. Every key is documented in
-          <code class="inl">jira-intern/CONFIG.md</code>. <b>No tokens go in this file.</b></p>
+          <a href="doc.html?f=CONFIG.md">docs/CONFIG.md</a>. <b>No tokens go in this file.</b></p>
         <div class="note"><b>Config precedence:</b> tracked defaults from
           <code class="inl">config/jira-board.config.json</code>, then a sparse
           <code class="inl">$AI_CONFIG_FILE</code> or <code class="inl">~/.ai/config.json</code>
@@ -931,14 +931,17 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
         <a class="doc" href="doc.html?f=ARCHITECTURE.md"><b>🏗️ Architecture</b><span>How the fetch, data file and app fit together.</span></a>
         <a class="doc" href="doc.html?f=USAGE.md"><b>🧭 Using the board</b><span>Chips, Raised by me, Next Sprint, the drawer, shortcuts.</span></a>
         <a class="doc" href="doc.html?f=DEPLOYMENT.md"><b>🚀 Deployment</b><span>Docker, static file, live server, deploy pitfalls.</span></a>
-        <a class="doc" href="doc.html?f=setup/README.md"><b>⚙️ Setup guide</b><span>Secrets, config &amp; MCP — every template explained.</span></a>
+        <a class="doc" href="doc.html?f=SETUP.md"><b>⚙️ Setup guide</b><span>Secrets, config &amp; MCP — every template explained.</span></a>
+        <a class="doc" href="doc.html?f=CONFIG.md"><b>🧩 Config reference</b><span>Every key in the project config and the personal override.</span></a>
+        <a class="doc" href="doc.html?f=INTERN.md"><b>🐍 The intern</b><span>The fetch pipeline from the inside: scripts, runners, behaviours.</span></a>
+        <a class="doc" href="doc.html?f=OVERVIEW.md"><b>📖 Project overview</b><span>What it does, quick start, repository layout.</span></a>
       </div>
 
       <div class="note warn" style="margin-top: 24px">
         <b>Before making the repo public:</b> confirm no <code class="inl">*.env</code> with real values is staged,
         keep <code class="inl">config/jira-board.config.json</code> generic, and keep real identity/internal
         hostnames only in <code class="inl">~/.ai/config.json</code>. Checklist in
-        <a href="doc.html?f=setup/README.md">setup/README.md</a>.
+        <a href="doc.html?f=SETUP.md">docs/SETUP.md</a>.
       </div>
 
       <footer>

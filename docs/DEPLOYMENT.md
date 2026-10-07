@@ -1,7 +1,7 @@
 # Deployment & running
 
 Three ways to run the board, easiest first. All of them assume you've done the one-time
-[setup](../setup/README.md) (a Jira token in `~/.cursor/mcp-secrets.env` and a filled-in
+[setup](SETUP.md) (a Jira token in `~/.cursor/mcp-secrets.env` and a filled-in
 optional personal override at `~/.ai/config.json`; project defaults are in
 `config/jira-board.config.json`).
 

@@ -1,21 +1,21 @@
 # Setup — secrets, config & MCP
 
-Everything user-, company- and token-specific lives **outside** the app bundle. This folder
-holds a safe **template** for each of those files. Nothing here contains a real token — you
+Everything user-, company- and token-specific lives **outside** the app bundle. The repo's
+`setup/` folder holds a safe **template** for each of those files. Nothing here contains a real token — you
 copy a template, fill it in on your machine, and keep your filled-in copies out of git.
 
 > **The golden rule:** the only file that ever holds a real token is your
 > `mcp-secrets.env`, and it lives **outside this repo** (default `~/.cursor/mcp-secrets.env`).
 > Everything else points at it by path.
 
-| Template in this folder | Copy it to | What it is |
+| Template in `setup/` | Copy it to | What it is |
 |---|---|---|
-| [`mcp-secrets.env.template`](mcp-secrets.env.template) | `~/.cursor/mcp-secrets.env` | Your API tokens (Jira required; Confluence/Bitbucket optional). |
-| [`config.example.json`](config.example.json) | `~/.ai/config.json` | Who you are + your company URLs + preferences. **No tokens.** Lives outside the repo. |
-| [`mcp.cursor.json.template`](mcp.cursor.json.template) | `~/.cursor/mcp.json` | MCP servers for Cursor (optional — richer AI briefs). |
-| [`mcp.claude.json.template`](mcp.claude.json.template) | `~/.claude/.claude.json` | MCP servers for Claude Code (optional). |
-| [`mcp-with-secrets.sh.template`](mcp-with-secrets.sh.template) | `~/.local/bin/mcp-with-secrets.sh` | Wrapper that keeps tokens out of the MCP JSON. |
-| [`Start Jira Board.command.template`](Start%20Jira%20Board.command.template) | `~/Desktop/Start Jira Board.command` | macOS double-click launcher. |
+| [`mcp-secrets.env.template`](../setup/mcp-secrets.env.template) | `~/.cursor/mcp-secrets.env` | Your API tokens (Jira required; Confluence/Bitbucket optional). |
+| [`config.example.json`](../setup/config.example.json) | `~/.ai/config.json` | Who you are + your company URLs + preferences. **No tokens.** Lives outside the repo. |
+| [`mcp.cursor.json.template`](../setup/mcp.cursor.json.template) | `~/.cursor/mcp.json` | MCP servers for Cursor (optional — richer AI briefs). |
+| [`mcp.claude.json.template`](../setup/mcp.claude.json.template) | `~/.claude/.claude.json` | MCP servers for Claude Code (optional). |
+| [`mcp-with-secrets.sh.template`](../setup/mcp-with-secrets.sh.template) | `~/.local/bin/mcp-with-secrets.sh` | Wrapper that keeps tokens out of the MCP JSON. |
+| [`Start Jira Board.command.template`](../setup/Start%20Jira%20Board.command.template) | `~/Desktop/Start Jira Board.command` | macOS double-click launcher. |
 
 ---
 
@@ -65,7 +65,7 @@ chmod 600 ~/.ai/config.json
 
 Edit `~/.ai/config.json` and set your `user` (name **exactly** as Jira shows it, so
 "assigned to me" matches), your `endpoints` (company URLs), and the `app.branding` footer.
-Full reference for every key: [`../jira-intern/CONFIG.md`](../jira-intern/CONFIG.md).
+Full reference for every key: [`CONFIG.md`](CONFIG.md).
 
 The project config is loaded first. `$AI_CONFIG_FILE` or `~/.ai/config.json` is then
 deep-merged over it, and saved Settings AI choices are the final runtime overlay.
@@ -85,8 +85,8 @@ node jira-intern/local-runner/config.mjs path
 Only if you want the **local AI-summary pass** to enrich tickets from Confluence/Bitbucket.
 Pick the client you use:
 
-- **Cursor:** merge [`mcp.cursor.json.template`](mcp.cursor.json.template) into `~/.cursor/mcp.json`.
-- **Claude Code / Desktop:** merge [`mcp.claude.json.template`](mcp.claude.json.template) into
+- **Cursor:** merge [`mcp.cursor.json.template`](../setup/mcp.cursor.json.template) into `~/.cursor/mcp.json`.
+- **Claude Code / Desktop:** merge [`mcp.claude.json.template`](../setup/mcp.claude.json.template) into
   `~/.claude/.claude.json`, and install the wrapper so tokens stay out of that JSON:
   ```bash
   cp setup/mcp-with-secrets.sh.template ~/.local/bin/mcp-with-secrets.sh
@@ -112,7 +112,7 @@ chmod +x ~/Desktop/"Start Jira Board.command"
 ```
 
 Double-click it to build + deploy in Docker and open the board. See
-[`../docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md) for all the ways to run it.
+[`DEPLOYMENT.md`](DEPLOYMENT.md) for all the ways to run it.
 
 ---
 
