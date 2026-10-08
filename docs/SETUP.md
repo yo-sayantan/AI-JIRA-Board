@@ -116,6 +116,26 @@ Double-click it to build + deploy in Docker and open the board. See
 
 ---
 
+## Step 6 — Trust your company's certificate authority (optional)
+
+If your Bitbucket (or Jira) uses a certificate from a private company CA, every Bitbucket call fails
+inside Docker with `CERTIFICATE_VERIFY_FAILED` and the board silently falls back to what Jira's
+index says — stale branch names, no review state from Bitbucket, no newest-branch ranking. Fix it
+once by putting the CA in `~/.ai/ca-bundle.pem`; both containers mount `~/.ai`, and the bundle is
+added to (not swapped for) the public roots.
+
+```bash
+# macOS — company roots are normally installed in the System keychain by IT
+security find-certificate -a -p /Library/Keychains/System.keychain > ~/.ai/ca-bundle.pem
+```
+
+On Linux/Windows ask IT for the root CA as PEM and save it to the same path. Then redeploy
+(`bash start-jira-board.sh`) and refresh: the run summary shows `bb_ok: true`.
+
+A host that cannot even **resolve** the Bitbucket name (off VPN, or Docker's DNS proxy flapping) is
+a network problem, not a certificate one — reconnect the VPN, or uncomment the `dns:` block in
+`docker-compose.yml`.
+
 ## Before you make the repo public
 
 This repo is safe to push **as long as your real secrets never enter it** — they don't, by

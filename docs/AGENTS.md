@@ -135,7 +135,10 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
   sub-task (unless the PR title / branch name has the sub-task's key) in every path that fills
   `prs`/`branches` — and the Done gate (`transition.py::evaluate(is_subtask=…)`, mirrored in
   `src/demo/gates.ts`) lets a sub-ticket close with no PR but not with an unmerged one of its own.
-- A PR's `sourceBranch` comes from Bitbucket's PR record when it was fetched, not from dev-status.
+- Jira's dev-status index can list a branch that does not exist and claim a PR comes from it. An open PR's
+  `sourceBranch` comes from Bitbucket's PR record, and a branch Bitbucket 404s is dropped (`devinfo.branch_head`).
+  None of that works while Bitbucket is unreachable from the container — check `bb_ok` in the refresh log first;
+  a private-CA certificate error is fixed by `~/.ai/ca-bundle.pem` (added to, never replacing, the system roots).
 - Jira comment lists in search payloads are TRUNCATED when long — `comments_for` falls back to
   pagination; don't read `fields.comment.comments` directly.
 - `devinfo` returning **no entry** for a key means the LOOKUP failed; `{}`-with-empty-lists means

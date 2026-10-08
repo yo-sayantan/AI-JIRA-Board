@@ -113,10 +113,19 @@ for _k in _ENV_EXPORT:
         os.environ.setdefault(_k, SECRETS_ENV[_k])
 
 
+# Same default as jira-intern/_jira.py: ~/.ai is mounted into this container as /root/.ai.
+DEFAULT_CA_BUNDLE = os.path.expanduser("~/.ai/ca-bundle.pem")
+
+
 def _verified_ssl():
-    """System roots plus the optional private CA bundle (JIRA_CA_BUNDLE / SSL_CERT_FILE)."""
+    """System roots plus the optional private CA bundle (JIRA_CA_BUNDLE / SSL_CERT_FILE, else
+    ~/.ai/ca-bundle.pem when it exists)."""
     ctx = ssl.create_default_context()
-    bundle = os.environ.get("JIRA_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE") or None
+    bundle = (
+        os.environ.get("JIRA_CA_BUNDLE")
+        or os.environ.get("SSL_CERT_FILE")
+        or (DEFAULT_CA_BUNDLE if os.path.isfile(DEFAULT_CA_BUNDLE) else None)
+    )
     if bundle:
         try:
             ctx.load_verify_locations(cafile=bundle)

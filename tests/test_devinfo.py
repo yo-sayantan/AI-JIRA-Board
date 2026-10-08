@@ -4,6 +4,7 @@ are replaced by canned payloads shaped like the real responses."""
 import os
 import sys
 import unittest
+import urllib.error
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "jira-intern"))
@@ -122,6 +123,10 @@ class ChoosePrimaryTests(unittest.TestCase):
 
 
 class FetchOneTests(unittest.TestCase):
+    def setUp(self):
+        devinfo._BB_UNREACHABLE = False  # the breaker is process-wide; no test may leak it
+        self.addCleanup(setattr, devinfo, "_BB_UNREACHABLE", False)
+
     def fetch(self, dev_status, bb, enrich_open=True):
         with mock.patch.object(devinfo, "jira_get", return_value=dev_status), mock.patch.object(devinfo, "bb_get", bb):
             return devinfo.fetch_one("123", enrich_open)
@@ -295,13 +300,112 @@ class BitbucketIsTheAuthorityForBranchNames(unittest.TestCase):
         with mock.patch.object(devinfo, "bb_get", self._stub(record)):
             self.assertEqual(devinfo._to_pr(_dev_pr(61, PLAIN))["state"], "changes")
 
-    def test_without_enrichment_no_bitbucket_call_is_made(self):
-        with mock.patch.object(devinfo, "bb_get", side_effect=AssertionError("no call expected")):
-            self.assertEqual(devinfo._to_pr(_dev_pr(61, PLAIN), enrich_open=False)["sourceBranch"], PLAIN)
+    def test_without_enrichment_the_pr_record_is_still_read_but_not_the_comments(self):
+        paths = []
+
+        def bb_get(path, timeout=45):
+            paths.append(path)
+            if "/activities" in path:
+                raise AssertionError("comment pages must not be read without enrichment")
+            return {"fromRef": {"displayId": NEWEST}, "toRef": {"displayId": "release/aws"}, "reviewers": []}
+
+        with mock.patch.object(devinfo, "bb_get", bb_get):
+            pr = devinfo._to_pr(_dev_pr(61, PLAIN), enrich_open=False)
+        self.assertEqual(pr["sourceBranch"], NEWEST)
+        self.assertEqual(len(paths), 1)
+        self.assertFalse(any("/activities" in x for x in paths))
 
     def test_a_merged_pr_is_not_looked_up(self):
         with mock.patch.object(devinfo, "bb_get", side_effect=AssertionError("no call expected")):
             self.assertEqual(devinfo._to_pr(_dev_pr(61, PLAIN, status="MERGED"))["sourceBranch"], PLAIN)
+
+
+def _http_404(path):
+    return urllib.error.HTTPError(path, 404, "Not Found", {}, None)
+
+
+class BranchHeadTests(unittest.TestCase):
+    """Bitbucket's answer for a branch: a time, 'does not exist' (404), or unknown (unreachable)."""
+
+    def setUp(self):
+        devinfo._BB_UNREACHABLE = False
+        self.addCleanup(setattr, devinfo, "_BB_UNREACHABLE", False)
+
+    def test_404_means_the_branch_is_gone(self):
+        with mock.patch.object(devinfo, "bb_get", side_effect=_http_404("x")):
+            self.assertEqual(devinfo.branch_head("PROJ", "svc", PLAIN), (None, True))
+
+    def test_other_http_errors_are_unknown_not_gone(self):
+        err = urllib.error.HTTPError("x", 401, "Unauthorized", {}, None)
+        with mock.patch.object(devinfo, "bb_get", side_effect=err):
+            self.assertEqual(devinfo.branch_head("PROJ", "svc", PLAIN), (None, False))
+
+    def test_unreachable_bitbucket_is_skipped_for_the_rest_of_the_run(self):
+        calls = []
+
+        def down(path, timeout=45):
+            calls.append(path)
+            raise urllib.error.URLError("Temporary failure in name resolution")
+
+        with mock.patch.object(devinfo, "bb_get", down):
+            self.assertEqual(devinfo.branch_head("PROJ", "svc", PLAIN), (None, False))
+            self.assertEqual(devinfo.branch_head("PROJ", "svc", MID), (None, False))
+            self.assertIsNone(devinfo._bb_pull_request("PROJ", "svc", 61))
+        self.assertEqual(len(calls), 1)
+
+    def test_a_newest_commit_time(self):
+        with mock.patch.object(devinfo, "bb_get", return_value=_commit(9_000_000)):
+            self.assertEqual(devinfo.branch_head("PROJ", "svc", PLAIN), (9000.0, False))
+
+
+class GoneBranchesAreDropped(unittest.TestCase):
+    """Jira's index keeps branches Bitbucket no longer has; those are not the ticket's."""
+
+    def setUp(self):
+        devinfo._BB_UNREACHABLE = False
+        self.addCleanup(setattr, devinfo, "_BB_UNREACHABLE", False)
+
+    def _run(self, dev_status, gone, times, pr_records=None):
+        def bb_get(path, timeout=45):
+            if "/commits?" in path:
+                for name in gone:
+                    if f"until=refs%2Fheads%2F{name.replace('/', '%2F')}&" in path:
+                        raise _http_404(path)
+                for name, ms in times.items():
+                    if f"until=refs%2Fheads%2F{name.replace('/', '%2F')}&" in path:
+                        return _commit(ms)
+                raise RuntimeError("unknown branch")
+            for pid, rec in (pr_records or {}).items():
+                if path.endswith(f"/pull-requests/{pid}"):
+                    return rec
+            return {"values": [], "isLastPage": True}
+
+        with mock.patch.object(devinfo, "jira_get", return_value=dev_status), mock.patch.object(devinfo, "bb_get", bb_get):
+            return devinfo.fetch_one("1", enrich_open=False)
+
+    def test_the_reported_case(self):
+        """Jira: branch feature/PROJ-1 exists and PR #61 comes from it. Bitbucket: that branch does
+        not exist and #61 comes from the _1 branch. The board must follow Bitbucket."""
+        record = {"fromRef": {"displayId": NEWEST}, "toRef": {"displayId": "release/x"}, "reviewers": []}
+        info = self._run(_dev_status([_dev_pr(61, PLAIN)]), gone={PLAIN}, times={MID: 1_000_000, NEWEST: 2_000_000},
+                         pr_records={61: record})
+        self.assertNotIn(PLAIN, info["branches"])
+        self.assertEqual(info["branch"], NEWEST)
+        self.assertEqual((info["pr"]["id"], info["pr"]["sourceBranch"]), (61, NEWEST))
+
+    def test_a_merged_prs_deleted_source_branch_stays_as_history(self):
+        info = self._run(_dev_status([_dev_pr(50, PLAIN, status="MERGED")]), gone={PLAIN}, times={MID: 1_000_000, NEWEST: 2_000_000})
+        self.assertIn(PLAIN, info["branches"])
+        self.assertEqual(info["branch"], NEWEST)
+
+    def test_nothing_is_dropped_when_bitbucket_cannot_be_asked(self):
+        def down(path, timeout=45):
+            raise urllib.error.URLError("no route")
+
+        with mock.patch.object(devinfo, "jira_get", return_value=_dev_status([_dev_pr(61, PLAIN)])), mock.patch.object(devinfo, "bb_get", down):
+            info = devinfo.fetch_one("1", enrich_open=False)
+        self.assertEqual(set(info["branches"]), {PLAIN, MID, NEWEST})
+        self.assertEqual(info["pr"]["sourceBranch"], PLAIN)
 
 
 if __name__ == "__main__":

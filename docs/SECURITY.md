@@ -120,10 +120,11 @@ Certificate verification is **on** for every outbound call: `jira-intern/_jira.p
 (fetch) and `ai-intern/worker.py _verified_ssl()` (worker; the public AI, Checkmarx and Dynatrace
 endpoints always verify and ignore `JIRA_INSECURE_TLS`).
 
-- **Private corporate CA:** `JIRA_CA_BUNDLE=/path/to/root-ca.pem`. In Docker, mount the PEM into
-  both containers (the commented `private-ca.pem` volume lines in `docker-compose.yml`) and pass
-  the variable through. A bundle that cannot be read fails loudly rather than silently falling
-  back.
+- **Private corporate CA:** put the PEM at `~/.ai/ca-bundle.pem` — both containers mount `~/.ai`,
+  so the fetch scripts and the worker pick it up with no further setting — or point
+  `JIRA_CA_BUNDLE` at it. The bundle is **added** to the system roots, never a replacement (Jira
+  may use a public certificate while Bitbucket uses the company CA). An explicit `JIRA_CA_BUNDLE`
+  that cannot be read fails loudly; an unreadable default bundle is warned about and skipped.
 - **Last resort:** `JIRA_INSECURE_TLS=1` disables verification for Jira/Bitbucket only and prints
   `WARN: TLS verification disabled (JIRA_INSECURE_TLS=1)` on every run. The bearer token then
   travels over an unverified channel; do not leave this on.

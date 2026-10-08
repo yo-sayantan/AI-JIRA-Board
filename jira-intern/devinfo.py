@@ -17,6 +17,7 @@ URL, so there is no repo guessing anywhere in this module.
 """
 import re
 import sys
+import urllib.error
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -66,15 +67,35 @@ def pr_comment_stats(proj, slug, pid):
     return total, resolved, max(0, total - resolved)
 
 
+# Set once Bitbucket proves unreachable (DNS, TLS, refused) so the rest of the run does not pay a
+# timeout per PR and per branch. A 4xx answer means Bitbucket IS reachable and never trips it.
+_BB_UNREACHABLE = False
+
+
+def _bb(path, timeout, what):
+    """bb_get for the lookups below. Returns (data, http_status_or_None). Never raises."""
+    global _BB_UNREACHABLE
+    if _BB_UNREACHABLE:
+        return None, None
+    try:
+        return bb_get(path, timeout=timeout), 200
+    except urllib.error.HTTPError as e:
+        sys.stderr.write(f"WARN bitbucket {what}: HTTP {e.code}\n")
+        return None, e.code
+    except (urllib.error.URLError, OSError) as e:
+        _BB_UNREACHABLE = True
+        sys.stderr.write(f"WARN bitbucket unreachable ({what}): {e} — skipping Bitbucket for the rest of this run\n")
+        return None, None
+    except Exception as e:
+        sys.stderr.write(f"WARN bitbucket {what}: {e}\n")
+        return None, None
+
+
 def _bb_pull_request(proj, slug, pid):
     """Bitbucket's own record of one pull request, or None when it cannot be read. Unlike the
     copy Jira's dev-status index keeps, this is current: it is the authority for which branch
     the PR really comes from and goes to, and for reviewer verdicts."""
-    try:
-        return bb_get(f"/projects/{proj}/repos/{slug}/pull-requests/{pid}", timeout=30)
-    except Exception as e:
-        sys.stderr.write(f"WARN bitbucket PR {proj}/{slug}#{pid}: {e}\n")
-        return None
+    return _bb(f"/projects/{proj}/repos/{slug}/pull-requests/{pid}", 15, f"PR {proj}/{slug}#{pid}")[0]
 
 
 def _to_pr(raw, enrich_open=True):
@@ -91,9 +112,13 @@ def _to_pr(raw, enrich_open=True):
     needs_work = False
     source_branch, destination_branch = src.get("branch"), dst.get("branch")
     m = _PR_URL_RE.search(url or "")
-    if m and enrich_open and not (merged or declined):
+    if m and not (merged or declined):
         proj, slug, pid = m.groups()
-        total, resolved, open_c = pr_comment_stats(proj, slug, pid)
+        # Comment counts page through the activity feed (slow) — only when enriching. The PR
+        # record itself is one short call and is ALWAYS read: Jira's index can name a branch the
+        # PR does not come from, and the single-ticket refresh must not keep showing that.
+        if enrich_open:
+            total, resolved, open_c = pr_comment_stats(proj, slug, pid)
         bb = _bb_pull_request(proj, slug, pid)
         if bb:
             needs_work = any(r.get("status") == "NEEDS_WORK" for r in bb.get("reviewers") or [])
@@ -165,21 +190,26 @@ def _repo_of(url):
     return (m.group(1), m.group(2)) if m else None
 
 
+def branch_head(proj, slug, branch):
+    """(epoch seconds of the newest commit on `branch`, gone). `gone` is True only when Bitbucket
+    answered 404 — the branch does not exist, although Jira's index may still list it. Any other
+    failure (network down) is (None, False): unknown, so nothing is dropped on missing data."""
+    q = urllib.parse.urlencode({"until": "refs/heads/" + branch, "limit": 1})
+    data, status = _bb(f"/projects/{proj}/repos/{slug}/commits?{q}", 20, f"latest commit {proj}/{slug} {branch}")
+    if data is None:
+        return None, status == 404
+    commit = next(iter(data.get("values") or []), None)
+    if not isinstance(commit, dict):
+        return None, False
+    stamps = [t for t in (commit.get("committerTimestamp"), commit.get("authorTimestamp")) if isinstance(t, (int, float))]
+    return (max(stamps) / 1000.0 if stamps else None), False
+
+
 def latest_commit_time(proj, slug, branch):
     """Epoch seconds of the newest commit reachable from `branch`, or None when Bitbucket
     cannot say (branch deleted, network down). A None never ranks a branch — it only keeps
     it from winning on missing data."""
-    try:
-        q = urllib.parse.urlencode({"until": "refs/heads/" + branch, "limit": 1})
-        data = bb_get(f"/projects/{proj}/repos/{slug}/commits?{q}", timeout=20)
-        commit = next(iter(data.get("values") or []), None)
-        if not isinstance(commit, dict):
-            return None
-        stamps = [t for t in (commit.get("committerTimestamp"), commit.get("authorTimestamp")) if isinstance(t, (int, float))]
-        return max(stamps) / 1000.0 if stamps else None
-    except Exception as e:
-        sys.stderr.write(f"WARN bitbucket latest commit {proj}/{slug} {branch}: {e}\n")
-        return None
+    return branch_head(proj, slug, branch)[0]
 
 
 def _bb_pr_as_devstatus(p, slug):
@@ -352,11 +382,19 @@ def fetch_one(issue_id, enrich_open=True):
         times = {}
         if len(branches) > 1:
             # Which branch is the work on? Ask Bitbucket for each branch's newest commit.
+            gone = set()
             for b in branches:
                 if refs.get(b):
-                    t = latest_commit_time(*refs[b], b)
+                    t, missing = branch_head(*refs[b], b)
                     if t:
                         times[b] = t
+                    elif missing:
+                        gone.add(b)
+            # Jira's index keeps branches that were deleted or never existed under that name; a
+            # branch Bitbucket says does not exist is not the ticket's. A merged / declined PR's
+            # source branch is history (usually deleted on merge) and stays listed.
+            history = {p.get("sourceBranch") for p in prs if p.get("merged") or p.get("state") == "declined"}
+            branches = [b for b in branches if b not in gone or b in history]
             if times:
                 branch, own_pr, _b, _p = choose_primary(branches, prs, times)
                 # Jira's index can lag a new PR: look for one from the branch we settled on.
