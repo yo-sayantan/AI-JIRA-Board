@@ -883,7 +883,7 @@ const CLOUD_PROVIDER_INFO: Record<
   cursor: {
     label: 'Cursor',
     missingKey: 'CURSOR_API_KEY is read from ~/.cursor/mcp-secrets.env (Cursor Dashboard → API Keys).',
-    about: 'Value picks only: capable models at or under $10 output per 1M tokens, standard speed.',
+    about: 'Value picks: Capable models at or under $10 per 1M output tokens (standard speed).',
     prefer: (models) => models.find((m) => m.id === 'grok-4.7') || models[0],
   },
   claude: {
