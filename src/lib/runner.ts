@@ -349,6 +349,10 @@ export interface CursorCatalogInfo {
   total: number
   shown: number
   overCap: number
+  /** The over-cap models on this key, so a wanted one can be found and priced. */
+  over?: { id: string; name: string; output: number | null }[]
+  /** Models on this key that you chose not to offer (the `exclude` list in cursor-prices.json). */
+  hidden?: number
   fast: number
   /** Cursor's automatic pickers (default, auto-*) — no fixed price, never offered. */
   routed?: number

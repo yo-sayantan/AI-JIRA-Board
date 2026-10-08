@@ -82,10 +82,12 @@ class RealCatalog(unittest.TestCase):
         "claude-haiku-4-5", "claude-sonnet-4-5", "gpt-5.1", "claude-sonnet-4",
     ]
 
-    def test_it_yields_sixteen_models_not_three(self):
+    def test_it_yields_thirteen_models_not_three(self):
+        # 16 priced at or under $10, minus the three on the owner's exclude list
         kept, info = cp.publish(catalog(*self.IDS))
-        self.assertEqual(len(kept), 16)
-        self.assertEqual(info["total"], 25)
+        self.assertEqual(len(kept), 13)
+        self.assertEqual((info["total"], info["hidden"]), (25, 3))
+        self.assertEqual(len(kept) + info["hidden"], 16)
 
     def test_word_order_does_not_hide_a_model(self):
         # the API says claude-haiku-4-5; Cursor's table says "Claude 4.5 Haiku"
@@ -105,6 +107,25 @@ class RealCatalog(unittest.TestCase):
     def test_version_digits_keep_their_order(self):
         self.assertIsNone(cp.price_of({"id": "claude-haiku-5-4"}))  # 5.4 is not 4.5
         self.assertEqual(cp.price_of({"id": "claude-haiku-5-5"})["name"], "Claude Haiku 5.5")
+
+
+class Curated(unittest.TestCase):
+    """`exclude` is the owner's own list: priced and affordable, but never offered."""
+
+    def test_excluded_models_are_hidden_not_priced_out(self):
+        kept, info = cp.publish(catalog("grok-4.5", "grok-4.7", "gemini-2.5-flash", "gpt-5.4-nano", "gpt-5.6-luna"))
+        self.assertEqual([m["id"] for m in kept], ["grok-4.7", "gpt-5.6-luna"])
+        self.assertEqual((info["hidden"], info["overCap"]), (3, 0))
+
+    def test_the_hide_list_matches_the_names_in_the_price_table(self):
+        names = {m["name"] for m in TABLE["models"]}
+        for hidden in TABLE["exclude"]:
+            self.assertIn(hidden, names)
+
+    def test_over_cap_models_are_named_so_a_wanted_one_can_be_found(self):
+        _, info = cp.publish(catalog("claude-opus-4-5", "claude-sonnet-4"))
+        self.assertEqual(sorted(o["id"] for o in info["over"]), ["claude-opus-4-5", "claude-sonnet-4"])
+        self.assertEqual({o["output"] for o in info["over"]}, {25, 15})
 
 
 class Allowed(unittest.TestCase):

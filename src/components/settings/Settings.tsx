@@ -945,7 +945,7 @@ function CloudKeyRow({ provider, cloud }: { provider: AiCloudProvider; cloud: Cl
   const cat = cloud?.catalog
   // Cursor: say how the list was narrowed, so a short list is explained rather than mysterious.
   const detail = cat
-    ? `${n} shown · ${cat.overCap} over $${cat.capUsd}${cat.unpriced.length ? ` · ${cat.unpriced.length} unpriced` : ''}`
+    ? `${n} shown · ${cat.overCap} over $${cat.capUsd}${cat.hidden ? ` · ${cat.hidden} hidden` : ''}${cat.unpriced.length ? ` · ${cat.unpriced.length} unpriced` : ''}`
     : `${n} model${n === 1 ? '' : 's'} on this key`
   const state = !cloud
     ? { text: `Checking ${k.env}…`, color: '#94a3b8' }
@@ -955,10 +955,11 @@ function CloudKeyRow({ provider, cloud }: { provider: AiCloudProvider; cloud: Cl
         ? { text: cloud.error, color: '#f59e0b' }
         : { text: `${k.env} found · ${detail}`, color: '#22c55e' }
   const unpriced = cat?.unpriced.length ? `\nNo price on file for: ${cat.unpriced.map((u) => u.id).join(', ')}.` : ''
+  const over = cat?.over?.length ? `\nOver $${cat.capUsd}: ${cat.over.map((o) => `${o.name} ($${o.output})`).join(', ')}.` : ''
   return (
     <div
       className={STRIP}
-      title={`${state.text}.${cat ? `\nYour key's Cursor catalog has ${cat.total} models; ${cat.shown} cost $${cat.capUsd} or less per 1M output tokens${cat.fast ? `, ${cat.fast} are Fast variants (left out)` : ''}.${unpriced}` : ''}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
+      title={`${state.text}.${cat ? `\nYour key's Cursor catalog has ${cat.total} models; ${cat.shown} cost $${cat.capUsd} or less per 1M output tokens${cat.fast ? `, ${cat.fast} are Fast variants (left out)` : ''}${cat.hidden ? `, ${cat.hidden} are hidden by your exclude list` : ''}.${over}${unpriced}` : ''}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />
       <span className="min-w-0 truncate font-medium">{state.text}</span>

@@ -3,6 +3,12 @@
   "source": "https://cursor.com/docs/models-and-pricing.md",
   "checked": "2026-10-08",
   "maxOutputUsd": 10,
+  "_exclude": "Models in the price table that the board never offers, by name — your own curation, independent of price. Remove a name to offer it again.",
+  "exclude": [
+    "Grok 4.5",
+    "Gemini 2.5 Flash",
+    "GPT-5.4 Nano"
+  ],
   "models": [
     {
       "name": "Grok 4.7",

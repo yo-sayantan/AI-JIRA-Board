@@ -774,7 +774,7 @@ ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
           A model only appears in <i>Settings</i> if your key's catalog includes it — Cursor's catalog is per account and
           team — and <i>Fast</i> variants are left out (they cost more).</p>
         <details class="faq">
-          <summary>Over $10 — not offered (<span id="cursor-over-count">…</span>)</summary>
+          <summary>Not offered — over $10, Fast, or hidden (<span id="cursor-over-count">…</span>)</summary>
           <div class="a">
             <table>
               <thead><tr><th>Model</th><th>Maker</th><th>Input</th><th>Output</th></tr></thead>
@@ -1082,7 +1082,8 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
           var ra = rank[a.provider] == null ? 9 : rank[a.provider], rb = rank[b.provider] == null ? 9 : rank[b.provider];
           return ra - rb || (a.output || 0) - (b.output || 0) || a.name.localeCompare(b.name);
         });
-        var shown = all.filter(function (m) { return !m.fast && m.output != null && m.output <= cap; });
+        var hide = (data.exclude || []).map(function (n) { return n.toLowerCase(); });
+        var shown = all.filter(function (m) { return !m.fast && m.output != null && m.output <= cap && hide.indexOf(m.name.toLowerCase()) < 0; });
         var rest = all.filter(function (m) { return shown.indexOf(m) < 0; });
         var dash = '<span title="Cursor lists no cache-write price for this model">\u2014</span>';
         var checked = document.getElementById('cursor-checked');
@@ -1100,7 +1101,7 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
         if (count) count.textContent = rest.length + ' models';
         if (over) {
           over.innerHTML = rest.map(function (m) {
-            return '<tr><td>' + esc(m.name) + (m.fast ? ' <i>(fast)</i>' : '') + '</td><td>' + esc(m.provider) + '</td><td>' + usd(m.input) + '</td><td>' + usd(m.output) + '</td></tr>';
+            return '<tr><td>' + esc(m.name) + (m.fast ? ' <i>(fast)</i>' : '') + (hide.indexOf(m.name.toLowerCase()) >= 0 ? ' <i>(hidden by exclude list)</i>' : '') + '</td><td>' + esc(m.provider) + '</td><td>' + usd(m.input) + '</td><td>' + usd(m.output) + '</td></tr>';
           }).join('');
         }
       }

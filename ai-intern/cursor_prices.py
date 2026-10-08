@@ -130,7 +130,8 @@ def publish(models: list, table: dict | None = None):
     """
     table = table or load_prices()
     cap = float(table.get("maxOutputUsd", 10))
-    kept, over, fast, unpriced, routed = [], [], [], [], []
+    hidden_names = {norm(n) for n in table.get("exclude") or []}
+    kept, over, fast, unpriced, routed, hidden = [], [], [], [], [], []
     for m in models:
         entry = price_of(m, table)
         label = m.get("label") or m.get("id")
@@ -138,6 +139,8 @@ def publish(models: list, table: dict | None = None):
             routed.append(m.get("id"))  # Cursor's own picker ("default", "auto-smart"): no fixed price
         elif entry is None:
             unpriced.append({"id": m.get("id"), "name": label})
+        elif norm(entry.get("name")) in hidden_names:
+            hidden.append({"id": m.get("id"), "name": entry.get("name")})
         elif is_fast(m) or entry.get("fast"):
             fast.append({"id": m.get("id"), "name": label})
         elif entry.get("output") is None or entry["output"] > cap:
@@ -150,6 +153,8 @@ def publish(models: list, table: dict | None = None):
         "total": len(models),
         "shown": len(kept),
         "overCap": len(over),
+        "over": over,
+        "hidden": len(hidden),
         "fast": len(fast),
         "routed": len(routed),
         "unpriced": unpriced,
