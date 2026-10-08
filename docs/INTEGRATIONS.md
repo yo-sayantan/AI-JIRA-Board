@@ -44,8 +44,21 @@ authoritative, includes reviewers/approvals); a Bitbucket **key-scan** of hinted
 - PR state mapping: ≥`requiredApprovals` approvals + 0 open comments → `approved`; NEEDS_WORK →
   `changes`; merged/declined terminal (with fixed comment stats — closed PRs skip activity pages).
 - Bitbucket is probed once per run; if down, `BB_OK=False` and all PR data is **carried forward**
-  (the run note says so). Single-ticket refresh always skips Bitbucket (dev-status only) so a
-  hung Bitbucket can't wedge the queue.
+  (the run note says so). Single-ticket refresh skips the per-PR comment lookups so a slow
+  Bitbucket can't wedge the queue; the primary-branch ranking below still runs, because it is one
+  short call per branch and only for tickets that have several.
+- **Primary branch.** A ticket can carry several branches (renames, a restarted attempt, one per
+  repo). The ticket's `branch` is the one with the **newest commit**: Jira's dev-status has no
+  commit time per branch, so `devinfo.latest_commit_time` asks Bitbucket for each branch's newest
+  commit (`/commits?until=refs/heads/<branch>&limit=1`), only when there is more than one branch.
+  The primary PR (`pr`) is then that branch's own PR, and `branches` / `prs` are reordered with
+  the primary first and nothing dropped. When the branch has no PR in dev-status (the index can
+  lag a new PR), `devinfo.prs_from_branch` looks for one in Bitbucket; if there is still none,
+  `pr` is `{"state": "none"}` and the card shows no PR badge while the other PRs stay listed in
+  the drawer. Without a readable commit time the previous run's branch stays (so a refresh that
+  could not reach Bitbucket never flips it back); with no prior either, the in-flight PR's
+  source branch decides, as before. The UI follows `pr` (`primaryPrOf` in `src/lib/format.ts`).
+  The readiness report still weighs every PR of the ticket.
 - Review activity never bumps Jira's `updated` → even "unchanged" tickets re-check PRs on the
   daily fast path.
 

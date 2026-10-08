@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { Ticket, LinkRef, Comment, PullRequest } from '../../types'
 import { COLUMN_META } from '../../lib/columns'
-import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba, cycleTime, fmtDays, unwrapBrief } from '../../lib/format'
+import { fmtDate, fmtDateTime, relTime, prMeta, isMergedPr, isClosedPr, prListOf, primaryPrOf, prCommentStats, branchesOf, branchStatusOf, typeMeta, effectiveType, isAssignedToMe, hexToRgba, cycleTime, fmtDays, unwrapBrief } from '../../lib/format'
 import { Pill, StatusBadge, PriorityBadge, TypeBadge, PrBadge, BranchStatusPill, Approvals, PointsTag, CopyButton, SafeHtml, ExternalLink, safeHref } from '../common/ui'
 import { Pipeline } from './Pipeline'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
@@ -243,7 +243,7 @@ export function TicketDetail({
             <StatusBadge column={ticket.column} label={ticket.status} />
             <PriorityBadge priority={ticket.priority} />
             <TypeBadge type={effectiveType(ticket)} />
-            <PrBadge state={prs[0]?.state} />
+            <PrBadge state={primaryPrOf(ticket)?.state} />
             {ticket.fixVersions?.map((v) => (
               <Pill key={v} color="#8b5cf6" title={`Fix version: ${v}`}>
                 {v}

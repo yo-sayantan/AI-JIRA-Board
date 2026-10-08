@@ -116,6 +116,9 @@ def dev_fields(key, dev_map, prior):
             "pr": (prior or {}).get("pr") or {"state": "none"},
             "prs": (prior or {}).get("prs") or [],
         }
+    # Same primary-branch rule as the daily fetch; last run's branch breaks a tie when this
+    # lookup carried no commit times.
+    info = devinfo.settle(info, (prior or {}).get("branch"))
     return {"branch": info["branch"], "branches": info["branches"], "pr": info["pr"], "prs": info["prs"]}
 
 

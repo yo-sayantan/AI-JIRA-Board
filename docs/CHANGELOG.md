@@ -3,6 +3,15 @@
 Notable changes by area. Dates are omitted for the unreleased section; entries describe what the
 code does now, so a reader can check them against the tree.
 
+## Unreleased — primary branch
+
+- A ticket with several branches now shows the one with the **newest commit** as its branch, and
+  the PR banners (card badge, approvals, drawer badge) follow that branch's own PR instead of
+  whichever PR was updated last. Other PRs stay listed and count toward `+N PR`. Commit times come
+  from Bitbucket (`devinfo.py`), one call per branch and only for tickets with more than one; the
+  previous choice is kept when Bitbucket cannot be reached. See
+  [INTEGRATIONS.md](INTEGRATIONS.md#bitbucket-serverdc-rest-10--jira-dev-status).
+
 ## Unreleased — codebase audit
 
 ### Security
