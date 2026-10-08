@@ -135,7 +135,7 @@ endpoints always verify and ignore `JIRA_INSECURE_TLS`).
 - The board is published on **`127.0.0.1:4321` only** by default (`docker-compose.yml`
   `${BIND_IP:-127.0.0.1}`; `npm run serve` binds `127.0.0.1` too). AI-Intern (4322) and Ollama
   (11434) are never published; the board proxies the worker.
-- **Host header check** (`serve.mjs hostAllowed`): requests whose `Host` is not loopback, the
+- **Host header check** (`server/serve.mjs hostAllowed`): requests whose `Host` is not loopback, the
   server's own bind address, or an `ALLOWED_HOSTS` entry get **403 `forbidden host`**. A page on
   another origin cannot make your browser send a loopback `Host`, which is what blocks DNS
   rebinding.

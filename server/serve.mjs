@@ -1,6 +1,6 @@
 // Optional local server for the board. Zero dependencies.
 //
-//   node serve.mjs            (or: npm run serve)
+//   node server/serve.mjs     (or: npm run serve)
 //
 // Serving the board (http://localhost:4321) unlocks the live Refresh button, per-ticket refresh,
 // the archive rebuild and PR report generation. Without it the board still works from file://.
@@ -66,14 +66,14 @@
 // ───────────────────────────────────────────────────────────────────────────────────────────────
 import { createServer } from 'node:http'
 import { stat } from 'node:fs/promises'
-import { ALLOWED_HOSTS, BOARD_PATH, DATE_RE, HOST, KEY_RE, PATHS, PORT, ROOT, YEAR_RE } from './server/config.mjs'
-import { SECURITY_HEADERS, createStaticHandler, json, readBody } from './server/http.mjs'
-import { MOVE_TARGETS, moveTicket, runStatus, startArchive, startDaily, startRaised, stopArchive, ticketRefresh } from './server/jobs.mjs'
-import { externalGenerating, readReport, reportQueue, reportsIndex, resolveReportKeys, stopReports } from './server/reports.mjs'
-import { aiStatus, enrichingKeys, localCatalog, proxyAi } from './server/ai.mjs'
-import { readBoardSettings, updateBoardSettings } from './server/settings.mjs'
-import { startScheduler } from './server/schedule.mjs'
-import { MODELS_DIR_LABEL, ensureOllamaReady, ollamaInfo, ollamaWanted, reconcileOllama } from './server/ollama.mjs'
+import { ALLOWED_HOSTS, BOARD_PATH, DATE_RE, HOST, KEY_RE, PATHS, PORT, ROOT, YEAR_RE } from './config.mjs'
+import { SECURITY_HEADERS, createStaticHandler, json, readBody } from './http.mjs'
+import { MOVE_TARGETS, moveTicket, runStatus, startArchive, startDaily, startRaised, stopArchive, ticketRefresh } from './jobs.mjs'
+import { externalGenerating, readReport, reportQueue, reportsIndex, resolveReportKeys, stopReports } from './reports.mjs'
+import { aiStatus, enrichingKeys, localCatalog, proxyAi } from './ai.mjs'
+import { readBoardSettings, updateBoardSettings } from './settings.mjs'
+import { startScheduler } from './schedule.mjs'
+import { MODELS_DIR_LABEL, ensureOllamaReady, ollamaInfo, ollamaWanted, reconcileOllama } from './ollama.mjs'
 
 const serveStatic = createStaticHandler(
   ROOT,

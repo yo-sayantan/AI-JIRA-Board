@@ -83,9 +83,9 @@ inlined) so it runs from a double-click. It reads `window.__JIRA_DATA__` at load
 | `src/components/` | Feature folders: `board/`, `header/`, `ticket/`, `completed/`, `reports/`, `settings/`, `common/`. |
 | `vite.config.ts` | Single-file build; injects the external `../jira-intern/data.js` `<script>`. |
 
-### 3. `serve.mjs` + `server/` — the optional local server
+### 3. `server/` (entry `serve.mjs`) — the optional local server
 
-Zero-dependency Node. `serve.mjs` is the route table; `server/` holds the pieces:
+Zero-dependency Node. `server/serve.mjs` is the route table; `server/` holds the pieces:
 
 | Module | Role |
 |---|---|

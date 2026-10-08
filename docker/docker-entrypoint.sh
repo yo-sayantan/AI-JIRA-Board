@@ -115,4 +115,4 @@ log "scheduled refreshes follow Settings (active, full board, PR reports)"
 
 # 5) Serve the board. exec => the server is the signal target under tini.
 log "serving the board on ${BIND_HOST:-0.0.0.0}:${PORT:-4321}"
-exec node "$APP_DIR/serve.mjs"
+exec node "$APP_DIR/server/serve.mjs"

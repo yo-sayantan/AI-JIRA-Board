@@ -39,7 +39,7 @@ Consumed by:
 - `local-runner/config.mjs` — resolver. Runners call it for shell vars (`shellenv`), rendered
   prompts (`render`, substituting the `{{TOKENS}}` below), and the MCP policy block (`policy`).
 - `local-runner/*.sh` — daily / weekly / summary / per-ticket runners (connector, models, timeouts).
-- `jira-board/serve.mjs` — port.
+- `jira-board/server/serve.mjs` — port.
 - `local-runner/sync-datajs.mjs` — injects the `app` section into `data.js` as
   `window.__JIRA_CONFIG__`, so the **built** app re-themes at runtime (no rebuild needed).
 

@@ -6,13 +6,13 @@
 #  Docker, no Node, no server. This is the page to reach for when the board
 #  itself won't start.
 #
-#  Usage:   ./open-guide.sh        (first time: chmod +x open-guide.sh)
+#  Usage:   ./scripts/open-guide.sh        (first time: chmod +x scripts/open-guide.sh)
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 # Resolve the repo from this script's own location, so it works from anywhere.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUIDE="$SCRIPT_DIR/docs/index.html"
+GUIDE="$(cd "$SCRIPT_DIR/.." && pwd)/docs/index.html"
 
 if [ ! -f "$GUIDE" ]; then
   echo "✖  Guide not found at: $GUIDE" >&2

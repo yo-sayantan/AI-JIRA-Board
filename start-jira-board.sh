@@ -108,7 +108,7 @@ free_port() {
 # ── 3. Build + deploy ─────────────────────────────────────────────────────────
 deploy() {
   cd "$REPO_DIR"
-  [ -f Dockerfile ] || die "No Dockerfile in ${REPO_DIR}"
+  [ -f docker/Dockerfile ] || die "No docker/Dockerfile in ${REPO_DIR}"
   [ -f docker-compose.yml ] || die "No docker-compose.yml in ${REPO_DIR}"
 
   # Build dist/ on the HOST when the toolchain is here. The Docker VM's network is too
