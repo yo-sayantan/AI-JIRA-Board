@@ -344,6 +344,8 @@ export interface CloudModelChoice {
   note?: string | null
   /** Offered although it costs more than the cap (your `include` list). */
   exception?: boolean
+  /** False for a pinned model your key's Cursor catalog does not list — Cursor may reject it. */
+  inCatalog?: boolean
 }
 
 /** What the worker did with the key's Cursor catalog — why the list is as long as it is. */
@@ -355,6 +357,8 @@ export interface CursorCatalogInfo {
   over?: { id: string; name: string; output: number | null }[]
   /** Models on this key that you chose not to offer (the `exclude` list in cursor-prices.json). */
   hidden?: number
+  /** Pinned models (your `pin` list) that this key's catalog does not list. */
+  pinned?: string[]
   exceptions?: number
   fast: number
   /** Cursor's automatic pickers (default, auto-*) — no fixed price, never offered. */

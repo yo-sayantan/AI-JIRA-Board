@@ -151,7 +151,7 @@ class IncludeList(unittest.TestCase):
         self.assertEqual((kept, info["hidden"]), ([], 1))
 
     def test_jobs_may_run_included_models_but_not_excluded_ones(self):
-        for model in ("gpt-5.6-terra", "gemini-3.1-pro", "claude-sonnet-5-5", "claude-haiku-5-5", "gemini-3.8-flash"):
+        for model in ("gpt-5.6-terra", "gemini-3.1-pro", "claude-sonnet-5-5", "claude-haiku-5-5", "gemini-3.8-flash"):  # included or pinned
             self.assertTrue(cp.allowed(model), model)
         for model in ("claude-haiku-4-5", "gemini-3-flash", "grok-4.5", "gpt-5.4-nano", "gpt-5.5"):
             self.assertFalse(cp.allowed(model), model)
@@ -162,14 +162,79 @@ class IncludeList(unittest.TestCase):
             self.assertIn(name, names)
 
 
+class PinList(unittest.TestCase):
+    """`pin`: offered even when the key's catalog lacks the model, under Cursor's documented id."""
+
+    OFFICIAL = {"claude-sonnet-5-5", "claude-haiku-5-5", "gemini-3.8-flash"}  # each page's "Model ID" on cursor.com
+
+    def test_pinned_models_the_catalog_lacks_are_added_with_the_official_id(self):
+        kept, info = cp.publish(catalog("gpt-5.6-luna"), pin=True)
+        pinned = {m["id"]: m for m in kept if m["inCatalog"] is False}
+        self.assertEqual(set(pinned), self.OFFICIAL)
+        self.assertEqual(sorted(info["pinned"]), sorted(self.OFFICIAL))
+        self.assertEqual(pinned["claude-haiku-5-5"]["price"]["output"], 0.5)
+        self.assertEqual(pinned["gemini-3.8-flash"]["price"]["output"], 3.5)
+
+    def test_a_pinned_model_the_catalog_does_list_is_not_added_twice(self):
+        kept, info = cp.publish(catalog("claude-sonnet-5-5"), pin=True)
+        self.assertEqual([m["id"] for m in kept if m["priceName"] == "Claude Sonnet 5.5"], ["claude-sonnet-5-5"])
+        self.assertTrue(next(m for m in kept if m["id"] == "claude-sonnet-5-5")["inCatalog"])
+        self.assertNotIn("claude-sonnet-5-5", info["pinned"])
+
+    def test_pinning_is_off_unless_asked_for(self):
+        kept, _ = cp.publish(catalog("gpt-5.6-luna"))
+        self.assertEqual([m["id"] for m in kept], ["gpt-5.6-luna"])
+
+    def test_exclude_beats_pin(self):
+        table = dict(TABLE, pin=["Grok 4.5"], exclude=["Grok 4.5"])
+        kept, _ = cp.publish([], table, pin=True)
+        self.assertEqual(kept, [])
+
+    def test_every_pinned_name_has_an_official_model_id(self):
+        by_name = {m["name"]: m for m in TABLE["models"]}
+        for name in TABLE["pin"]:
+            self.assertIn(by_name[name]["modelId"], self.OFFICIAL)
+
+
+class GeminiCuration(unittest.TestCase):
+    """Gemini: only 3.1 Pro and 3.8 Flash, whatever else the key's catalog or Cursor's table holds."""
+
+    ALL_GEMINI = ["gemini-2.5-flash", "gemini-3-flash", "gemini-3-pro", "gemini-3.1-pro", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
+
+    def test_only_the_two_chosen_models_survive(self):
+        kept, _ = cp.publish(catalog(*self.ALL_GEMINI), pin=True)
+        self.assertEqual(sorted(m["id"] for m in kept if m["provider"] == "Google"), ["gemini-3.1-pro", "gemini-3.8-flash"])
+
+    def test_the_same_holds_when_the_catalog_lacks_gemini_3_8(self):
+        kept, _ = cp.publish(catalog(*[g for g in self.ALL_GEMINI if g != "gemini-3.8-flash"]), pin=True)
+        self.assertEqual(sorted(m["id"] for m in kept if m["provider"] == "Google"), ["gemini-3.1-pro", "gemini-3.8-flash"])
+
+    def test_jobs_may_run_exactly_those_two(self):
+        self.assertEqual([g for g in self.ALL_GEMINI if cp.allowed(g)], ["gemini-3.1-pro", "gemini-3.8-flash"])
+
+
+class AnthropicCuration(unittest.TestCase):
+    """Anthropic: only Claude Sonnet 5.5 and Claude Haiku 5.5, whatever the key's catalog holds."""
+
+    EVERY_CLAUDE = ["claude-sonnet-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-haiku-4-5", "claude-sonnet-4", "claude-sonnet-4-5",
+                    "claude-sonnet-4-6", "claude-opus-4-5", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5", "claude-opus-5-5"]
+
+    def test_only_the_two_chosen_models_are_offered(self):
+        kept, _ = cp.publish(catalog(*self.EVERY_CLAUDE), pin=True)
+        self.assertEqual(sorted(m["id"] for m in kept if m["provider"] == "Anthropic"), ["claude-haiku-5-5", "claude-sonnet-5-5"])
+
+    def test_jobs_may_run_exactly_those_two(self):
+        self.assertEqual([c for c in self.EVERY_CLAUDE if cp.allowed(c)], ["claude-sonnet-5-5", "claude-haiku-5-5"])
+
+
 class PriceWarning(unittest.TestCase):
-    """Anything at $10+ output is flagged in the UI: the data it needs must be exact."""
+    """Only output ABOVE $10 is flagged in the UI: $10 itself is the top of the value range."""
 
     def test_the_boundary_models_carry_their_exact_output_price(self):
         kept, _ = cp.publish(catalog("claude-sonnet-5", "gpt-5.6-terra", "gpt-5.6-luna"))
         out = {m["id"]: m["price"]["output"] for m in kept}
         self.assertEqual(out, {"claude-sonnet-5": 10, "gpt-5.6-terra": 12, "gpt-5.6-luna": 1.2})
-        self.assertEqual(sorted(i for i, v in out.items() if v >= 10), ["claude-sonnet-5", "gpt-5.6-terra"])
+        self.assertEqual(sorted(i for i, v in out.items() if v > 10), ["gpt-5.6-terra"])
 
 
 class Allowed(unittest.TestCase):
@@ -234,7 +299,8 @@ class WorkerEffort(unittest.TestCase):
 
     def test_published_cursor_models_keep_only_the_efforts_they_support(self):
         kept, _ = self.worker._publish_cursor([{"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "efforts": ["low", "high"]}])
-        self.assertEqual(kept[0]["efforts"], ["low", "high"])
+        luna = next(m for m in kept if m["id"] == "gpt-5.6-luna")  # pinned models also appear; find ours
+        self.assertEqual(luna["efforts"], ["low", "high"])
 
 
 if __name__ == "__main__":

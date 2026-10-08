@@ -378,7 +378,7 @@ def _cheap_rank(text):
 
 def _publish_cursor(models):
     """(models to offer, diagnostics): the key's catalog, narrowed by price — see cursor_prices.py."""
-    kept, info = cursor_prices.publish(models)
+    kept, info = cursor_prices.publish(models, pin=True)
     for m in kept:
         m["efforts"] = [e for e in EFFORTS if e in (m.get("efforts") or [])]
     return kept, info

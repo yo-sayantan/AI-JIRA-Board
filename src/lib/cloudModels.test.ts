@@ -35,9 +35,10 @@ describe('groupByProvider', () => {
 
 describe('isPricey', () => {
   const at = (output: number | null) => ({ price: { output } })
-  it('warns from $10 upward, boundary included', () => {
-    expect(isPricey(at(10))).toBe(true)
+  it('warns only above $10 — $10 itself is the top of the value range, not a warning', () => {
     expect(isPricey(at(12))).toBe(true)
+    expect(isPricey(at(10.01))).toBe(true)
+    expect(isPricey(at(10))).toBe(false)
     expect(isPricey(at(9.99))).toBe(false)
     expect(isPricey(at(1.2))).toBe(false)
   })

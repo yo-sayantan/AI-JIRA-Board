@@ -12,12 +12,19 @@
     "Gemini 3 Flash",
     "Gemini 3.5 Flash",
     "Gemini 3.6 Flash",
-    "Gemini 3.7 Flash"
+    "Gemini 3.7 Flash",
+    "Claude Sonnet 5"
   ],
   "_include": "Offered even though they cost more than maxOutputUsd — your exceptions to the cap. Only models in the API key's catalog are ever offered. 'exclude' wins if a name is in both.",
   "include": [
     "GPT-5.6 Terra",
     "Gemini 3.1 Pro"
+  ],
+  "_pin": "Offered even when the API key's Cursor catalog does not list them, using the model id Cursor documents. Cursor may reject an id its API does not know — the job then fails with a visible error. 'exclude' wins.",
+  "pin": [
+    "Claude Sonnet 5.5",
+    "Claude Haiku 5.5",
+    "Gemini 3.8 Flash"
   ],
   "models": [
     {

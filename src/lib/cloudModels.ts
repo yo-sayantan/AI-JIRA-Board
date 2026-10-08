@@ -1,13 +1,13 @@
 import type { CloudModelChoice } from './runner'
 
 /** "$0.20", "$1.20", "$0.125", "$10": whole dollars bare, otherwise two decimals or three where needed. */
-/** Output price (USD per 1M tokens) at which a model gets a cost warning. */
-export const PRICEY_OUTPUT_USD = 10
+/** Output price (USD per 1M tokens) ABOVE which a model gets a cost warning; $10 itself does not. */
+export const WARN_ABOVE_OUTPUT_USD = 10
 
-/** True when the model's output price is at or above the warning line. */
+/** True when the model's output price is above the warning line. */
 export function isPricey(m: { price?: { output: number | null } | null } | null | undefined): boolean {
   const out = m?.price?.output
-  return out != null && out >= PRICEY_OUTPUT_USD
+  return out != null && out > WARN_ABOVE_OUTPUT_USD
 }
 
 export function usd(n: number | null | undefined): string {

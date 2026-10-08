@@ -959,7 +959,7 @@ function CloudKeyRow({ provider, cloud }: { provider: AiCloudProvider; cloud: Cl
   return (
     <div
       className={STRIP}
-      title={`${state.text}.${cat ? `\nYour key's Cursor catalog has ${cat.total} models; ${cat.shown} cost $${cat.capUsd} or less per 1M output tokens${cat.fast ? `, ${cat.fast} are Fast variants (left out)` : ''}${cat.hidden ? `, ${cat.hidden} are hidden by your exclude list` : ''}${cat.exceptions ? `; ${cat.exceptions} offered above the cap by your include list` : ''}.${over}${unpriced}` : ''}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
+      title={`${state.text}.${cat ? `\nYour key's Cursor catalog has ${cat.total} models; ${cat.shown} cost $${cat.capUsd} or less per 1M output tokens${cat.fast ? `, ${cat.fast} are Fast variants (left out)` : ''}${cat.hidden ? `, ${cat.hidden} are hidden by your exclude list` : ''}${cat.exceptions ? `; ${cat.exceptions} offered above the cap by your include list` : ''}.${cat.pinned?.length ? `\nPinned but not in your key's catalog (Cursor may reject them): ${cat.pinned.join(', ')}.` : ''}${over}${unpriced}` : ''}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />
       <span className="min-w-0 truncate font-medium">{state.text}</span>
@@ -993,14 +993,17 @@ function CloudModelPicker({
     onChange({ ...settings, aiCloudModel: info.prefer(models).id })
   }, [models, info, settings, onChange])
 
-  // A model at $10+ output is the expensive end of the list: warn where it is chosen.
+  // Above $10 output: the red ⚠ at the right of the row, and this line, say so where it is chosen.
+  const pricey = isPricey(selected)
   const hint = !ready
     ? 'Loading the model list…'
     : !hasKey
       ? info.missingKey
-      : isPricey(selected)
-        ? `⚠ ${selected?.label} costs ${usd(selected?.price?.output)} per 1M output tokens${selected?.exception ? ' — above the $10 cap, offered because you included it' : ' — the top of the value range'}. Low effort spends the fewest tokens.`
-        : (cloud.error ?? info.about)
+      : selected?.inCatalog === false
+        ? `${selected.label} is not in your Cursor catalog — Cursor may reject it. Run one report to check; pick another model if it fails.`
+        : pricey
+          ? `${selected?.label} costs ${usd(selected?.price?.output)} per 1M output tokens${selected?.exception ? ' — above the $10 cap' : ''}. A lower effort spends fewer tokens.`
+          : (cloud.error ?? info.about)
 
   return (
     <>
@@ -1016,7 +1019,7 @@ function CloudModelPicker({
           {groupByProvider(models).map(([group, rows]) => {
             const options = rows.map((m) => (
               <option key={m.id} value={m.id} title={m.id}>
-                {m.price?.output != null ? `${isPricey(m) ? '⚠ ' : ''}${m.label} · ${usd(m.price.output)}/M out` : m.label === m.id ? m.label : `${m.label} · ${m.id}`}
+                {m.price?.output != null ? `${m.label} · ${usd(m.price.output)}/M out${isPricey(m) ? '  ⚠' : ''}` : m.label === m.id ? m.label : `${m.label} · ${m.id}`}
               </option>
             ))
             return group ? (
@@ -1053,8 +1056,21 @@ function CloudModelPicker({
         >
           i
         </a>
+        {/* Reserved even when empty, so choosing a model never resizes the dropdown. */}
+        <span className="grid h-8 w-5 shrink-0 place-items-center">
+          {pricey && (
+            <span
+              role="img"
+              aria-label={`Costs ${usd(selected?.price?.output)} per 1M output tokens — above $10`}
+              title={`Costs ${usd(selected?.price?.output)} per 1M output tokens — above $10`}
+              className="text-[16px] leading-none text-[#dc2626]"
+            >
+              ⚠
+            </span>
+          )}
+        </span>
       </div>
-      <p className="h-8 line-clamp-2 text-[10.5px] leading-4 text-[var(--muted)]" title={hint}>
+      <p className={`h-8 line-clamp-2 text-[10.5px] leading-4 ${pricey && selected?.inCatalog !== false ? 'text-[#dc2626]' : 'text-[var(--muted)]'}`} title={hint}>
         {hint}
       </p>
     </>
@@ -1065,13 +1081,17 @@ function FactTile({ label, value, hint, warn = false }: { label: string; value: 
   return (
     <div
       className="flex min-w-0 flex-col justify-center rounded-lg border bg-[var(--surface-2)] px-2.5"
-      style={{ borderColor: warn ? 'rgba(245,158,11,0.55)' : 'var(--line)', background: warn ? 'rgba(245,158,11,0.08)' : undefined }}
+      style={{ borderColor: warn ? 'rgba(220,38,38,0.5)' : 'var(--line)', background: warn ? 'rgba(220,38,38,0.06)' : undefined }}
       title={hint}
     >
       <span className="truncate text-[9.5px] font-bold uppercase tracking-wider text-[var(--muted)]">{label}</span>
-      <span className="truncate text-[12.5px] font-semibold tabular-nums" style={{ color: warn ? '#b45309' : 'var(--ink)' }}>
-        {warn && <span aria-hidden>⚠ </span>}
-        {value}
+      <span className="flex items-center justify-between gap-1">
+        <span className="truncate text-[12.5px] font-semibold tabular-nums text-[var(--ink)]">{value}</span>
+        {warn && (
+          <span role="img" aria-label="Above $10" className="shrink-0 text-[13px] leading-none text-[#dc2626]">
+            ⚠
+          </span>
+        )}
       </span>
     </div>
   )
@@ -1109,7 +1129,7 @@ function AiFacts({
           label="Output / 1M"
           value={usd(rate.output)}
           warn={isPricey(cloudModel)}
-          hint={`USD per million output tokens — a lower effort spends fewer${isPricey(cloudModel) ? ' · ⚠ at or above $10: the expensive end of the list' : ''}`}
+          hint={`USD per million output tokens — a lower effort spends fewer${isPricey(cloudModel) ? ' · above $10: the expensive end of the list' : ''}`}
         />
         <FactTile
           label="Cache read / 1M"

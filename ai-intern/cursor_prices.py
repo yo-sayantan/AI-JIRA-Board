@@ -121,7 +121,7 @@ def _usd(entry: dict) -> dict:
     }
 
 
-def publish(models: list, table: dict | None = None):
+def publish(models: list, table: dict | None = None, pin: bool = False):
     """(models to offer, diagnostics) from the key's catalog.
 
     Each offered model carries `provider`, `price` and `priceName`. Sorted by provider, then
@@ -132,6 +132,8 @@ def publish(models: list, table: dict | None = None):
     cap = float(table.get("maxOutputUsd", 10))
     hidden_names = {norm(n) for n in table.get("exclude") or []}
     include_names = {norm(n) for n in table.get("include") or []}
+    pin_names = {norm(n) for n in table.get("pin") or []}
+    found = set()
     kept, over, fast, unpriced, routed, hidden = [], [], [], [], [], []
     for m in models:
         entry = price_of(m, table)
@@ -144,13 +146,24 @@ def publish(models: list, table: dict | None = None):
             hidden.append({"id": m.get("id"), "name": entry.get("name")})
         elif norm(entry.get("name")) in include_names and not is_fast(m):
             # your exception: offered whatever it costs
-            kept.append({**m, "provider": entry.get("provider"), "price": _usd(entry), "priceName": entry.get("name"), "note": entry.get("note"), "exception": entry.get("output") is None or entry["output"] > cap})
+            found.add(norm(entry.get("name")))
+            kept.append({**m, "provider": entry.get("provider"), "price": _usd(entry), "priceName": entry.get("name"), "note": entry.get("note"), "inCatalog": True, "exception": entry.get("output") is None or entry["output"] > cap})
         elif is_fast(m) or entry.get("fast"):
             fast.append({"id": m.get("id"), "name": label})
         elif entry.get("output") is None or entry["output"] > cap:
             over.append({"id": m.get("id"), "name": entry.get("name"), "output": entry.get("output")})
         else:
-            kept.append({**m, "provider": entry.get("provider"), "price": _usd(entry), "priceName": entry.get("name"), "note": entry.get("note"), "exception": False})
+            found.add(norm(entry.get("name")))
+            kept.append({**m, "provider": entry.get("provider"), "price": _usd(entry), "priceName": entry.get("name"), "note": entry.get("note"), "inCatalog": True, "exception": False})
+    pinned = []
+    if pin:  # pinned models the key's catalog does not list: offered anyway, with the id Cursor documents
+        for entry in table.get("models") or []:
+            n = norm(entry.get("name"))
+            if n in pin_names and n not in found and n not in hidden_names and entry.get("modelId") and not entry.get("fast"):
+                pinned.append({"id": entry["modelId"], "label": entry["name"], "efforts": [], "effortParam": None, "variants": [], "aliases": [],
+                               "provider": entry.get("provider"), "price": _usd(entry), "priceName": entry["name"], "note": entry.get("note"),
+                               "inCatalog": False, "exception": entry.get("output") is None or entry["output"] > cap})
+        kept += pinned
     rank = {p: i for i, p in enumerate(PROVIDER_ORDER)}
     kept.sort(key=lambda m: (rank.get(m["provider"], len(rank)), m["price"]["output"], str(m.get("label") or m["id"]).lower()))
     return kept, {
@@ -160,6 +173,7 @@ def publish(models: list, table: dict | None = None):
         "over": over,
         "hidden": len(hidden),
         "exceptions": sum(1 for m in kept if m.get("exception")),
+        "pinned": [m["id"] for m in pinned],
         "fast": len(fast),
         "routed": len(routed),
         "unpriced": unpriced,
@@ -178,6 +192,6 @@ def allowed(model_id: str, table: dict | None = None) -> bool:
         return False
     if norm(entry.get("name")) in {norm(n) for n in table.get("exclude") or []}:
         return False
-    if norm(entry.get("name")) in {norm(n) for n in table.get("include") or []}:
+    if norm(entry.get("name")) in {norm(n) for n in (table.get("include") or []) + (table.get("pin") or [])}:
         return True
     return entry["output"] <= float(table.get("maxOutputUsd", 10))
