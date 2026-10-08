@@ -100,7 +100,7 @@ shared mounts: ./jira-intern (DATA — follows the deploy directory!), ./config,
 ```
 
 Image build: stage `dist-build` (npm ci + vite) **or** stage `dist-prebuilt` (host-built `dist/`
-copied in), selected by `--build-arg DIST_SOURCE`; `start-jira-board.sh` host-builds and passes
+copied in), selected by `--build-arg DIST_SOURCE`; `scripts/start-jira-board.sh` host-builds and passes
 `prebuilt` because in-image npm over the Docker VM's network silently drops optional native
 binaries (TypeScript 7 platform packages). The runtime stage seeds `/opt/jira-intern-seed` so an
 empty mounted volume gets a working skeleton on first boot.

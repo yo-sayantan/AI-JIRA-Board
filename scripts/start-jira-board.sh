@@ -6,9 +6,9 @@
 # image, and redeploys the same container name on the same port.
 #
 # Usage:
-#   ./start-jira-board.sh
-#   PORT=4321 ./start-jira-board.sh
-#   PULL=1 ./start-jira-board.sh          # also re-pull the base images (slow on a throttled link)
+#   ./scripts/start-jira-board.sh
+#   PORT=4321 ./scripts/start-jira-board.sh
+#   PULL=1 ./scripts/start-jira-board.sh          # also re-pull the base images (slow on a throttled link)
 # Or double-click the Desktop shortcut (Start My Jira Board.command).
 set -euo pipefail
 
@@ -29,7 +29,7 @@ export COMPOSE_PROJECT_NAME
 
 # Resolve the repo this script lives in (works even when launched from Desktop).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$SCRIPT_DIR"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 log()  { printf '\n▶  %s\n' "$*"; }
 ok()   { printf '   ✓ %s\n' "$*"; }

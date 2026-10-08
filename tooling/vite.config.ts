@@ -36,7 +36,7 @@ function classicScriptForFileProtocol(): Plugin {
   return {
     name: 'classic-script-for-file-protocol',
     closeBundle() {
-      const out = resolve(import.meta.dirname, 'dist/index.html')
+      const out = resolve(import.meta.dirname, '../dist/index.html')
       let html = readFileSync(out, 'utf8')
       // Only rewrite actual <script …> OPENING tags, and match type="module" regardless of where
       // it sits among the attributes (Vite could emit crossorigin/nonce before type, or reorder).

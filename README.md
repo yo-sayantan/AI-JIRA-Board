@@ -21,7 +21,7 @@ git clone https://github.com/yo-sayantan/AI-JIRA-Board.git && cd AI-JIRA-Board
 mkdir -p ~/.cursor ~/.ai
 cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env   # add your Jira token
 cp setup/config.example.json      ~/.ai/config.json           # add your name + URLs
-bash start-jira-board.sh                                      # build, deploy, open :4321
+bash scripts/start-jira-board.sh                                      # build, deploy, open :4321
 ```
 
 ## ✨ Why you'll like it

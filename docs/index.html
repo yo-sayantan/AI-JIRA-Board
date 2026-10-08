@@ -614,7 +614,7 @@ docker image prune -f           <span class="cmt"># clean old layers</span></pre
         <h3>One-click launcher (macOS / Linux)</h3>
         <p class="small">Starts Docker if needed, frees the port, rebuilds, redeploys, waits for health, and opens
           the board. Safe to run repeatedly — it never stacks containers or drifts ports.</p>
-        <pre><button class="copy">Copy</button>./start-jira-board.sh</pre>
+        <pre><button class="copy">Copy</button>./scripts/start-jira-board.sh</pre>
         <p class="small">For a Desktop shortcut, copy
           <code class="inl">setup/Start Jira Board.command.template</code> to your Desktop, set
           <code class="inl">REPO_DIR</code> inside it, then <code class="inl">chmod +x</code> it and double-click.</p>
@@ -840,7 +840,7 @@ bash jira-intern/local-runner/update-completed.sh  <span class="cmt"># full Comp
           <tr><td>Container exits immediately</td><td><code class="inl">docker logs JIRA-Board</code> — usually a bad token or an unreachable host.</td></tr>
           <tr><td>Changed <code class="inl">src/</code> but the UI looks old</td><td>Rebuild: <code class="inl">docker compose up -d --build</code>.</td></tr>
           <tr><td>Permission denied running <code class="inl">docker</code> on Linux</td><td><code class="inl">sudo usermod -aG docker "$USER"</code>, then log out and back in.</td></tr>
-          <tr><td><code class="inl">./start-jira-board.sh: Permission denied</code></td><td><code class="inl">chmod +x start-jira-board.sh</code></td></tr>
+          <tr><td><code class="inl">./scripts/start-jira-board.sh: Permission denied</code></td><td><code class="inl">chmod +x scripts/start-jira-board.sh</code></td></tr>
         </table>
       </div>
 
@@ -855,7 +855,7 @@ bash jira-intern/local-runner/update-completed.sh  <span class="cmt"># full Comp
           <p>TypeScript 7 ships its native compiler as per-platform <b>optional</b> npm packages. When
             <code class="inl">npm ci</code> runs <i>inside</i> the image over a slow/flaky Docker-VM network, npm
             silently skips optional packages — then <code class="inl">tsc</code> can’t find its Linux binary.</p>
-          <p><b>Fix:</b> deploy with <code class="inl">./start-jira-board.sh</code> — it builds
+          <p><b>Fix:</b> deploy with <code class="inl">./scripts/start-jira-board.sh</code> — it builds
             <code class="inl">dist/</code> on your machine first and tells Docker to just package it
             (<code class="inl">DIST_SOURCE=prebuilt</code>). Building by hand:</p>
           <pre><button class="copy">Copy</button>npm run build
@@ -954,7 +954,7 @@ docker compose build --build-arg DIST_SOURCE=prebuilt</pre>
       <details class="faq">
         <summary><span class="qi">+</span> Port 4321 is already in use <span class="ftag net">network</span></summary>
         <div class="a">
-          <p><code class="inl">./start-jira-board.sh</code> reclaims the port automatically (it stops whatever
+          <p><code class="inl">./scripts/start-jira-board.sh</code> reclaims the port automatically (it stops whatever
             holds it, including stale containers from older compose projects). Manual alternatives:</p>
           <pre><button class="copy">Copy</button>docker compose down
 PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another port</span></pre>
