@@ -86,10 +86,10 @@ class RealCatalog(unittest.TestCase):
         # 16 priced at or under $10 (minus the owner's exclude list), plus the include-list models
         kept, info = cp.publish(catalog(*self.IDS, "gpt-5.6-terra", "gemini-3.1-pro"))
         ids = {m["id"] for m in kept}
-        self.assertGreaterEqual(len(kept), 11)
-        for want in ("gpt-5.6-terra", "gemini-3.1-pro", "claude-sonnet-5", "gpt-5.6-luna", "glm-5.2", "kimi-k2.7-code"):
+        self.assertGreaterEqual(len(kept), 10)
+        for want in ("gpt-5.6-terra", "gemini-3.1-pro", "gpt-5.6-luna", "glm-5.2", "kimi-k2.7-code"):
             self.assertIn(want, ids)
-        for gone in ("grok-4.5", "gemini-2.5-flash", "gpt-5.4-nano", "claude-haiku-4-5", "gemini-3-flash", "gemini-3.6-flash"):
+        for gone in ("grok-4.5", "gemini-2.5-flash", "gpt-5.4-nano", "claude-haiku-4-5", "claude-sonnet-5", "gemini-3-flash", "gemini-3.6-flash"):
             self.assertNotIn(gone, ids)
         self.assertEqual(info["total"], 27)
 
@@ -231,9 +231,9 @@ class PriceWarning(unittest.TestCase):
     """Only output ABOVE $10 is flagged in the UI: $10 itself is the top of the value range."""
 
     def test_the_boundary_models_carry_their_exact_output_price(self):
-        kept, _ = cp.publish(catalog("claude-sonnet-5", "gpt-5.6-terra", "gpt-5.6-luna"))
+        kept, _ = cp.publish(catalog("claude-sonnet-5-5", "gpt-5.6-terra", "gpt-5.6-luna"))
         out = {m["id"]: m["price"]["output"] for m in kept}
-        self.assertEqual(out, {"claude-sonnet-5": 10, "gpt-5.6-terra": 12, "gpt-5.6-luna": 1.2})
+        self.assertEqual(out, {"claude-sonnet-5-5": 10, "gpt-5.6-terra": 12, "gpt-5.6-luna": 1.2})
         self.assertEqual(sorted(i for i, v in out.items() if v > 10), ["gpt-5.6-terra"])
 
 
