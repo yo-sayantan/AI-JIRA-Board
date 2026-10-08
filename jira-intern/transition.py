@@ -102,14 +102,16 @@ def qa_issues_of(fields):
 
 
 def live_prs(issue_id, key=None, parent=None):
-    """The ticket's pull requests from live Jira. For a sub-ticket (`parent` = the parent's
-    {id, key}) only its own: a PR it shares with the parent belongs to the parent."""
+    """The ticket's OWN pull requests from live Jira: not PRs that name only other tickets
+    (devinfo.scope_to_ticket), and for a sub-ticket (`parent` = the parent's {id, key}) not a PR it
+    shares with the parent either."""
     # Imported here: devinfo pulls in the Bitbucket client, which the gate-only tests don't need.
     import devinfo
 
     info = devinfo.fetch_one(issue_id, enrich_open=False)
     if info is None:
         raise RuntimeError("could not read pull requests from Jira")
+    info = devinfo.scope_to_ticket(key, info)
     if parent and parent.get("id"):
         # If the parent cannot be read nothing can be told apart; scope_to_subtask then leaves the
         # list whole, which can only block more, never wrongly allow.

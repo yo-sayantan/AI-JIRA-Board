@@ -73,6 +73,13 @@ authoritative, includes reviewers/approvals); a Bitbucket **key-scan** of hinted
   trusting the company CA (`~/.ai/ca-bundle.pem`, [SETUP.md](SETUP.md)). Until then the board can
   only show what Jira's index says; refresh logs read `bb_ok: false` and
   `WARN bitbucket unreachable … CERTIFICATE_VERIFY_FAILED`.
+- **A ticket shows only its OWN pull requests.** Jira links a PR to every ticket named in any commit
+  inside it, so release PRs, merges from dev and rebases drag other tickets' PRs onto a ticket.
+  `devinfo.scope_to_ticket` drops a PR whose title and source branch name some OTHER ticket and
+  never this one (and any branch that names only other tickets, unless a kept PR comes from it). A
+  PR naming no ticket at all stays — it cannot be judged. Only upper-case `ABC-123` shapes count as
+  "another ticket"; `utf-8`, `SHA-256`, `CVE-…` and similar look-alikes do not. Applied in the daily
+  fetch, the single-ticket refresh, the completed archive and the Done gate.
 - **A sub-task shows only its OWN code.** Jira links a PR to every ticket with a commit on its
   branch, so sub-tasks committed on the parent's branch used to mirror the parent's PR and branch.
   `devinfo.scope_to_subtask` drops, from a sub-task, any PR or branch it shares with its parent

@@ -269,6 +269,43 @@ def mentions_key(key, *texts):
     return any(pattern.search(t) for t in texts if t)
 
 
+# Anything shaped like a Jira key in a PR title or branch name. Upper-case only — Jira keys and
+# Bitbucket's auto-generated PR titles are upper-case, while "fix-123" or "utf-8" are not tickets —
+# minus a few upper-case standards that look like keys.
+_KEY_SHAPE = re.compile(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9]{1,9})[-_](\d+)(?![0-9])")
+_NOT_PROJECTS = {"AES", "CVE", "HTTP", "HTTPS", "ISO", "JDK", "JRE", "MD", "PR", "RFC", "RSA", "SHA", "SSL", "TLS", "UTF"}
+
+
+def other_keys(key, *texts):
+    """Ticket keys named in `texts` other than `key` (either spelling, ABC-1 or ABC_1)."""
+    own = (key or "").upper()
+    found = set()
+    for t in texts:
+        for proj, num in _KEY_SHAPE.findall(t or ""):
+            k = f"{proj}-{num}"
+            if proj not in _NOT_PROJECTS and k != own:
+                found.add(k)
+    return found
+
+
+def scope_to_ticket(key, info):
+    """A ticket's own code, without other tickets' pull requests.
+
+    Jira links a PR to every ticket mentioned in any commit inside it, so a rebase or a merge from
+    dev drags other people's PRs onto a ticket (one ticket here carried eleven PRs for other keys).
+    A PR whose title and source branch name some OTHER ticket and never this one is that ticket's
+    PR and is dropped; so is a branch that names only other tickets, unless a kept PR comes from it.
+    A PR that names no ticket at all cannot be judged and stays."""
+    if not info or not key:
+        return info
+    def foreign(*texts):
+        return not mentions_key(key, *texts) and bool(other_keys(key, *texts))
+    prs = [p for p in info.get("prs") or [] if not foreign(p.get("title"), p.get("sourceBranch"))]
+    kept_sources = {p.get("sourceBranch") for p in prs}
+    branches = [b for b in info.get("branches") or [] if b in kept_sources or not foreign(b)]
+    return {**info, "prs": prs, "branches": branches}
+
+
 def scope_to_subtask(key, info, parent_info):
     """A sub-task's own code, without the code of the ticket it belongs to.
 

@@ -252,5 +252,17 @@ class SubtaskCodeScope(unittest.TestCase):
         self.assertEqual(out["prs"], [])
 
 
+class ForeignPrsDropped(unittest.TestCase):
+    """A PR that names only another ticket is that ticket's, on every ticket (not just sub-tasks)."""
+
+    def test_code_for_drops_a_pr_for_another_ticket(self):
+        dev = {"ABC-9": {"branches": ["feature/ABC-9", "feature/XYZ-4-merge-dev"], "times": {},
+                         "prs": [_dev_pr(1, "feature/ABC-9", "ABC-9: the fix"), _dev_pr(2, "feature/XYZ-4-merge-dev", "Feature/XYZ-4 merge dev")]}}
+        with mock.patch.object(daily_fetch, "DEV", dev), mock.patch.object(daily_fetch, "BB_OK", False):
+            info = daily_fetch.code_for("ABC-9", None)
+        self.assertEqual([p["id"] for p in info["prs"]], [1])
+        self.assertEqual(info["branches"], ["feature/ABC-9"])
+
+
 if __name__ == "__main__":
     unittest.main()
