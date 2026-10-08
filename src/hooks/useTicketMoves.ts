@@ -4,7 +4,7 @@ import { COLUMN_META } from '../lib/columns'
 import { moveTicketInJira, type MoveTarget } from '../lib/runner'
 import type { ToastFn } from './useToasts'
 
-export const MOVE_TARGETS: ReadonlySet<ColumnKey> = new Set<ColumnKey>(['todo', 'prog', 'rev', 'qa', 'done'])
+export const MOVE_TARGETS: ReadonlySet<ColumnKey> = new Set<ColumnKey>(['todo', 'blocked', 'prog', 'rev', 'qa', 'done'])
 
 interface Pin {
   column: ColumnKey

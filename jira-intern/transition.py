@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Move one Jira ticket to another board column — the write side of drag-and-drop.
 
-    python3 transition.py <KEY> <todo|prog|rev|qa|done>
+    python3 transition.py <KEY> <todo|blocked|prog|rev|qa|done>
 
 Prints ONE JSON line and exits 0 whenever it reached a verdict:
     {"ok": true,  "moved": true, "status": "In Review", "warnings": ["No pull request…"]}
@@ -10,8 +10,11 @@ Prints ONE JSON line and exits 0 whenever it reached a verdict:
 
 The gates read LIVE Jira (issue links, sub-tasks, dev-status PRs), not the board's cached
 data.json, so a PR merged five minutes ago counts:
+  • Blocked   → no gate; any card may be marked blocked.
   • In Review → warn when there is no open or merged PR.        (the move still happens)
   • QA        → warn when the ticket has no QA ticket.           (the move still happens)
+                Lands on a READY-for-QA status, never a QA-in-progress one: that shelf belongs
+                to the QA team (the board shows it as the "QA In Progress" sub-division).
   • Done      → BLOCK unless every PR is merged and every QA ticket is done.
 
 Nothing here writes data.json; the board follows up with a normal single-ticket refresh.
@@ -24,13 +27,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from _jira import jira_get, jira_post, load_env, status_column  # noqa: E402
 
-COLUMNS = ("todo", "prog", "rev", "qa", "done")
+COLUMNS = ("todo", "blocked", "prog", "rev", "qa", "done")
 # Jira workflows rarely name statuses exactly like the board; prefer these, then any in the column.
 PREFERRED = {
     "todo": ("to do", "open", "reopened", "backlog"),
+    "blocked": ("blocked", "impeded"),
     "prog": ("in progress", "dev in progress", "in development"),
     "rev": ("in review", "code review", "ready for review", "ready4review"),
-    "qa": ("qa", "in qa", "in testing", "testing", "ready for qa"),
+    "qa": ("ready for qa", "ready4qa", "qa", "awaiting qa", "ready for testing", "in qa", "testing", "in testing"),
     "done": ("done", "closed", "resolved", "completed"),
 }
 
@@ -135,7 +139,7 @@ def move(key, target):
 
 def main(argv):
     if len(argv) != 3 or argv[2] not in COLUMNS:
-        print(json.dumps({"ok": False, "error": "usage: transition.py <KEY> <todo|prog|rev|qa|done>"}))
+        print(json.dumps({"ok": False, "error": "usage: transition.py <KEY> <todo|blocked|prog|rev|qa|done>"}))
         return 2
     key, target = argv[1].upper(), argv[2]
     try:

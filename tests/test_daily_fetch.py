@@ -92,7 +92,8 @@ class StatusColumns(unittest.TestCase):
         self.assertEqual(status_column("Cancelled"), "done")
         self.assertEqual(status_column("canceled"), "done")
         self.assertEqual(status_column("Rejected"), "done")
-        self.assertEqual(status_column("Blocked"), "hold")
+        self.assertEqual(status_column("Blocked"), "blocked")
+        self.assertEqual(status_column("On Hold"), "hold")
         self.assertEqual(status_column(None), "prog")
 
 

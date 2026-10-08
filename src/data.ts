@@ -20,7 +20,9 @@ function isTicketLike(t: unknown): t is Ticket {
 function normalizeTicket(t: Ticket): Ticket {
   // An unknown column would match no board column and the card would silently vanish. Own-property
   // check, not `in`: a column named "toString" or "constructor" must not pass as a real column.
-  const column = typeof t.column === 'string' && Object.prototype.hasOwnProperty.call(COLUMN_META, t.column) ? t.column : mapStatusToColumn(t.status)
+  let column = typeof t.column === 'string' && Object.prototype.hasOwnProperty.call(COLUMN_META, t.column) ? t.column : mapStatusToColumn(t.status)
+  // Dumps written before the Blocked column existed filed Blocked / Impeded under On Hold.
+  if (column === 'hold' && mapStatusToColumn(t.status) === 'blocked') column = 'blocked'
   return {
     ...t,
     title: typeof t.title === 'string' ? t.title : '',

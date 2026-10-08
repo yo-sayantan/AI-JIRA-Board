@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 /** Board columns. The intern maps every raw Jira status onto one of these. */
-export type ColumnKey = 'todo' | 'prog' | 'rev' | 'qa' | 'done' | 'hold'
+export type ColumnKey = 'todo' | 'blocked' | 'prog' | 'rev' | 'qa' | 'done' | 'hold'
 
 export type PrState = 'approved' | 'comments' | 'changes' | 'merged' | 'declined' | 'none'
 

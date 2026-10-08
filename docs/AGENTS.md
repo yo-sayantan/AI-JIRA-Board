@@ -100,7 +100,7 @@ assignee, hand-off history) is the most recent full-stack feature — copy its s
   `hexToRgba(color, 0.07)`, coloured text/icon, Motion spring on hover/tap. **No 3D/skeuomorphic
   buttons** (tried; rejected). The gold `gold-sheen` Completed trophy is the single exception.
 - Colour accents are welcome and each view owns a hue (Completed green/gold · Raised indigo ·
-  Next Sprint pink · On Hold orange). Never monochrome; keep gradients, the freshness pill, the
+  Next Sprint pink · On Hold orange · Blocked red · QA In Progress deep teal). Never monochrome; keep gradients, the freshness pill, the
   sprint block, and animations.
 - Fixed-width right-hand "rails" in list rows (one width table shared by header + rows) so
   columns align to the pixel; labels truncate, never overflow.

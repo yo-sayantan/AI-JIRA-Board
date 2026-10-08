@@ -1,20 +1,24 @@
 import { motion } from 'motion/react'
-import { BOARD_COLUMNS, HOLD_COLUMN } from '../../lib/columns'
+import { BOARD_COLUMNS, HOLD_COLUMN, PIPELINE_COLUMNS, QA_IN_PROGRESS, isQaInProgress } from '../../lib/columns'
 import type { ColumnKey } from '../../types'
 import { hexToRgba } from '../../lib/format'
 import { ColumnIcon, PauseIcon } from '../common/Icons'
 
-/** Horizontal status pipeline: To Do → In Progress → In Review → QA → Done. */
+/**
+ * Horizontal status pipeline: To Do → In Progress → In Review → QA → Done. Side states (Blocked,
+ * On Hold) are not stages: the bars stay dark and a badge says where the ticket is parked.
+ */
 export function Pipeline({ current, rawStatus }: { current: ColumnKey; rawStatus?: string | null }) {
-  const onHold = current === 'hold'
-  const currentIdx = BOARD_COLUMNS.findIndex((c) => c.key === current)
+  const aside = current === 'hold' ? HOLD_COLUMN : (BOARD_COLUMNS.find((c) => c.key === current && c.aside) ?? null)
+  const currentIdx = PIPELINE_COLUMNS.findIndex((c) => c.key === current)
+  const qaInProgress = current === 'qa' && isQaInProgress(rawStatus)
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-stretch gap-1.5">
-        {BOARD_COLUMNS.map((c, i) => {
-          const reached = !onHold && i <= currentIdx
-          const isCurrent = !onHold && i === currentIdx
+        {PIPELINE_COLUMNS.map((c, i) => {
+          const reached = !aside && i <= currentIdx
+          const isCurrent = !aside && i === currentIdx
           const accent = c.accent
           return (
             <div key={c.key} className="flex flex-1 flex-col items-center gap-1">
@@ -32,18 +36,23 @@ export function Pipeline({ current, rawStatus }: { current: ColumnKey; rawStatus
                 style={{ color: reached ? accent : 'var(--muted)' }}
               >
                 <ColumnIcon col={c.key} color={reached ? accent : 'var(--muted)'} size={12} />
-                <span className={isCurrent ? '' : 'hidden sm:inline'}>{c.label}</span>
+                <span className={isCurrent ? '' : 'hidden sm:inline'}>
+                  {c.label}
+                  {isCurrent && qaInProgress ? ` · ${QA_IN_PROGRESS.label.replace(/^QA /, '')}` : ''}
+                </span>
               </div>
             </div>
           )
         })}
       </div>
-      {onHold && (
+      {aside && (
         <div
           className="inline-flex items-center gap-1.5 self-start rounded-full px-2.5 py-1 text-[11px] font-semibold pulse-attention"
-          style={{ color: HOLD_COLUMN.accent, background: hexToRgba(HOLD_COLUMN.accent, 0.14), ['--ring' as string]: HOLD_COLUMN.accent }}
+          style={{ color: aside.accent, background: hexToRgba(aside.accent, 0.14), ['--ring' as string]: aside.accent }}
         >
-          <PauseIcon size={12} color={HOLD_COLUMN.accent} /> On Hold{rawStatus ? ` · ${rawStatus}` : ''}
+          {aside.key === 'hold' ? <PauseIcon size={12} color={aside.accent} /> : <ColumnIcon col={aside.key} color={aside.accent} size={12} />}
+          {aside.label}
+          {rawStatus && rawStatus.toLowerCase() !== aside.label.toLowerCase() ? ` · ${rawStatus}` : ''}
         </div>
       )}
     </div>

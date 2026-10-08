@@ -8,9 +8,14 @@ export interface ColumnMeta {
   /** Lowercased Jira statuses that fold into this column. */
   statuses: string[]
   emoji: string
+  /** A side state (Blocked, On Hold) rather than a lifecycle stage — left out of a ticket's progress pipeline. */
+  aside?: boolean
+  /** Folds to a slim rail while empty and nothing is being dragged, so the working columns get the width. */
+  collapsible?: boolean
 }
 
-// The five board columns, left → right, exactly as requested.
+// The six board columns, left → right. Blocked sits between To Do and In Progress: work that is
+// stuck, droppable like any other column (it IS a Jira status), but not a pipeline stage.
 // "In Review" intentionally folds in Ready4Review + Code Review + In Review.
 export const BOARD_COLUMNS: ColumnMeta[] = [
   {
@@ -19,6 +24,15 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
     accent: '#64748b',
     emoji: '📋',
     statuses: ['to do', 'todo', 'open', 'backlog', 'reopened', 'selected for development', 'new'],
+  },
+  {
+    key: 'blocked',
+    label: 'Blocked',
+    accent: '#ef4444',
+    emoji: '⛔',
+    statuses: ['blocked', 'impeded', 'blocker', 'stuck'],
+    aside: true,
+    collapsible: true,
   },
   {
     key: 'prog',
@@ -71,7 +85,31 @@ export const HOLD_COLUMN: ColumnMeta = {
   label: 'On Hold',
   accent: '#f97316',
   emoji: '⏸️',
-  statuses: ['on hold', 'hold', 'blocked', 'waiting', 'parked', 'impeded', 'paused', 'stalled'],
+  statuses: ['on hold', 'hold', 'waiting', 'parked', 'paused', 'stalled'],
+}
+
+/** The lifecycle stages a ticket moves through — the board columns minus the side states. */
+export const PIPELINE_COLUMNS: ColumnMeta[] = BOARD_COLUMNS.filter((c) => !c.aside)
+
+/**
+ * QA has a sub-division: "QA In Progress" — tickets the QA team has picked up. It is not a column
+ * and never a drop target: developers drop a card on QA (transition.py picks a ready-for-QA status),
+ * and only QA moves it further in Jira. Any QA-column status that is not a waiting word counts.
+ */
+export const QA_IN_PROGRESS = { label: 'QA In Progress', accent: '#0d9488' } as const
+const QA_READY = ['qa', 'ready for qa', 'ready4qa', 'awaiting qa', 'qa ready', 'ready for testing', 'ready for test', 'to test', 'to be tested']
+const QA_WAITING_WORDS = new Set(['ready', 'awaiting', 'pending', 'queued', 'moved', 'handed', 'for'])
+
+export function isQaInProgress(status: string | null | undefined): boolean {
+  const s = (status ?? '').trim().toLowerCase()
+  if (!s || QA_READY.includes(s)) return false
+  return !s.split(/[^a-z0-9]+/).some((w) => QA_WAITING_WORDS.has(w))
+}
+
+/** Which QA shelf a ticket sits on; null outside the QA column. */
+export function qaStage(t: { column: ColumnKey; status?: string | null }): 'ready' | 'inprogress' | null {
+  if (t.column !== 'qa') return null
+  return isQaInProgress(t.status) ? 'inprogress' : 'ready'
 }
 
 // NOT a column — a *partition* of the To Do column. Tickets keep `column: 'todo'`; they're
@@ -102,17 +140,17 @@ export function mapStatusToColumn(status: string | null | undefined): ColumnKey 
   // non-alphanumeric char (handles multi-word keywords like "on hold" / "in progress").
   const hasWord = (kw: string) =>
     new RegExp(`(^|[^a-z0-9])${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`).test(s)
-  // On Hold takes precedence so blocked work surfaces in its own section.
+  // On Hold takes precedence so paused work surfaces in its own section.
   if (HOLD_COLUMN.statuses.some((x) => s === x || hasWord(x))) return 'hold'
   for (const col of BOARD_COLUMNS) {
     if (col.statuses.some((x) => s === x)) return col.key
   }
-  // Word fallback in the SAME order as the Python intern (qa → review → progress), so "QA In
-  // Progress" lands in QA on both sides instead of matching "in progress" first here.
+  // Word fallback in the SAME order as the Python intern (blocked → qa → review → progress), so
+  // "QA In Progress" lands in QA on both sides instead of matching "in progress" first here.
   for (const key of WORD_FALLBACK_ORDER) {
     if (COLUMN_META[key].statuses.some((x) => hasWord(x))) return key
   }
   return 'todo'
 }
 
-const WORD_FALLBACK_ORDER: ColumnKey[] = ['qa', 'rev', 'prog', 'todo', 'done']
+const WORD_FALLBACK_ORDER: ColumnKey[] = ['blocked', 'qa', 'rev', 'prog', 'todo', 'done']

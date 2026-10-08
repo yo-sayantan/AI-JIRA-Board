@@ -251,6 +251,13 @@ export function ColumnIcon({ col, color = 'currentColor', size = 14 }: { col: st
         <circle cx="4.5" cy="18" r="1.4" fill={color} />
       </svg>
     )
+  if (col === 'blocked')
+    return (
+      <svg {...svg(size, '')}>
+        <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.9" />
+        <path d="M5.8 5.8l12.4 12.4" {...s} />
+      </svg>
+    )
   if (col === 'prog')
     return (
       <svg {...svg(size, '')}>
@@ -376,6 +383,16 @@ export function MoveIcon({ size = 15, className = '', color = '#8b5cf6' }: IP) {
     <svg {...svg(size, className)}>
       <path d="M12 3v18M3 12h18" {...line(color, 2)} />
       <path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" {...line(color, 2)} />
+    </svg>
+  )
+}
+
+/** Padlock — a shelf only another team moves cards onto. */
+export function LockIcon({ size = 12, className = '', color = 'currentColor' }: IP) {
+  return (
+    <svg {...svg(size, className)}>
+      <rect x="5" y="11" width="14" height="10" rx="2.2" stroke={color} strokeWidth="1.9" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" {...line(color, 1.9)} />
     </svg>
   )
 }
