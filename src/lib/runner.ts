@@ -324,17 +324,42 @@ export async function startTicketRefresh(key: string): Promise<TicketRefreshStar
   }
 }
 
+/** USD per 1M tokens, from ai-intern/cursor-prices.json. null = Cursor lists no such charge. */
+export interface CloudPrice {
+  input: number | null
+  cacheWrite: number | null
+  cacheRead: number | null
+  output: number | null
+}
+
 export interface CloudModelChoice {
   id: string
   label: string
-  /** Cursor effort values this model accepts. Empty for Claude. */
+  /** Cursor effort values this model accepts (low / medium / high). Empty for Claude. */
   efforts?: string[]
+  /** Cursor models only: who makes it, and what it costs. */
+  provider?: string
+  price?: CloudPrice
+  /** A pricing caveat worth showing (e.g. a surcharge above 100k input tokens). */
+  note?: string | null
+}
+
+/** What the worker did with the key's Cursor catalog — why the list is as long as it is. */
+export interface CursorCatalogInfo {
+  total: number
+  shown: number
+  overCap: number
+  fast: number
+  unpriced: { id: string; name: string }[]
+  capUsd: number
+  pricesChecked?: string | null
 }
 
 export interface CloudProviderModels {
   configured: boolean
   models: CloudModelChoice[]
   error?: string | null
+  catalog?: CursorCatalogInfo
 }
 
 export async function getCloudModels(): Promise<{

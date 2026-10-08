@@ -28,6 +28,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import cursor_prices  # same directory; models are offered by price, not by a hand-typed id list
+
 HERE = Path(__file__).resolve().parent
 INTERN = Path(os.environ.get("INTERN_DIR") or str(HERE.parent / "jira-intern")).resolve()
 sys.path.insert(0, str(INTERN))
@@ -134,27 +136,14 @@ if os.environ.get("JIRA_INSECURE_TLS") == "1":
     MCP_SSL.verify_mode = ssl.CERT_NONE
     log("WARN JIRA_INSECURE_TLS=1: TLS certificate verification is OFF for on-prem Jira/Bitbucket reads")
 
-EFFORTS = ("low", "medium")
-# Claude stays on Haiku. Cursor is the explicit value allow-list _CURSOR_KEEP.
+EFFORTS = ("low", "medium", "high")
+# Claude stays on Haiku. Cursor models are offered by price (see below).
 _CHEAP_RANK = (("haiku", 0),)
 # Only Claude model ids reach _cheap_rank, so only Claude flagship markers are listed.
 _FLAGSHIP = re.compile(r"opus|sonnet|thinking", re.I)
-# Value picks: capable models whose standard (non-fast) output rate is at most $10 / 1M tokens,
-# newest of each family only — a same-price older sibling (Grok 4.6, 4.5) is left out.
-# Ids are Cursor's API ids, copied from each model's "Model ID" on cursor.com/docs/models/<slug>;
-# they are NOT uniform (Claude uses hyphens: claude-sonnet-5-5), so never derive one from a name.
-# Rates: cursor.com/docs/models-and-pricing, checked 2026-10-08. Cursor offers no GLM or Kimi
-# model at the moment. Listed cheapest output first; docs/index.html#ai-cloud-prices and
-# Settings.tsx::CLOUD_RATES mirror this list.
-_CURSOR_KEEP = (
-    "claude-haiku-5-5",  # $0.50 out
-    "gpt-5.6-luna",  # $1.20
-    "composer-2.5",  # $2.50
-    "gemini-3.8-flash",  # $3.50
-    "muse-spark-1.3",  # $4.25
-    "grok-4.7",  # $6
-    "claude-sonnet-5-5",  # $10
-)
+# Cursor models are offered by PRICE, not by a hand-typed id list: a model is shown when it is in
+# the API key's Cursor catalog and priced at or under $10 / 1M output tokens in cursor-prices.json
+# (the whole cursor.com/docs/models-and-pricing table). See cursor_prices.py for the matching rules.
 _CLOUD_CACHE = {"at": 0.0, "val": None}
 _CLOUD_LOCK = threading.RLock()
 
@@ -388,14 +377,11 @@ def _cheap_rank(text):
 
 
 def _publish_cursor(models):
-    kept = {}
-    for m in models:
-        mid = m.get("id")
-        if mid not in _CURSOR_KEEP:
-            continue
-        efforts = [e for e in EFFORTS if e in (m.get("efforts") or [])]
-        kept[mid] = {**m, "efforts": efforts}
-    return [kept[mid] for mid in _CURSOR_KEEP if mid in kept]
+    """(models to offer, diagnostics): the key's catalog, narrowed by price — see cursor_prices.py."""
+    kept, info = cursor_prices.publish(models)
+    for m in kept:
+        m["efforts"] = [e for e in EFFORTS if e in (m.get("efforts") or [])]
+    return kept, info
 
 
 def _gemini_keep(model_id, label=""):
@@ -486,6 +472,7 @@ def list_cursor_models(key):
             "efforts": efforts,
             "effortParam": param_id,
             "variants": item.get("variants") or [],
+            "aliases": [a for a in (item.get("aliases") or []) if isinstance(a, str)],
         })
     return _publish_cursor(models)
 
@@ -553,9 +540,9 @@ def _fetch_cloud_models():
     if cursor_key:
         out["cursor"]["configured"] = True
         try:
-            out["cursor"]["models"] = list_cursor_models(cursor_key)
+            out["cursor"]["models"], out["cursor"]["catalog"] = list_cursor_models(cursor_key)
             if not out["cursor"]["models"]:
-                out["cursor"]["error"] = "None of the value-priced Cursor models in the allow-list are available on this key."
+                out["cursor"]["error"] = "None of the Cursor models on this key are priced at or under $10 per 1M output tokens."
         except Exception as e:
             out["cursor"]["error"] = str(_http_fail(e) if not isinstance(e, RuntimeError) else e)
     else:
@@ -766,7 +753,7 @@ def _cloud_allowed(provider, model):
     if not model:
         return False
     if provider == "cursor":
-        return model in _CURSOR_KEEP
+        return cursor_prices.allowed(model)
     if provider == "gemini":
         return _gemini_keep(model, model)
     return _cheap_rank(model) is not None

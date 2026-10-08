@@ -14,7 +14,7 @@ export type AiLevel = 'none' | 'low' | 'moderate' | 'full'
 export type AiBackend = 'local' | 'cloud'
 export type AiCloudProvider = 'claude' | 'cursor' | 'gemini'
 /** Cursor reasoning effort. Low is the default; medium is the only step up. */
-export type AiCloudEffort = 'low' | 'medium'
+export type AiCloudEffort = 'low' | 'medium' | 'high'
 
 export interface Settings {
   /** auto = follow the OS · fixed = always `theme` · schedule = light between the day hours. */
@@ -227,7 +227,7 @@ const SERVER_FIELDS = {
   aiLocalModel: modelId(MODEL_ID_MAX.aiLocalModel),
   aiCloudModel: modelId(MODEL_ID_MAX.aiCloudModel),
   aiCloudProvider: oneOf<AiCloudProvider>(['claude', 'cursor', 'gemini']),
-  aiCloudEffort: oneOf<AiCloudEffort>(['low', 'medium']),
+  aiCloudEffort: oneOf<AiCloudEffort>(['low', 'medium', 'high']),
   aiUseHostOllama: bool,
   ollamaEnabled: bool,
   reportParallel: bounded('reportParallel'),

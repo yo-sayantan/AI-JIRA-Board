@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ACTIVE_CADENCE, AI_LEVELS, BOARD_CADENCE, FEATURES, LIMITS, clampSetting, type AiCloudProvider, type FeatureKey, type Settings } from '../../lib/settings'
-import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice, type OllamaContainerInfo } from '../../lib/runner'
+import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice, type CloudPrice, type CursorCatalogInfo, type OllamaContainerInfo } from '../../lib/runner'
+import { groupByProvider, usd } from '../../lib/cloudModels'
 import fallbackCatalog from '../../../ai-intern/models.json'
 import { hexToRgba } from '../../lib/format'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
@@ -860,7 +861,7 @@ function AiInternControls({
         )}
       </div>
 
-      <AiFacts settings={settings} aiStatus={aiStatus ?? null} localModel={localModel} installed={installed} pulling={pulling} />
+      <AiFacts settings={settings} aiStatus={aiStatus ?? null} cloudModel={cloud?.models.find((m) => m.id === settings.aiCloudModel) ?? null} localModel={localModel} installed={installed} pulling={pulling} />
     </div>
   )
 }
@@ -872,6 +873,7 @@ function cloudProviderOf(s: Settings): 'claude' | 'cursor' | 'gemini' {
 const CLOUD_EFFORTS: { id: Settings['aiCloudEffort']; label: string }[] = [
   { id: 'low', label: 'Low' },
   { id: 'medium', label: 'Medium' },
+  { id: 'high', label: 'High' },
 ]
 
 /** Standard (non-fast) list rates, USD per 1M tokens. Medium bills at these rates.
@@ -884,7 +886,8 @@ const CLOUD_PROVIDER_INFO: Record<
     label: 'Cursor',
     missingKey: 'CURSOR_API_KEY is read from ~/.cursor/mcp-secrets.env (Cursor Dashboard → API Keys).',
     about: 'Value picks: Capable models at or under $10 per 1M output tokens (standard speed).',
-    prefer: (models) => models.find((m) => m.id === 'grok-4.7') || models[0],
+    // GPT-5.6 Luna: cheapest of the capable models, and what most installs already use.
+    prefer: (models) => models.find((m) => /luna/i.test(m.id)) || models[0],
   },
   claude: {
     label: 'Claude',
@@ -905,6 +908,8 @@ interface CloudModels {
   models: CloudModelChoice[]
   error: string | null
   hasKey: boolean
+  /** Cursor only: how the key's catalog was narrowed by price. */
+  catalog?: CursorCatalogInfo
 }
 
 /** The provider's model list and key status, loaded once per provider switch (null while loading). */
@@ -917,7 +922,7 @@ function useCloudModels(provider: AiCloudProvider | null): CloudModels | null {
     void getCloudModels().then((res) => {
       if (cancelled || !res) return
       const entry = res[provider]
-      setLoaded({ provider, models: entry?.models ?? [], error: entry?.error ?? res.error ?? null, hasKey: !!entry?.configured })
+      setLoaded({ provider, models: entry?.models ?? [], error: entry?.error ?? res.error ?? null, hasKey: !!entry?.configured, catalog: provider === 'cursor' ? res.cursor?.catalog : undefined })
     })
     return () => {
       cancelled = true
@@ -937,17 +942,23 @@ const CLOUD_KEYS: Record<AiCloudProvider, { env: string; biller: string }> = {
 function CloudKeyRow({ provider, cloud }: { provider: AiCloudProvider; cloud: CloudModels | null }) {
   const k = CLOUD_KEYS[provider]
   const n = cloud?.models.length ?? 0
+  const cat = cloud?.catalog
+  // Cursor: say how the list was narrowed, so a short list is explained rather than mysterious.
+  const detail = cat
+    ? `${n} shown · ${cat.overCap} over $${cat.capUsd}${cat.unpriced.length ? ` · ${cat.unpriced.length} unpriced` : ''}`
+    : `${n} model${n === 1 ? '' : 's'} on this key`
   const state = !cloud
     ? { text: `Checking ${k.env}…`, color: '#94a3b8' }
     : !cloud.hasKey
       ? { text: `${k.env} missing — add it to ~/.cursor/mcp-secrets.env`, color: '#f59e0b' }
       : cloud.error
         ? { text: cloud.error, color: '#f59e0b' }
-        : { text: `${k.env} found · ${n} model${n === 1 ? '' : 's'} on this key`, color: '#22c55e' }
+        : { text: `${k.env} found · ${detail}`, color: '#22c55e' }
+  const unpriced = cat?.unpriced.length ? `\nNo price on file for: ${cat.unpriced.map((u) => u.id).join(', ')}.` : ''
   return (
     <div
       className={STRIP}
-      title={`${state.text}.\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
+      title={`${state.text}.${cat ? `\nYour key's Cursor catalog has ${cat.total} models; ${cat.shown} cost $${cat.capUsd} or less per 1M output tokens${cat.fast ? `, ${cat.fast} are Fast variants (left out)` : ''}.${unpriced}` : ''}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />
       <span className="min-w-0 truncate font-medium">{state.text}</span>
@@ -994,18 +1005,27 @@ function CloudModelPicker({
           className="jb-field h-8 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] disabled:opacity-60"
         >
           {!models.length && <option value="">{!ready ? 'Loading models…' : hasKey ? 'No cheaper models on this key' : 'No key yet'}</option>}
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label === m.id ? m.label : `${m.label} · ${m.id}`}
-            </option>
-          ))}
+          {groupByProvider(models).map(([group, rows]) => {
+            const options = rows.map((m) => (
+              <option key={m.id} value={m.id} title={m.id}>
+                {m.price?.output != null ? `${m.label} · ${usd(m.price.output)}/M out` : m.label === m.id ? m.label : `${m.label} · ${m.id}`}
+              </option>
+            ))
+            return group ? (
+              <optgroup key={group} label={group}>
+                {options}
+              </optgroup>
+            ) : (
+              options
+            )
+          })}
         </select>
         {provider === 'cursor' && efforts.length > 0 && (
           <select
             value={efforts.includes(settings.aiCloudEffort) ? settings.aiCloudEffort : efforts[0]}
             onChange={(e) => onChange({ ...settings, aiCloudEffort: e.target.value as Settings['aiCloudEffort'] })}
             aria-label="Cursor effort"
-            title="Effort — Low uses fewer tokens than Medium"
+            title="Effort — Low uses the fewest tokens, High the most (and the best answers)"
             className="jb-field h-8 w-[5.75rem] shrink-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)]"
           >
             {CLOUD_EFFORTS.filter((e) => efforts.includes(e.id)).map((e) => (
@@ -1033,21 +1053,6 @@ function CloudModelPicker({
   )
 }
 
-/**
- * USD per 1M tokens at standard speed, from cursor.com/docs/models-and-pricing (checked 2026-10-08).
- * Mirrors `_CURSOR_KEEP` in ai-intern/worker.py and docs/index.html#ai-cloud-prices — keep all
- * three in step. `cacheWrite` is null where Cursor charges nothing extra to write the cache.
- */
-const CLOUD_RATES: Record<string, { input: string; cacheWrite: string | null; cache: string; output: string }> = {
-  'claude-haiku-5-5': { input: '$0.10', cacheWrite: '$0.125', cache: '$0.01', output: '$0.50' },
-  'gpt-5.6-luna': { input: '$0.20', cacheWrite: '$0.25', cache: '$0.02', output: '$1.20' },
-  'composer-2.5': { input: '$0.50', cacheWrite: null, cache: '$0.20', output: '$2.50' },
-  'gemini-3.8-flash': { input: '$0.75', cacheWrite: null, cache: '$0.075', output: '$3.50' },
-  'muse-spark-1.3': { input: '$1.25', cacheWrite: null, cache: '$0.15', output: '$4.25' },
-  'grok-4.7': { input: '$2', cacheWrite: null, cache: '$0.50', output: '$6' },
-  'claude-sonnet-5-5': { input: '$2', cacheWrite: '$2.50', cache: '$0.10', output: '$10' },
-}
-
 function FactTile({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
   return (
     <div className="flex min-w-0 flex-col justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5" title={hint}>
@@ -1065,33 +1070,36 @@ function FactTile({ label, value, hint }: { label: string; value: ReactNode; hin
 function AiFacts({
   settings,
   aiStatus,
+  cloudModel,
   localModel,
   installed,
   pulling,
 }: {
   settings: Settings
   aiStatus: AiInternStatus | null
+  /** The selected cloud model as the worker published it — its price comes with it. */
+  cloudModel: CloudModelChoice | null
   localModel: AiCatalogModel | null
   installed: string[]
   pulling: string | null
 }) {
   let tiles: ReactNode
   if (settings.aiBackend === 'cloud') {
-    const rate = CLOUD_RATES[settings.aiCloudModel]
+    const rate: CloudPrice | undefined = cloudModel?.price
     const biller = CLOUD_KEYS[cloudProviderOf(settings)].biller
     tiles = rate ? (
       <>
-        <FactTile label="Input / 1M" value={rate.input} hint="USD per million input tokens, standard speed" />
-        <FactTile label="Output / 1M" value={rate.output} hint="USD per million output tokens — Low effort spends fewer" />
+        <FactTile label="Input / 1M" value={usd(rate.input)} hint={`USD per million input tokens, standard speed${cloudModel?.note ? ` · ${cloudModel.note}` : ''}`} />
+        <FactTile label="Output / 1M" value={usd(rate.output)} hint="USD per million output tokens — a lower effort spends fewer" />
         <FactTile
           label="Cache read / 1M"
-          value={rate.cache}
-          hint={`USD per million cached input tokens${rate.cacheWrite ? ` · writing to the cache costs ${rate.cacheWrite} / 1M` : ''}`}
+          value={usd(rate.cacheRead)}
+          hint={`USD per million cached input tokens${rate.cacheWrite != null ? ` · writing to the cache costs ${usd(rate.cacheWrite)} / 1M` : ''}`}
         />
       </>
     ) : (
       <div className="col-span-3 flex min-w-0 items-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 text-[11px] text-[var(--muted)]">
-        <span className="min-w-0 truncate">{settings.aiCloudModel ? `${biller} sets this model's prices — the guide lists the Cursor value picks.` : 'Pick a model to see its prices.'}</span>
+        <span className="min-w-0 truncate">{settings.aiCloudModel ? `${biller} sets this model's prices — see ${biller}'s pricing page.` : 'Pick a model to see its prices.'}</span>
       </div>
     )
   } else {
