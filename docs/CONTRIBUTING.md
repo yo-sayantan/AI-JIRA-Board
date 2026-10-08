@@ -90,7 +90,11 @@ Update the reference spec `jira-intern/prompts/pr-readiness-prompt.md` so the th
 must equal the Ollama tag you will pull or create; `level` low/moderate/full; `fits` container/host;
 `ramGb`; links). The file is bind-mounted into AI-Intern, so `docker compose restart jira-ai` is
 enough; the Settings dropdown and the offline guide read it. For a new **cloud** model on Cursor,
-add its id to `_CURSOR_KEEP` in `worker.py`; Claude and Gemini lists are filtered by name
+add its id to `_CURSOR_KEEP` in `worker.py`, its rates to `CLOUD_RATES` in `Settings.tsx`, and a
+row to the guide's price table (`docs/index.html#ai-cloud-prices`). Copy the id from the **Model
+ID** field on the model's own page (`cursor.com/docs/models/<slug>`) — never derive it from the
+display name: the formats differ by provider (`gpt-5.6-luna`, but `claude-sonnet-5-5`), and a
+wrong id is silently filtered out. Claude and Gemini lists are filtered by name
 (`_cheap_rank`, `_gemini_keep`).
 
 **Add a server route.** Add the handler to `routes` in `serve.mjs` (or the prefix branch for

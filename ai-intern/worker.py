@@ -139,18 +139,21 @@ EFFORTS = ("low", "medium")
 _CHEAP_RANK = (("haiku", 0),)
 # Only Claude model ids reach _cheap_rank, so only Claude flagship markers are listed.
 _FLAGSHIP = re.compile(r"opus|sonnet|thinking", re.I)
-# Value picks: capable models whose standard (medium, non-fast) output rate is
-# at most $10 / 1M tokens. Same-price older siblings are left out.
+# Value picks: capable models whose standard (non-fast) output rate is at most $10 / 1M tokens,
+# newest of each family only — a same-price older sibling (Grok 4.6, 4.5) is left out.
+# Ids are Cursor's API ids, copied from each model's "Model ID" on cursor.com/docs/models/<slug>;
+# they are NOT uniform (Claude uses hyphens: claude-sonnet-5-5), so never derive one from a name.
+# Rates: cursor.com/docs/models-and-pricing, checked 2026-10-08. Cursor offers no GLM or Kimi
+# model at the moment. Listed cheapest output first; docs/index.html#ai-cloud-prices and
+# Settings.tsx::CLOUD_RATES mirror this list.
 _CURSOR_KEEP = (
-    "gpt-5.6-luna",
-    "composer-2.5",
-    "gemini-3-flash",
-    "kimi-k2.7-code",
-    "glm-5.2",
-    "grok-4.7",
-    "grok-4.6",
-    "gemini-3.6-flash",
-    "claude-sonnet-5",
+    "claude-haiku-5-5",  # $0.50 out
+    "gpt-5.6-luna",  # $1.20
+    "composer-2.5",  # $2.50
+    "gemini-3.8-flash",  # $3.50
+    "muse-spark-1.3",  # $4.25
+    "grok-4.7",  # $6
+    "claude-sonnet-5-5",  # $10
 )
 _CLOUD_CACHE = {"at": 0.0, "val": None}
 _CLOUD_LOCK = threading.RLock()
