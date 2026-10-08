@@ -959,7 +959,7 @@ function CloudKeyRow({ provider, cloud }: { provider: AiCloudProvider; cloud: Cl
   return (
     <div
       className={STRIP}
-      title={`${state.text}.${cat ? `\nYour key's Cursor catalog has ${cat.total} models; ${cat.shown} cost $${cat.capUsd} or less per 1M output tokens${cat.fast ? `, ${cat.fast} are Fast variants (left out)` : ''}${cat.hidden ? `, ${cat.hidden} are hidden by your exclude list` : ''}${cat.exceptions ? `; ${cat.exceptions} offered above the cap by your include list` : ''}.${cat.pinned?.length ? `\nPinned but not in your key's catalog (Cursor may reject them): ${cat.pinned.join(', ')}.` : ''}${over}${unpriced}` : ''}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
+      title={`${state.text}.${cat ? `\nYour key's Cursor catalog has ${cat.total} models; ${cat.shown} cost $${cat.capUsd} or less per 1M output tokens${cat.fast ? `, ${cat.fast} are Fast variants (left out)` : ''}${cat.hidden ? `, ${cat.hidden} are hidden by your exclude list` : ''}${cat.exceptions ? `; ${cat.exceptions} offered above the cap` : ''}.${cat.pinned?.length ? `\nPinned but not in your key's catalog (Cursor may reject them): ${cat.pinned.join(', ')}.` : ''}${over}${unpriced}` : ''}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />
       <span className="min-w-0 truncate font-medium">{state.text}</span>
