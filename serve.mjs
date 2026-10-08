@@ -26,6 +26,7 @@
 //   GET  /ai-intern/models.json            file
 //   GET  /jira-intern/data.json|data.js    file, Cache-Control: no-store (Jira data never hits disk cache)
 //   GET  /jira-intern/reports/index.js     file, Cache-Control: no-store
+//   GET  /jira-intern/demo/data.json       file, the Demo-mode sample board
 //
 // Data writers (daily fetch, archive rebuild, per-ticket refresh — one data.json writer at a time)
 //   POST /api/run-intern                   202 { ok, started:true, runAt } · 409 { ok:false, running:true }
@@ -76,7 +77,16 @@ import { MODELS_DIR_LABEL, ensureOllamaReady, ollamaInfo, ollamaWanted, reconcil
 
 const serveStatic = createStaticHandler(
   ROOT,
-  [/^\/dist\//, /^\/docs\//, /^\/setup\//, /^\/ai-intern\/models\.json$/, /^\/jira-intern\/data\.js(on)?$/, /^\/jira-intern\/reports\/index\.js$/],
+  [
+    /^\/dist\//,
+    /^\/docs\//,
+    /^\/setup\//,
+    /^\/ai-intern\/models\.json$/,
+    /^\/jira-intern\/data\.js(on)?$/,
+    /^\/jira-intern\/reports\/index\.js$/,
+    // Demo mode's sample board, kept beside the real dump so it can be read and edited by hand.
+    /^\/jira-intern\/demo\/[\w.-]+\.json$/,
+  ],
   { noStore: [/^\/jira-intern\//] },
 )
 

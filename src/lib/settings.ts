@@ -155,6 +155,14 @@ export const FEATURES = [
       'Drag a card to To Do, In Progress, In Review, QA or Done and the ticket is transitioned in Jira in the background. In Review warns when there is no pull request and QA when there is no QA ticket; Done is refused — the card slides back — until every PR is merged and the QA ticket is done. Needs the local server.',
   },
   {
+    key: 'demoMode',
+    default: false,
+    label: 'Demo mode',
+    hint: 'A sample board for testing — nothing reaches Jira',
+    detail:
+      'Replaces the board with ~20 invented tickets covering every column (including Blocked and the QA In Progress shelf), On Hold, Next Sprint, sub-tasks, pull requests in every state, the Completed archive, Raised by me and two sample PR Readiness Reports. Drag-and-drop runs the same PR and QA gates in the browser, so a refused Done still slides back — but no refresh, transition, report or AI job is ever sent. Your real board is untouched and returns the moment you turn this off.',
+  },
+  {
     key: 'onHold',
     default: true,
     label: 'On Hold section',

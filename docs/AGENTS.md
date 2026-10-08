@@ -39,6 +39,8 @@ AI agent to make a correct change without re-deriving the architecture.
 | `config/` | `jira-board.config.json` — tracked, **generic** project defaults (+ JSON schema). Personal values live OUTSIDE the repo in `~/.ai/config.json`. |
 | `setup/` | Templates ONLY (secrets, personal config, MCP, Desktop launcher) — the guide for them is `docs/SETUP.md`. Shipped into the Docker image. |
 | `docs/` | **All** documentation lives here (see index at the bottom): the suite, `index.html` (served Setup Guide), `doc.html` (styled viewer for the .md files), `legal.html` (policies). The only `.md` files outside are runtime inputs, not docs: `jira-intern/prompts/*.md` (LLM prompts read by scripts) and `.github/pull_request_template.md` (GitHub requires its location). |
+| `jira-intern/demo/` | Demo mode's sample board: `data.json` (the source — tracked in git, unlike the real dump), `tickets/*.json` (per-ticket mirror, `npm run demo:split`), `README.md`. |
+| `src/demo/` | Demo mode's code: loads + re-dates `jira-intern/demo/data.json`, two canned PR reports, and a browser-side mirror of the move gates. Driven by the `demoMode` feature toggle; `runner.ts::setDemoMode` blocks every server call while it is on. |
 | `tests/` | Python unittests (`npm test`). |
 
 ## Golden rules (break these and the system corrupts)

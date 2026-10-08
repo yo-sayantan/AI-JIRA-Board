@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ColumnKey, Ticket } from '../types'
 import { COLUMN_META } from '../lib/columns'
+import { demoMoveVerdict } from '../demo'
 import { moveTicketInJira, type MoveTarget } from '../lib/runner'
 import type { ToastFn } from './useToasts'
 
@@ -10,6 +11,8 @@ interface Pin {
   column: ColumnKey
   /** Drop order — later drops sit lower in the column. */
   seq: number
+  /** Status to show until the real one arrives, so badges and the QA shelf follow the card. */
+  status: string
 }
 
 /**
@@ -24,11 +27,14 @@ export function useTicketMoves({
   served,
   toast,
   refreshTicket,
+  demo = false,
 }: {
   served: boolean
   toast: ToastFn
   /** Watches the server-side refresh queued by the move and swaps the fresh data in. */
   refreshTicket: (key: string) => Promise<void>
+  /** Demo mode: judge the move locally (same gates) and never call the server. */
+  demo?: boolean
 }) {
   const [pins, setPins] = useState<ReadonlyMap<string, Pin>>(new Map())
   const [movingKeys, setMovingKeys] = useState<ReadonlySet<string>>(new Set())
@@ -38,7 +44,7 @@ export function useTicketMoves({
   const setPin = useCallback((key: string, column: ColumnKey | null) => {
     setPins((prev) => {
       const next = new Map(prev)
-      if (column) next.set(key, { column, seq: ++seq.current })
+      if (column) next.set(key, { column, seq: ++seq.current, status: COLUMN_META[column]?.label ?? column })
       else next.delete(key)
       return next
     })
@@ -56,7 +62,7 @@ export function useTicketMoves({
     async (ticket: Ticket, to: ColumnKey) => {
       const from = ticket.column
       if (to === from || !MOVE_TARGETS.has(to)) return
-      if (!served) return void toast('Moving tickets needs the local server — run `npm run serve`.', 'info')
+      if (!served && !demo) return void toast('Moving tickets needs the local server — run `npm run serve`.', 'info')
       if (inFlight.current.has(ticket.key)) return void toast(`${ticket.key} is already being moved.`, 'info')
       inFlight.current.add(ticket.key)
       markMoving(ticket.key, true)
@@ -64,7 +70,8 @@ export function useTicketMoves({
       setPin(ticket.key, to)
       const label = COLUMN_META[to].label
 
-      const verdict = await moveTicketInJira(ticket.key, to as MoveTarget)
+      // Demo mode runs the same PR / QA gates in the browser, so a refused Done still bounces back.
+      const verdict = demo ? demoMoveVerdict(ticket, to) : await moveTicketInJira(ticket.key, to as MoveTarget)
       inFlight.current.delete(ticket.key)
       markMoving(ticket.key, false)
 
@@ -80,12 +87,13 @@ export function useTicketMoves({
         else toast(`Couldn't move ${ticket.key} to ${label}: ${verdict.error ?? 'unknown error'}.`, 'error')
         return
       }
-      toast(verdict.moved ? `${ticket.key} → ${verdict.status ?? label} in Jira.` : `${ticket.key} was already in ${label}.`, 'success')
+      const where = demo ? 'on the demo board' : 'in Jira'
+      toast(verdict.moved ? `${ticket.key} → ${verdict.status ?? label} ${where}.` : `${ticket.key} was already in ${label}.`, 'success')
       for (const w of verdict.warnings ?? []) toast(`${ticket.key}: ${w}`, 'info')
       // The server queued this ticket's refresh; attach to it so the real status lands on the board.
-      if (verdict.moved) void refreshTicket(ticket.key)
+      if (verdict.moved && !demo) void refreshTicket(ticket.key)
     },
-    [served, toast, refreshTicket, pins, setPin, markMoving],
+    [served, demo, toast, refreshTicket, pins, setPin, markMoving],
   )
 
   /** Show pinned tickets in their dropped column until the dump itself agrees. */
@@ -95,7 +103,7 @@ export function useTicketMoves({
       return tickets.map((t) => {
         const pin = pins.get(t.key)
         if (!pin || t.column === pin.column) return t
-        return { ...t, column: pin.column, done: pin.column === 'done', onHold: false }
+        return { ...t, column: pin.column, status: pin.status, done: pin.column === 'done', onHold: false }
       })
     },
     [pins],

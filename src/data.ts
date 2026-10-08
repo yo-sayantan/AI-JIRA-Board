@@ -4,7 +4,7 @@ import { projectOf } from './lib/format'
 import { fixture } from './fixtures'
 import { DONE_BOARD_DAYS } from './lib/appConfig'
 
-export type DataSource = 'live' | 'fixture' | 'empty'
+export type DataSource = 'live' | 'fixture' | 'empty' | 'demo'
 
 /** The dump data.js injected at page load, if any. */
 export function injectedDump(): JiraData | null {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ColumnKey } from './types'
-import { RUN_COMMAND, aiModelLabel, enrichJobsRunning, isServed } from './lib/runner'
+import { RUN_COMMAND, aiModelLabel, enrichJobsRunning, isServed, setDemoMode } from './lib/runner'
 import { countMyCompleted, countRaised, countTicketsWithPr, dashboardPrTickets, hasActiveWork, indexByKey, splitBoard } from './lib/boardView'
 import { parseQuery } from './lib/search'
 import { useBoardData } from './hooks/useBoardData'
@@ -18,7 +18,7 @@ import { Header } from './components/header/Header'
 import type { ReportsMenuProps } from './components/header/ReportsMenu'
 import { Stats, type StatSelection } from './components/board/Stats'
 import { Board } from './components/board/Board'
-import { ArchivedUndo, NoMatches } from './components/board/BoardNotices'
+import { ArchivedUndo, DemoBanner, NoMatches } from './components/board/BoardNotices'
 import { OnHold } from './components/board/OnHold'
 import { NextSprint } from './components/board/NextSprint'
 import { EmptyState } from './components/board/EmptyState'
@@ -51,11 +51,16 @@ export default function App() {
     ),
   )
   const { features } = settings
+  // Demo mode: a sample board, and every call that would reach Jira or the AI intern switched
+  // off. Set during render, not in an effect, so no fetch can slip out before the flag lands.
+  const demo = features.demoMode
+  setDemoMode(demo)
   const { toasts, toast, dismiss } = useToasts(settings.toastSeconds, settings.toastMax)
   toastRef.current = toast
-  const { data, source, userArchived, reload, archive, restoreArchived } = useBoardData(served, (m) => toast(m, 'error'))
-  const jobs = useInternJobs({ served, toast, dismiss, reload })
-  const moves = useTicketMoves({ served, toast, refreshTicket: jobs.refreshTicket })
+  const { data, source, userArchived, reload, archive, restoreArchived } = useBoardData(served, (m) => toast(m, 'error'), demo)
+  const jobs = useInternJobs({ served, toast, dismiss, reload, demo })
+  const moves = useTicketMoves({ served, toast, refreshTicket: jobs.refreshTicket, demo })
+  const exitDemo = useCallback(() => setSettings((s) => ({ ...s, features: { ...s.features, demoMode: false } })), [setSettings])
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [completedOpen, setCompletedOpen] = useState(false)
@@ -68,7 +73,7 @@ export default function App() {
 
   const status = useInternStatus(served, features.autoRefresh || settingsOpen || jobs.running != null)
   const ai = status?.ai ?? null
-  const reports = useReports({ served, enabled: features.prReports, status, toast })
+  const reports = useReports({ served, enabled: features.prReports, status, toast, demo })
 
   const byKey = useMemo(() => indexByKey(data), [data])
   // Dropped cards show in their new column at once; Jira confirms (or refuses) in the background.
@@ -108,10 +113,10 @@ export default function App() {
 
   const refreshedOnOpen = useRef(false)
   useEffect(() => {
-    if (!served || !features.reloadActive || refreshedOnOpen.current) return
+    if (!served || demo || !features.reloadActive || refreshedOnOpen.current) return
     refreshedOnOpen.current = true
     void jobs.refreshBoard()
-  }, [features.reloadActive, jobs.refreshBoard])
+  }, [demo, features.reloadActive, jobs.refreshBoard])
 
   const archiveTicket = useCallback(
     (key: string) => {
@@ -197,6 +202,8 @@ export default function App() {
       </ErrorBoundary>
 
       {/* Counts follow the search. The Completed chip counts MY tickets only, like the archive's default scope. */}
+      {demo && <DemoBanner onExit={exitDemo} />}
+
       <Stats
         tickets={view.board}
         completedCount={features.completedArchive ? myCompletedCount : null}

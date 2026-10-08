@@ -27,6 +27,15 @@ export function fetchWithTimeout(url: string, init: RequestInit = {}, ms = FETCH
 }
 
 /** True when the board was opened through the local server (http/https), not file://. */
+// Demo mode's safety net. The hooks already refuse these actions with a friendly message; this
+// makes it impossible for a path anyone forgets to reach Jira, Bitbucket or the AI intern while
+// the board is showing invented tickets. Settings (including an AI model pull) still work — those
+// configure the machine and are never triggered by a demo ticket.
+let demoMode = false
+export function setDemoMode(on: boolean): void {
+  demoMode = on
+}
+
 export function isServed(): boolean {
   return typeof location !== 'undefined' && /^https?:$/.test(location.protocol)
 }
@@ -213,6 +222,7 @@ export interface ReportStart {
 
 /** Ask the server to (re)generate one ticket's report in the background (served mode only). */
 export async function startReportGeneration(key: string): Promise<ReportStart | null> {
+  if (demoMode) return null
   try {
     const r = await fetchWithTimeout(`/api/report?key=${encodeURIComponent(key)}`, { method: 'POST' })
     if (r.status === 429) return { ok: false, queueFull: true }
@@ -265,6 +275,7 @@ export interface BulkReportStart {
  * rebuilds ones whose stored report still matches the current PR fingerprint.
  */
 export async function startBulkReportGeneration(target: ReportScope, force = false): Promise<BulkReportStart | null> {
+  if (demoMode) return null
   const q = new URLSearchParams({ scope: target.scope })
   if (target.scope === 'year') q.set('year', String(target.year))
   if (target.scope === 'since') q.set('since', target.since)
@@ -302,6 +313,7 @@ export interface TicketRefreshStart {
 /** Trigger a targeted background fetch for ONE ticket (served mode only).
  *  Always queues when another refresh is in flight — never drops later clicks. */
 export async function startTicketRefresh(key: string): Promise<TicketRefreshStart | null> {
+  if (demoMode) return null
   try {
     const r = await fetchWithTimeout(`/api/refresh-ticket?key=${encodeURIComponent(key)}`, { method: 'POST' })
     if (r.status === 429) return { ok: false, queueFull: true }
@@ -403,6 +415,7 @@ export async function getInternStatus(): Promise<InternStatus | null> {
  * (The server still answers 304 to a conditional request if one ever arrives.)
  */
 export async function getDataDump(): Promise<JiraData | null> {
+  if (demoMode) return null
   try {
     const r = await fetchWithTimeout('/jira-intern/data.json', { cache: 'no-cache' }, 20_000)
     if (!r.ok) return null
@@ -434,6 +447,7 @@ export interface RunStartResult {
 }
 
 async function startRun(path: string): Promise<RunStartResult> {
+  if (demoMode) return { ok: false, status: 0 }
   try {
     const r = await fetchWithTimeout(path, { method: 'POST' })
     const body = (await r.json().catch(() => ({}))) as { runAt?: string }
@@ -460,6 +474,7 @@ export type ArchiveScope =
 
 /** Kick off the Completed archive rebuild. A scope updates only that slice; all rebuilds the whole archive. */
 export async function startArchiveRun(target: ArchiveScope = { scope: 'all' }): Promise<RunStartResult> {
+  if (demoMode) return { ok: false, status: 0 }
   const q = new URLSearchParams()
   q.set('scope', target.scope)
   if (target.scope === 'year') q.set('year', String(target.year))
@@ -494,6 +509,7 @@ export interface MoveVerdict {
 
 /** Move a ticket to another column IN JIRA. Resolves when Jira has answered (a few seconds). */
 export async function moveTicketInJira(key: string, to: MoveTarget): Promise<MoveVerdict> {
+  if (demoMode) return { ok: false, error: 'demo mode is on' }
   try {
     const r = await fetch(`/api/move-ticket?key=${encodeURIComponent(key)}&to=${to}`, { method: 'POST' })
     const body = (await r.json().catch(() => null)) as MoveVerdict | null
