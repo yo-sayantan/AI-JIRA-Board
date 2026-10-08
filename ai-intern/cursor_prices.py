@@ -131,6 +131,7 @@ def publish(models: list, table: dict | None = None):
     table = table or load_prices()
     cap = float(table.get("maxOutputUsd", 10))
     hidden_names = {norm(n) for n in table.get("exclude") or []}
+    include_names = {norm(n) for n in table.get("include") or []}
     kept, over, fast, unpriced, routed, hidden = [], [], [], [], [], []
     for m in models:
         entry = price_of(m, table)
@@ -141,12 +142,15 @@ def publish(models: list, table: dict | None = None):
             unpriced.append({"id": m.get("id"), "name": label})
         elif norm(entry.get("name")) in hidden_names:
             hidden.append({"id": m.get("id"), "name": entry.get("name")})
+        elif norm(entry.get("name")) in include_names and not is_fast(m):
+            # your exception: offered whatever it costs
+            kept.append({**m, "provider": entry.get("provider"), "price": _usd(entry), "priceName": entry.get("name"), "note": entry.get("note"), "exception": entry.get("output") is None or entry["output"] > cap})
         elif is_fast(m) or entry.get("fast"):
             fast.append({"id": m.get("id"), "name": label})
         elif entry.get("output") is None or entry["output"] > cap:
             over.append({"id": m.get("id"), "name": entry.get("name"), "output": entry.get("output")})
         else:
-            kept.append({**m, "provider": entry.get("provider"), "price": _usd(entry), "priceName": entry.get("name"), "note": entry.get("note")})
+            kept.append({**m, "provider": entry.get("provider"), "price": _usd(entry), "priceName": entry.get("name"), "note": entry.get("note"), "exception": False})
     rank = {p: i for i, p in enumerate(PROVIDER_ORDER)}
     kept.sort(key=lambda m: (rank.get(m["provider"], len(rank)), m["price"]["output"], str(m.get("label") or m["id"]).lower()))
     return kept, {
@@ -155,6 +159,7 @@ def publish(models: list, table: dict | None = None):
         "overCap": len(over),
         "over": over,
         "hidden": len(hidden),
+        "exceptions": sum(1 for m in kept if m.get("exception")),
         "fast": len(fast),
         "routed": len(routed),
         "unpriced": unpriced,
@@ -171,4 +176,8 @@ def allowed(model_id: str, table: dict | None = None) -> bool:
     entry = price_of({"id": model_id}, table)
     if not entry or entry.get("fast") or is_fast({"id": model_id}) or entry.get("output") is None:
         return False
+    if norm(entry.get("name")) in {norm(n) for n in table.get("exclude") or []}:
+        return False
+    if norm(entry.get("name")) in {norm(n) for n in table.get("include") or []}:
+        return True
     return entry["output"] <= float(table.get("maxOutputUsd", 10))

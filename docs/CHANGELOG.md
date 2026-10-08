@@ -14,6 +14,10 @@ code does now, so a reader can check them against the tree.
   punctuation and case, and a catalog model with no price on file is reported, not dropped. The
   Settings key strip says how many were shown / over the cap / unpriced, the cache-read tile reads
   the live price, and the guide's table (now with **Cache write**) renders from the same file.
+- **Curated, with a cost warning.** `cursor-prices.json` has an `exclude` list (hidden: Grok 4.5,
+  Gemini 2.5 / 3 / 3.5 / 3.6 / 3.7 Flash, GPT-5.4 Nano, Claude 4.5 Haiku) and an `include` list of
+  exceptions above the $10 cap (GPT-5.6 Terra, Gemini 3.1 Pro). Any model whose output costs $10 or
+  more per 1M tokens is marked ⚠ in the dropdown, the Output tile and the guide.
 - **Effort now has a High level** (Low · Medium · High) for Cursor models, wherever the catalog's
   effort parameter lists it.
 - A ticket with several branches now shows the one with the **newest commit** as its branch, and

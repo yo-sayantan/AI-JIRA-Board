@@ -772,7 +772,9 @@ ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
         <p class="small"><b>Cache write</b> is what storing a prompt prefix for reuse costs; <b>cache read</b> is what
           reusing it costs instead of full input. <b>—</b> means Cursor lists no cache-write price for that model.
           A model only appears in <i>Settings</i> if your key's catalog includes it — Cursor's catalog is per account and
-          team — and <i>Fast</i> variants are left out (they cost more).</p>
+          team — and <i>Fast</i> variants are left out (they cost more). Two lists in that file shape it:
+          <code class="inl">include</code> offers a model above the cap (an exception), and <code class="inl">exclude</code> hides one
+          you do not want offered. <span style="color:#b45309">⚠</span> marks any model whose output costs $10 or more per 1M tokens.</p>
         <details class="faq">
           <summary>Not offered — over $10, Fast, or hidden (<span id="cursor-over-count">…</span>)</summary>
           <div class="a">
@@ -1083,7 +1085,12 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
           return ra - rb || (a.output || 0) - (b.output || 0) || a.name.localeCompare(b.name);
         });
         var hide = (data.exclude || []).map(function (n) { return n.toLowerCase(); });
-        var shown = all.filter(function (m) { return !m.fast && m.output != null && m.output <= cap && hide.indexOf(m.name.toLowerCase()) < 0; });
+        var inc = (data.include || []).map(function (n) { return n.toLowerCase(); });
+        var shown = all.filter(function (m) {
+          var n = m.name.toLowerCase();
+          if (hide.indexOf(n) >= 0) return false;
+          return inc.indexOf(n) >= 0 || (!m.fast && m.output != null && m.output <= cap);
+        });
         var rest = all.filter(function (m) { return shown.indexOf(m) < 0; });
         var dash = '<span title="Cursor lists no cache-write price for this model">\u2014</span>';
         var checked = document.getElementById('cursor-checked');
@@ -1092,6 +1099,8 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
         if (body) {
           body.innerHTML = shown.map(function (m) {
             var note = m.note ? ' <span class="small" title="' + esc(m.note) + '">\u24d8</span>' : '';
+            if (m.output > cap) note += ' <i title="Offered although it costs more than $' + cap + ' — your include list">(over the cap — your include list)</i>';
+            if (m.output >= 10) note += ' <span title="Output costs $10 or more per 1M tokens" style="color:#b45309">\u26a0</span>';
             return '<tr><td><b>' + esc(m.name) + '</b>' + note + '</td><td>' + esc(m.provider) + '</td><td>' + usd(m.input) +
               '</td><td>' + (m.cacheWrite == null ? dash : usd(m.cacheWrite)) + '</td><td>' + usd(m.cacheRead) + '</td><td>' + usd(m.output) + '</td></tr>';
           }).join('') || '<tr><td colspan="6">No models at or under $' + cap + '.</td></tr>';

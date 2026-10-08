@@ -94,7 +94,9 @@ nothing to add in code: a model is offered when it is in the API key's Cursor ca
 or under $10 per 1M output tokens in `ai-intern/cursor-prices.json` (the whole
 `cursor.com/docs/models-and-pricing` table). To add or re-price one, edit that file — one row with
 `name`, `provider`, the four rates and `fast`; the worker picks it up on the next catalog fetch, and
-the Settings list, the cache-read tile and the guide's price table all follow. Matching ignores
+the Settings list, the cache-read tile and the guide's price table all follow. Two name lists shape
+the result: `exclude` hides a model you never want offered, and `include` offers one above the cap
+(an exception). Models priced at $10 or more output get a ⚠ in the dropdown, the tile and the guide. Matching ignores
 punctuation and case (`claude-sonnet-5-5` = `claude-sonnet-5.5` = "Claude Sonnet 5.5"), see
 `ai-intern/cursor_prices.py`. If a model you expect is missing, hover the key strip in Settings: it
 says how many were hidden as over the cap and lists catalog ids with no price on file. Claude and

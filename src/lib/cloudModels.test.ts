@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CloudModelChoice } from './runner'
-import { groupByProvider, usd } from './cloudModels'
+import { groupByProvider, isPricey, usd } from './cloudModels'
 
 describe('usd', () => {
   it('writes whole dollars bare and fractions to the precision Cursor quotes', () => {
@@ -30,5 +30,21 @@ describe('groupByProvider', () => {
   })
   it('puts models without a maker in one ungrouped list (Claude and Gemini providers)', () => {
     expect(groupByProvider([m('x'), m('y')])).toEqual([['', [m('x'), m('y')]]])
+  })
+})
+
+describe('isPricey', () => {
+  const at = (output: number | null) => ({ price: { output } })
+  it('warns from $10 upward, boundary included', () => {
+    expect(isPricey(at(10))).toBe(true)
+    expect(isPricey(at(12))).toBe(true)
+    expect(isPricey(at(9.99))).toBe(false)
+    expect(isPricey(at(1.2))).toBe(false)
+  })
+  it('stays quiet when there is no price to judge', () => {
+    expect(isPricey(at(null))).toBe(false)
+    expect(isPricey({})).toBe(false)
+    expect(isPricey(null)).toBe(false)
+    expect(isPricey(undefined)).toBe(false)
   })
 })

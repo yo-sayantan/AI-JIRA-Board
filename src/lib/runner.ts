@@ -342,6 +342,8 @@ export interface CloudModelChoice {
   price?: CloudPrice
   /** A pricing caveat worth showing (e.g. a surcharge above 100k input tokens). */
   note?: string | null
+  /** Offered although it costs more than the cap (your `include` list). */
+  exception?: boolean
 }
 
 /** What the worker did with the key's Cursor catalog — why the list is as long as it is. */
@@ -353,6 +355,7 @@ export interface CursorCatalogInfo {
   over?: { id: string; name: string; output: number | null }[]
   /** Models on this key that you chose not to offer (the `exclude` list in cursor-prices.json). */
   hidden?: number
+  exceptions?: number
   fast: number
   /** Cursor's automatic pickers (default, auto-*) — no fixed price, never offered. */
   routed?: number
