@@ -12,7 +12,7 @@ FILE (read and write in place): {{INTERN_DIR}}/data.json
 My Jira: {{JIRA_BASE}} · Confluence: {{CONFLUENCE_BASE}} · Bitbucket: {{BITBUCKET_BASE}}
 
 ═══════════════════════════════════════════════════════════════════════════════
-TIER 1 — DEEP BRIEF: tickets[] whose column is "todo" or "prog"
+TIER 1 — DEEP BRIEF: tickets[] whose column is "todo", "blocked" or "prog"
 ═══════════════════════════════════════════════════════════════════════════════
 WHEN to (re)generate — any of:
   • the ticket has no `aiSummary`, or

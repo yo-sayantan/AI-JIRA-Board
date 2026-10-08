@@ -166,6 +166,18 @@ select.jb-field:disabled {
   border-color: color-mix(in srgb, var(--card-accent) 46%, var(--line));
   background-color: color-mix(in srgb, var(--card-accent) 8%, var(--surface-solid));
 }
+/* Board columns: width eases when the Blocked rail folds or opens (flex-basis/grow/min-width are
+   the animatable parts of a flex column). */
+.jb-col {
+  transition:
+    flex-basis 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    flex-grow 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    min-width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.jb-col-rail .jb-rail-zone:hover {
+  filter: saturate(1.4);
+}
+
 /* While its ghost is being dragged the card itself is gone from the column (kept in the DOM,
    since removing it would cancel the drag); it reappears only if the drop is abandoned. */
 .ticket-card-dragging {

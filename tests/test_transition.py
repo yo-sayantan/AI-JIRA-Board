@@ -5,7 +5,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jira-intern"))
-from transition import evaluate, is_qa, pick_transition  # noqa: E402
+from _jira import status_column  # noqa: E402
+from transition import COLUMNS, evaluate, is_qa, pick_transition  # noqa: E402
 
 OPEN_PR = {"id": 7, "state": "comments", "merged": False}
 MERGED_PR = {"id": 7, "state": "merged", "merged": True}
@@ -51,9 +52,11 @@ class Gates(unittest.TestCase):
     def test_done_passes_when_merged_and_qa_done(self):
         self.assertEqual(evaluate("done", [MERGED_PR, DECLINED_PR], [QA_DONE]), (None, []))
 
-    def test_todo_and_progress_have_no_gates(self):
+    def test_todo_progress_and_blocked_have_no_gates(self):
         self.assertEqual(evaluate("todo", [], []), (None, []))
         self.assertEqual(evaluate("prog", [], []), (None, []))
+        self.assertEqual(evaluate("blocked", [], []), (None, []))
+        self.assertIn("blocked", COLUMNS)
 
 
 class Helpers(unittest.TestCase):
@@ -71,6 +74,35 @@ class Helpers(unittest.TestCase):
         self.assertEqual(pick_transition(transitions, "rev")["id"], "2")
         self.assertEqual(pick_transition(transitions, "done")["id"], "3")
         self.assertIsNone(pick_transition(transitions, "qa"))
+
+    def test_dropping_on_qa_lands_on_a_ready_status_not_qa_in_progress(self):
+        transitions = [
+            {"id": "1", "to": {"name": "In QA"}},
+            {"id": "2", "to": {"name": "Ready for QA"}},
+            {"id": "3", "to": {"name": "QA In Progress"}},
+        ]
+        self.assertEqual(pick_transition(transitions, "qa")["id"], "2")
+        # A workflow with only in-progress QA statuses still gets a QA move.
+        self.assertEqual(pick_transition(transitions[:1], "qa")["id"], "1")
+
+    def test_blocked_transition_is_found(self):
+        transitions = [{"id": "9", "to": {"name": "Blocked"}}, {"id": "2", "to": {"name": "In Progress"}}]
+        self.assertEqual(pick_transition(transitions, "blocked")["id"], "9")
+
+
+class StatusColumns(unittest.TestCase):
+    def test_blocked_is_its_own_column(self):
+        self.assertEqual(status_column("Blocked"), "blocked")
+        self.assertEqual(status_column("Impeded"), "blocked")
+        self.assertEqual(status_column("Blocked by vendor"), "blocked")
+
+    def test_hold_keeps_paused_work(self):
+        self.assertEqual(status_column("On Hold"), "hold")
+        self.assertEqual(status_column("Waiting"), "hold")
+
+    def test_qa_variants_all_map_to_qa(self):
+        for s in ("QA", "Ready for QA", "In QA", "QA In Progress", "In Testing"):
+            self.assertEqual(status_column(s), "qa", s)
 
 
 if __name__ == "__main__":

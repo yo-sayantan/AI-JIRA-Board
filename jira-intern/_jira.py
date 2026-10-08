@@ -263,7 +263,8 @@ _STATUS_COLUMNS = (
       "testing", "in test", "in testing", "test", "verification", "verify"), "qa"),
     (("done", "completed", "closed", "resolved", "released", "shipped",
       "won't fix", "wont fix", "won’t fix", "cancelled", "canceled", "rejected"), "done"),
-    (("on hold", "hold", "blocked", "waiting", "parked", "impeded", "paused", "stalled"), "hold"),
+    (("blocked", "impeded", "blocker", "stuck"), "blocked"),
+    (("on hold", "hold", "waiting", "parked", "paused", "stalled"), "hold"),
 )
 
 
@@ -275,6 +276,8 @@ def status_column(name):
         if n in aliases:
             return col
     tokens = set(re.findall(r"[a-z0-9]+", n))
+    if tokens & {"blocked", "impeded"}:
+        return "blocked"
     if tokens & {"qa", "testing", "verification"}:
         return "qa"
     if "review" in tokens:

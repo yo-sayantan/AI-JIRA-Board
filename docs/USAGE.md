@@ -7,8 +7,8 @@ A tour of what's on screen and how to drive it.
 - **Header** — your name, last-fetch freshness, the current-sprint pill (name · dates · working
   days left · progress bar), live **search**, light/dark toggle, and **Refresh/Reload**.
 - **Stat chips** — one per column plus scope toggles. Click to filter; click again to clear.
-- **Board** — the kanban columns: To Do · In Progress · In Review · QA · Done.
-- **On Hold** — appears only when something is blocked/waiting.
+- **Board** — the kanban columns: To Do · Blocked · In Progress · In Review · QA · Done. Blocked folds to a slim rail while empty; QA shows a **QA In Progress** shelf when the QA team has picked something up.
+- **On Hold** — appears only when something is paused/waiting.
 - **Next Sprint** — a bar for tickets queued in a sprint that hasn't started (see below).
 - **Completed** — the full historical archive (top-right trophy chip).
 

@@ -36,12 +36,15 @@ The app's data shape is the source of truth in `git/jira-board/src/types.ts`. Ke
 STATUS → COLUMN MAPPING (case-insensitive). Set `column` on every ticket:
 ═══════════════════════════════════════════════════════════════════════════════
   "To Do" / Open / Backlog / Reopened / Selected for Development        -> "todo"
+  "Blocked" / Impeded                                                   -> "blocked"  (its own column, between To Do and In Progress)
   "In Progress" / Dev in Progress / Work in Progress / In Development   -> "prog"
   "In Review" / Code Review / Ready4Review / Ready for Review / Review  -> "rev"   (these all fold together)
   "QA" / In QA / Under QA / Ready for QA / Testing / Verification      -> "qa"
   "Done" / Completed / Closed / Resolved / Released                    -> "done"
-  "On Hold" / Hold / Blocked / Waiting / Parked / Impeded              -> "hold"  (also set onHold:true)
-The board shows columns: To Do · In Progress · In Review · QA · Done. On Hold renders as its own section
+  "On Hold" / Hold / Waiting / Parked / Paused                          -> "hold"  (also set onHold:true)
+The board shows columns: To Do · Blocked · In Progress · In Review · QA · Done. Inside QA, statuses such as
+"In QA" / "Under QA" / "In Testing" / "QA In Progress" render on a "QA In Progress" shelf (still column "qa").
+On Hold renders as its own section
 ONLY when occupied. Completed renders the full historical archive (collapsed by default).
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -208,7 +211,7 @@ data.json SCHEMA (match git/jira-board/src/types.ts EXACTLY — same keys, same 
       "key": "PROJ-123",
       "title": "…",
       "status": "Ready4Review",                 // raw Jira status text
-      "column": "rev",                           // one of: todo|prog|rev|qa|done|hold
+      "column": "rev",                           // one of: todo|blocked|prog|rev|qa|done|hold
       "type": "Security", "priority": "High", "storyPoints": 5,
       "branch": "feature/PROJ-123_…",           // primary real branch
       "branches": ["feature/PROJ-123_…", "bugfix/PROJ-123_…"],  // all real sourceBranches from the PRs

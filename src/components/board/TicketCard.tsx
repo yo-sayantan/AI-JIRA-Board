@@ -241,7 +241,8 @@ export const TicketCard = memo(function TicketCard({
         <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-wide" style={{ color: accent }}>
           {ticket.column === 'done' && <TrophyIcon size={12} />}
           <TypeIcon type={effectiveType(ticket)} color={tm.color} size={13} />
-          {ticket.key}
+          {/* Keys never break at their hyphen — six columns leave each card ~220px. */}
+          <span className="whitespace-nowrap">{ticket.key}</span>
           <PointsTag points={ticket.storyPoints} />
         </span>
         {moving ? (
