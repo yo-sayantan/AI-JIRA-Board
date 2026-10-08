@@ -387,6 +387,16 @@ export function MoveIcon({ size = 15, className = '', color = '#8b5cf6' }: IP) {
   )
 }
 
+/** Lab flask — sample data / testing. */
+export function FlaskIcon({ size = 13, className = '', color = 'currentColor' }: IP) {
+  return (
+    <svg {...svg(size, className)}>
+      <path d="M9 3h6M10 3v5l-4.5 9A2 2 0 0 0 7.3 20h9.4a2 2 0 0 0 1.8-3L14 8V3" {...line(color, 1.9)} />
+      <path d="M7.5 14h9" {...line(color, 1.9)} />
+    </svg>
+  )
+}
+
 /** Padlock — a shelf only another team moves cards onto. */
 export function LockIcon({ size = 12, className = '', color = 'currentColor' }: IP) {
   return (

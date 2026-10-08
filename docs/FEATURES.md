@@ -16,6 +16,19 @@ are the fastest way into any feature.
 | Empty board | Celebration state when nothing is active | `board/FunEmptyBoard.tsx` |
 | Drag to change status | Drop a card in To Do / Blocked / In Progress / In Review / QA / Done and the ticket is transitioned **in Jira** in the background. The card moves at once; Jira's verdict arrives a few seconds later. In Review warns when there is no PR, QA warns when there is no QA ticket (the move still happens). Done is **refused** until every PR is merged and every QA ticket is done — the card slides back. Gates read live Jira, not the cached dump. Settings → *Drag to change status*; needs the local server. | `board/Column.tsx` (drop target), `board/TicketCard.tsx` (native drag), `src/hooks/useTicketMoves.ts` (optimistic override + bounce-back), `POST /api/move-ticket` in `serve.mjs` → `server/jobs.mjs::moveTicket` → `jira-intern/transition.py` |
 
+## Demo mode
+
+Settings → Features → **Demo mode**. Replaces the board with ~20 invented tickets so every
+feature can be exercised without real data — and with every server call switched off.
+
+| Aspect | Behaviour | Code |
+|---|---|---|
+| What you get | All six columns (Blocked included), both QA shelves, On Hold, Next Sprint, sub-tasks, PRs in every state, sprint carry-over, the Completed archive (11 rows over ~2 years), Raised by me with hand-off trails, and two sample PR Readiness Reports (`DEMO-220` ships, `DEMO-210` does not) | `src/demo/data.ts`, `src/demo/reports.ts` |
+| Drag-and-drop | Works fully, and runs the **same PR / QA gates in the browser** — a Done with an unmerged PR or open QA still slides back with the reason. `src/demo/gates.ts` mirrors `jira-intern/transition.py::evaluate`; `gates.test.ts` pins both | `src/demo/gates.ts` |
+| Nothing is sent | Board/archive/raised refreshes, per-ticket refresh, report generation and transitions are all refused with one message. `runner.ts::setDemoMode` is the hard switch — it makes those calls return a refusal before any `fetch`, so a path nobody guarded still cannot reach Jira or the AI intern. Settings (including an AI model pull) still work: they configure the machine and are never triggered by a demo ticket | `src/lib/runner.ts`, `src/hooks/useInternJobs.ts`, `useReports.ts`, `useTicketMoves.ts` |
+| Your real data | Untouched. The dump is built in the browser, never written; the archive set is kept in memory so `jb-archived` keeps the real board's keys. Turning the toggle off restores the real board immediately, no reload | `src/hooks/useBoardData.ts` |
+| Telling them apart | An amber **Demo mode** banner sits above the chips with a "Show my real board" button; `DataSource` reports `demo`; every URL in the data points at `example.com` | `board/BoardNotices.tsx::DemoBanner` |
+
 ## Stat chips (the row above the board)
 
 `src/components/board/Stats.tsx` — one selection drives everything (`StatSelection`):

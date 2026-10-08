@@ -11,6 +11,7 @@ import {
   type PrReportsIndex,
   type ReportScope,
 } from '../lib/runner'
+import { DEMO_REFUSED, demoReports } from '../demo'
 import type { ToastFn } from './useToasts'
 
 const EMPTY: ReadonlySet<string> = new Set()
@@ -25,7 +26,20 @@ function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
  * PR Readiness Reports. Which keys are generating comes from the shared intern status; the index
  * of reports on disk is fetched once and again only when a report finishes or its AI pass lands.
  */
-export function useReports({ served, enabled, status, toast }: { served: boolean; enabled: boolean; status: InternStatus | null; toast: ToastFn }) {
+export function useReports({
+  served,
+  enabled,
+  status,
+  toast,
+  demo = false,
+}: {
+  served: boolean
+  enabled: boolean
+  status: InternStatus | null
+  toast: ToastFn
+  /** Demo mode: serve the two canned sample reports; never generate anything. */
+  demo?: boolean
+}) {
   const [index, setIndex] = useState<PrReportsIndex | null>(null)
   const [generating, setGenerating] = useState<ReadonlySet<string>>(EMPTY)
   const [openReport, setOpenReport] = useState<PrReport | null>(null)
@@ -37,12 +51,17 @@ export function useReports({ served, enabled, status, toast }: { served: boolean
   const announced = useRef(new Set<string>())
 
   const refreshIndex = useCallback(async () => {
+    if (demo) {
+      const next = { reports: demoReports().summaries, generating: [] }
+      setIndex(next)
+      return next
+    }
     const next = await getReportsIndex()
     if (next) setIndex(next)
     const key = openKey.current
     if (key) void getReport(key).then((r) => r && openKey.current === key && setOpenReport(r))
     return next
-  }, [])
+  }, [demo])
 
   useEffect(() => {
     if (!enabled) return
@@ -50,7 +69,7 @@ export function useReports({ served, enabled, status, toast }: { served: boolean
   }, [enabled, served, refreshIndex])
 
   useEffect(() => {
-    if (!enabled || !status) return
+    if (!enabled || !status || demo) return
     const prev = seen.current
     const nextGenerating = new Set(status.reportsGenerating ?? [])
     const nextEnriching = new Set(status.reportsEnriching ?? [])
@@ -81,18 +100,25 @@ export function useReports({ served, enabled, status, toast }: { served: boolean
 
   const openReportFor = useCallback(
     async (key: string) => {
+      if (demo) {
+        const r = demoReports().reports[key]
+        if (r) setOpenReport(r)
+        else toast(`No sample report for ${key} — try DEMO-220 or DEMO-210.`, 'info')
+        return
+      }
       setLoadingKey(key)
       const r = await getReport(key)
       setLoadingKey(null)
       if (r) setOpenReport(r)
       else toast(`No PR readiness report for ${key} yet.`, 'info')
     },
-    [toast],
+    [demo, toast],
   )
   const closeReport = useCallback(() => setOpenReport(null), [])
 
   const generateOne = useCallback(
     async (key: string) => {
+      if (demo) return void toast(DEMO_REFUSED, 'info')
       if (!served) return void toast(`Report generation needs the server or Docker — run: bash jira-intern/local-runner/pr-report.sh ${key}`, 'info')
       const start = await startReportGeneration(key)
       if (start?.queueFull) return void toast('The report queue is full — try again shortly.', 'info')
@@ -101,11 +127,12 @@ export function useReports({ served, enabled, status, toast }: { served: boolean
       toast(start.already ? `${key} report is already being generated.` : `Generating PR readiness report for ${key} — running in the background.`, 'loading')
       void pollNow()
     },
-    [served, toast],
+    [served, demo, toast],
   )
 
   const generateBulk = useCallback(
     async (target: ReportScope, force: boolean) => {
+      if (demo) return void toast(DEMO_REFUSED, 'info')
       if (!served) return void toast('Bulk generation needs the server or Docker — run: bash jira-intern/local-runner/pr-reports-backfill.sh --all-years', 'info')
       const start = await startBulkReportGeneration(target, force)
       if (!start?.ok) return void toast("Couldn't start the report run — is the server running?", 'error')
@@ -121,14 +148,15 @@ export function useReports({ served, enabled, status, toast }: { served: boolean
       else toast(`Queued ${queued} — they generate in the background.`, 'loading')
       void pollNow()
     },
-    [served, toast],
+    [served, demo, toast],
   )
 
   const stopAll = useCallback(async () => {
+    if (demo) return void toast(DEMO_REFUSED, 'info')
     await stopReportRun()
     toast('Stopped report generation.', 'info')
     void pollNow()
-  }, [toast])
+  }, [demo, toast])
 
   return { index, generating, openReport, loadingKey, openReportFor, closeReport, generateOne, generateBulk, stopAll }
 }

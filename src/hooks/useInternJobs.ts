@@ -11,6 +11,7 @@ import {
   type InternStatus,
   type RunStartResult,
 } from '../lib/runner'
+import { DEMO_REFUSED } from '../demo'
 import type { DismissFn, ToastFn } from './useToasts'
 
 export type RunJob = 'daily' | 'archive' | 'raised'
@@ -55,11 +56,14 @@ export function useInternJobs({
   toast,
   dismiss,
   reload,
+  demo = false,
 }: {
   served: boolean
   toast: ToastFn
   dismiss: DismissFn
   reload: () => Promise<void>
+  /** Demo mode: every job is refused — the sample board has nothing to fetch. */
+  demo?: boolean
 }) {
   const [running, setRunning] = useState<RunJob | null>(null)
   const [progress, setProgress] = useState<RunProgress | null>(null)
@@ -148,6 +152,7 @@ export function useInternJobs({
 
   const refreshBoard = useCallback(async () => {
     if (runningRef.current) return
+    if (demo) return void toast(DEMO_REFUSED, 'info')
     if (!served) {
       toast('Reloading the latest dump…', 'loading')
       setTimeout(() => location.reload(), 350)
@@ -155,11 +160,12 @@ export function useInternJobs({
     }
     const id = toast('Refreshing the board. Fetching your active tickets…', 'loading')
     await begin('daily', startInternRun, id, { already: 'Intern already running — watching it.', fail: 'Could not start the intern run.' })
-  }, [served, toast, begin])
+  }, [served, demo, toast, begin])
 
   const rebuildArchive = useCallback(
     async (target: ArchiveScope = { scope: 'all' }) => {
       if (runningRef.current) return
+      if (demo) return void toast(DEMO_REFUSED, 'info')
       if (!served) return void toast('The archive rebuild needs the local server — run `npm run serve`.', 'info')
       const id = toast(`Rebuilding Completed — ${archiveLabel(target)}…`, 'loading')
       await begin('archive', () => startArchiveRun(target), id, {
@@ -167,7 +173,7 @@ export function useInternJobs({
         fail: 'Could not start the archive rebuild.',
       })
     },
-    [served, toast, begin],
+    [served, demo, toast, begin],
   )
 
   const stopArchive = useCallback(async () => {
@@ -180,13 +186,14 @@ export function useInternJobs({
   // normal board refresh, so this is the one pull that keeps that list current.
   const refreshRaised = useCallback(async () => {
     if (runningRef.current) return
+    if (demo) return void toast(DEMO_REFUSED, 'info')
     if (!served) return void toast('Refreshing raised tickets needs the local server — run `npm run serve`.', 'info')
     const id = toast('Refreshing the tickets you raised…', 'loading')
     await begin('raised', startRaisedRun, id, {
       already: 'Another intern job is running — watching it.',
       fail: 'Could not start the raised-tickets refresh.',
     })
-  }, [served, toast, begin])
+  }, [served, demo, toast, begin])
 
   const dropRefreshingKey = useCallback((key: string) => {
     setRefreshingKeys((prev) => {
@@ -199,6 +206,7 @@ export function useInternJobs({
   // Every click queues FIFO on the server; each key is watched until IT leaves the pending list.
   const refreshTicket = useCallback(
     async (key: string) => {
+      if (demo) return void toast(DEMO_REFUSED, 'info')
       if (!served) return void toast('Single-ticket refresh needs the local server — run `npm run serve`.', 'info')
       if (refreshingKeysRef.current.has(key)) return void toast(`${key} is already queued.`, 'info')
       setRefreshingKeys((prev) => new Set(prev).add(key))
@@ -238,19 +246,19 @@ export function useInternJobs({
         finish(typeof exit === 'number' && exit !== 0 ? `${key} refresh failed (exit ${exit}).` : `${key} refresh timed out.`, 'error')
       }, TICKET_POLL_MS)
     },
-    [served, toast, dismiss, dropRefreshingKey, reload],
+    [served, demo, toast, dismiss, dropRefreshingKey, reload],
   )
 
   // A run started from a terminal, cron or another tab: attach to it instead of looking idle.
   useEffect(() => {
-    if (!served) return
+    if (!served || demo) return
     void pollNow().then((s) => {
       if (!s?.running || runningRef.current) return
       const job: RunJob = s.job === 'archive' ? 'archive' : s.job === 'raised' ? 'raised' : 'daily'
       const id = toast('JIRA Intern Agent is running… the board updates when it finishes.', 'loading')
       watchRun(job, s.dataModified ?? null, id, s.lastRunAt)
     })
-  }, [served, toast, watchRun])
+  }, [served, demo, toast, watchRun])
 
   useEffect(() => () => runWatch.current?.stop(), [])
 

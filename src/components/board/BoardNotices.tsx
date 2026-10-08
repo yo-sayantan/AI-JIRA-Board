@@ -1,4 +1,4 @@
-import { EyeOffIcon } from '../common/Icons'
+import { FlaskIcon, EyeOffIcon } from '../common/Icons'
 
 export function NoMatches({ query, onClear }: { query: string; onClear: () => void }) {
   return (
@@ -24,6 +24,34 @@ export function ArchivedUndo({ keys, onUndo }: { keys: string[]; onUndo: () => v
         title={`You moved ${keys.join(', ')} to Completed — undo to bring ${keys.length === 1 ? 'it' : 'them'} back onto the board`}
       >
         <EyeOffIcon size={13} /> {keys.length} moved to Completed · Undo
+      </button>
+    </div>
+  )
+}
+
+const DEMO = '#f59e0b'
+
+/** Demo mode is on: say so loudly, and offer the way out. */
+export function DemoBanner({ onExit }: { onExit: () => void }) {
+  return (
+    <div
+      role="status"
+      className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border px-3.5 py-2"
+      style={{ borderColor: `${DEMO}73`, background: `${DEMO}14` }}
+    >
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-bold" style={{ color: DEMO }}>
+        <FlaskIcon size={14} color={DEMO} /> Demo mode
+      </span>
+      <span className="min-w-0 flex-1 text-[11.5px] text-[var(--ink-soft)]">
+        These tickets are invented. Drag them anywhere — the PR and QA gates still run, but nothing is sent to Jira or the AI intern.
+      </span>
+      <button
+        type="button"
+        onClick={onExit}
+        className="shrink-0 rounded-lg border px-2.5 py-1 text-[11.5px] font-semibold transition-colors hover:bg-[var(--surface-2)]"
+        style={{ borderColor: `${DEMO}73`, color: DEMO }}
+      >
+        Show my real board
       </button>
     </div>
   )

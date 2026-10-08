@@ -5,7 +5,7 @@ import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel
 import fallbackCatalog from '../../../ai-intern/models.json'
 import { hexToRgba } from '../../lib/format'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
-import { CalendarIcon, DocIcon, DownloadIcon, MegaphoneIcon, MoonIcon, MoveIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from '../common/Icons'
+import { CalendarIcon, DocIcon, DownloadIcon, FlaskIcon, MegaphoneIcon, MoonIcon, MoveIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from '../common/Icons'
 
 const AI = '#a855f7'
 
@@ -207,7 +207,7 @@ function internTone(ai: AiInternStatus | null | undefined): string {
 }
 
 /** Board sections first, then content, then behaviour — so the 3-column grid reads by row. */
-const FEATURE_ORDER: FeatureKey[] = ['nextSprint', 'onHold', 'dragMove', 'completedArchive', 'raisedTickets', 'prReports', 'aiBriefs', 'shortcuts', 'reloadActive', 'autoRefresh', 'animations']
+const FEATURE_ORDER: FeatureKey[] = ['nextSprint', 'onHold', 'dragMove', 'demoMode', 'completedArchive', 'raisedTickets', 'prReports', 'aiBriefs', 'shortcuts', 'reloadActive', 'autoRefresh', 'animations']
 /**
  * The AI-Ollama container is a Feature like the others, but it is a SERVER setting
  * (`ollamaEnabled`) rather than a `features` flag, because the server starts and stops the
@@ -532,6 +532,7 @@ const FEATURE_STYLE: Record<FeatureKey, { color: string; icon: (c: string) => Re
   aiBriefs: { color: '#a855f7', icon: (c) => <SparkleIcon size={13} color={c} /> },
   onHold: { color: '#f97316', icon: (c) => <PauseIcon size={13} color={c} /> },
   dragMove: { color: '#8b5cf6', icon: (c) => <MoveIcon size={13} color={c} /> },
+  demoMode: { color: '#f59e0b', icon: (c) => <FlaskIcon size={13} color={c} /> },
   reloadActive: { color: '#0ea5e9', icon: (c) => <DownloadIcon size={13} color={c} /> },
 }
 
