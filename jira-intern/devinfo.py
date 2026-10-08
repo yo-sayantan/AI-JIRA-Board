@@ -138,10 +138,148 @@ def pick_primary_pr(prs):
     return merged[0] if merged else prs[0]
 
 
+# ── Which branch is "the" branch? ────────────────────────────────────────────────────────
+# A ticket can accumulate several branches (renames, a restarted attempt, one per repo). The
+# board shows ONE as the ticket's branch and builds its PR banners from that branch's own PR,
+# so the choice has to be the branch the work is actually on: the one with the newest commit.
+# Jira's dev-status carries no commit time per branch, so Bitbucket is asked — one cheap call
+# per branch, and only for tickets that have more than one.
+
+_REPO_URL_RE = re.compile(r"/projects/([^/]+)/repos/([^/?#]+)")
+
+
+def _same_branch(a, b):
+    return bool(a) and bool(b) and str(a).strip().lower() == str(b).strip().lower()
+
+
+def _repo_of(url):
+    m = _REPO_URL_RE.search(url or "")
+    return (m.group(1), m.group(2)) if m else None
+
+
+def latest_commit_time(proj, slug, branch):
+    """Epoch seconds of the newest commit reachable from `branch`, or None when Bitbucket
+    cannot say (branch deleted, network down). A None never ranks a branch — it only keeps
+    it from winning on missing data."""
+    try:
+        q = urllib.parse.urlencode({"until": "refs/heads/" + branch, "limit": 1})
+        data = bb_get(f"/projects/{proj}/repos/{slug}/commits?{q}", timeout=20)
+        commit = next(iter(data.get("values") or []), None)
+        if not isinstance(commit, dict):
+            return None
+        stamps = [t for t in (commit.get("committerTimestamp"), commit.get("authorTimestamp")) if isinstance(t, (int, float))]
+        return max(stamps) / 1000.0 if stamps else None
+    except Exception as e:
+        sys.stderr.write(f"WARN bitbucket latest commit {proj}/{slug} {branch}: {e}\n")
+        return None
+
+
+def _bb_pr_as_devstatus(p, slug):
+    """A Bitbucket REST pull request in the shape dev-status uses, so `_to_pr` handles both."""
+    from_ref, to_ref = p.get("fromRef") or {}, p.get("toRef") or {}
+    self_links = ((p.get("links") or {}).get("self")) or [{}]
+    return {
+        "id": p.get("id"),
+        "name": p.get("title"),
+        "status": p.get("state"),
+        "url": (self_links[0] or {}).get("href"),
+        "source": {
+            "branch": from_ref.get("displayId"),
+            "repository": {"name": ((from_ref.get("repository") or {}).get("name")) or slug},
+        },
+        "destination": {"branch": to_ref.get("displayId")},
+        "reviewers": [
+            {"name": (r.get("user") or {}).get("displayName"), "approved": bool(r.get("approved"))}
+            for r in p.get("reviewers") or []
+            if isinstance(r, dict)
+        ],
+        "author": {"name": ((p.get("author") or {}).get("user") or {}).get("displayName")},
+        "lastUpdate": p.get("updatedDate"),
+    }
+
+
+def prs_from_branch(proj, slug, branch, enrich_open=True):
+    """Pull requests opened FROM `branch`, straight from Bitbucket. Used when Jira's index has
+    none for the branch the ticket is on — the index can lag a new PR by a while."""
+    try:
+        q = urllib.parse.urlencode(
+            {"direction": "OUTGOING", "at": "refs/heads/" + branch, "state": "ALL", "order": "NEWEST", "limit": 10}
+        )
+        data = bb_get(f"/projects/{proj}/repos/{slug}/pull-requests?{q}", timeout=30)
+        return [
+            _to_pr(_bb_pr_as_devstatus(p, slug), enrich_open)
+            for p in data.get("values") or []
+            if isinstance(p, dict) and _same_branch((p.get("fromRef") or {}).get("displayId"), branch)
+        ]
+    except Exception as e:
+        sys.stderr.write(f"WARN bitbucket PRs from {proj}/{slug} {branch}: {e}\n")
+        return []
+
+
+def _pr_identity(p):
+    m = _PR_URL_RE.search(p.get("url") or "")
+    return (m.group(1).upper(), m.group(2).lower(), m.group(3)) if m else (None, (p.get("repo") or "").lower(), str(p.get("id")))
+
+
+def choose_primary(branches, prs, times=None, prior_branch=None):
+    """Settle the ticket's primary branch and primary PR.
+
+    Returns (branch, pr, branches, prs). `branches` and `prs` come back reordered with the
+    primary branch (and its PRs) first and nothing dropped, so the board's lists keep every
+    entry. `pr` is the primary PR OF THAT BRANCH: when the branch has no PR of its own it is
+    {"state": "none"}, even if another branch has one — that PR is still in `prs`.
+
+    Order of preference for the branch, only when there is more than one to choose from:
+      1. the newest commit (`times`: branch → epoch seconds, branches without a time never win);
+      2. the branch chosen last time (`prior_branch`), when no commit time could be read — so a
+         refresh that skips Bitbucket does not flip the choice back and forth;
+      3. the source branch of the primary PR (how it was chosen before commit times existed).
+    """
+    branches = [b for b in dict.fromkeys(branches or []) if b]
+    prs = list(prs or [])
+    known = {b: t for b, t in (times or {}).items() if t and b in branches}
+
+    branch, legacy = None, None
+    if len(branches) > 1:
+        if known:
+            branch = max(known, key=known.get)  # ties keep list order
+        else:
+            branch = next((b for b in branches if _same_branch(b, prior_branch)), None)
+    if branch is None:
+        # The rule before commit times existed: the in-flight PR decides. Its pick is kept
+        # as is, even for a PR that carries no source branch.
+        legacy = pick_primary_pr(prs)
+        branch = legacy.get("sourceBranch") or (branches[0] if branches else None)
+    if branch and branch not in branches:
+        branches = [branch] + branches
+
+    own = [p for p in prs if _same_branch(p.get("sourceBranch"), branch)]
+    pr = legacy if legacy is not None else pick_primary_pr(own)
+    ordered_prs = (
+        [p for p in prs if p is pr]
+        + [p for p in own if p is not pr]
+        + [p for p in prs if p not in own and p is not pr]
+    )
+    ordered_branches = ([branch] if branch else []) + [b for b in branches if b != branch]
+    return branch, pr, ordered_branches, ordered_prs
+
+
+def settle(info, prior_branch=None):
+    """`info` (a fetch_one result) with branch/pr/branches/prs re-derived by choose_primary.
+    Callers that know last run's branch pass it so a lookup without commit times stays put."""
+    branch, pr, branches, prs = choose_primary(info.get("branches"), info.get("prs"), info.get("times"), prior_branch)
+    return {**info, "branch": branch, "pr": pr, "branches": branches, "prs": prs}
+
+
 def fetch_one(issue_id, enrich_open=True):
     """Branches + PRs for one issue id. Returns None when the call fails OR the payload cannot
     be read, so callers can tell "Jira says there is no code" apart from "we could not ask" —
-    and one malformed dev-status answer never takes down a whole batch in fetch_many."""
+    and one malformed dev-status answer never takes down a whole batch in fetch_many.
+
+    `enrich_open=False` skips the per-PR comment lookups (the single-ticket refresh uses it to
+    avoid slow calls). Ranking branches by newest commit stays on — it is one short call per
+    branch, only for tickets with several. Without a commit time the primary branch falls back
+    to last run's choice via `settle`."""
     try:
         data = jira_get(
             f"/rest/dev-status/latest/issue/detail?issueId={issue_id}"
@@ -152,15 +290,38 @@ def fetch_one(issue_id, enrich_open=True):
         prs = [_to_pr(p, enrich_open) for p in detail.get("pullRequests") or [] if isinstance(p, dict)]
         prs.sort(key=lambda p: (p.get("updatedAt") or ""), reverse=True)
 
-        branches = [b.get("name") for b in detail.get("branches") or [] if isinstance(b, dict) and b.get("name")]
+        # branch → (project, repo): the repo each branch lives in, for the Bitbucket lookups below.
+        refs = {}
+        branches = []
+        for b in detail.get("branches") or []:
+            if isinstance(b, dict) and b.get("name"):
+                branches.append(b["name"])
+                refs[b["name"]] = _repo_of(b.get("url")) or _repo_of((b.get("repository") or {}).get("url"))
         for p in prs:
             if p.get("sourceBranch"):
                 branches.append(p["sourceBranch"])
+                refs.setdefault(p["sourceBranch"], _repo_of(p.get("url")))
         branches = list(dict.fromkeys(branches))
 
-        pr = pick_primary_pr(prs)
-        branch = pr.get("sourceBranch") or (branches[0] if branches else None)
-        return {"branches": branches, "prs": prs, "branch": branch, "pr": pr}
+        times = {}
+        if len(branches) > 1:
+            # Which branch is the work on? Ask Bitbucket for each branch's newest commit.
+            for b in branches:
+                if refs.get(b):
+                    t = latest_commit_time(*refs[b], b)
+                    if t:
+                        times[b] = t
+            if times:
+                branch, own_pr, _b, _p = choose_primary(branches, prs, times)
+                # Jira's index can lag a new PR: look for one from the branch we settled on.
+                if branch and refs.get(branch) and not own_pr.get("id") and own_pr.get("state") == "none":
+                    seen = {_pr_identity(p) for p in prs}
+                    for extra in prs_from_branch(*refs[branch], branch, enrich_open):
+                        if _pr_identity(extra) not in seen:
+                            seen.add(_pr_identity(extra))
+                            prs.append(extra)
+
+        return settle({"branches": branches, "prs": prs, "times": times})
     except Exception as e:
         sys.stderr.write(f"WARN dev-status issue {issue_id}: {e}\n")
         return None
