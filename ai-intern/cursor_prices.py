@@ -28,6 +28,9 @@ _VARIANT_SUFFIX = re.compile(r"(thinking|reasoning|high|medium|low)$")
 # Providers in the order the Settings dropdown groups them.
 PROVIDER_ORDER = ("Cursor", "Anthropic", "OpenAI", "Google", "Z.ai", "Moonshot", "Meta")
 
+# Cursor's automatic model pickers: whatever they route to sets the price, so none is on file.
+ROUTER = re.compile(r"^(default|auto)(-|$)", re.I)
+
 _TABLE = {"mtime": None, "val": None}
 
 
@@ -36,31 +39,45 @@ def norm(text) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(text or "").lower())
 
 
+def loose(text) -> str:
+    """Word-order-blind key: 'claude-haiku-4-5' and 'Claude 4.5 Haiku' both become 'claude haiku|45'.
+
+    The words are sorted; the digit groups keep their order, so 4.5 and 5.4 stay different models.
+    Tried only after the exact normalised keys, so it can add matches but never change one.
+    """
+    tokens = re.findall(r"[a-z]+[a-z0-9]*|[0-9]+", str(text or "").lower())
+    words = sorted(t for t in tokens if not t.isdigit())
+    digits = "".join(t for t in tokens if t.isdigit())
+    return f"{' '.join(words)}|{digits}" if words and digits else ""
+
+
 def load_prices(path: Path = PRICES_PATH) -> dict:
     """The price table, re-read when the file changes so an edit needs no restart."""
     try:
         mtime = path.stat().st_mtime
     except OSError:
-        return {"maxOutputUsd": 10, "models": [], "checked": None, "source": None, "_index": {}}
+        return {"maxOutputUsd": 10, "models": [], "checked": None, "source": None, "_index": {}, "_loose": {}}
     if _TABLE["mtime"] != mtime or _TABLE["val"] is None:
         data = json.loads(path.read_text(encoding="utf-8"))
         data.setdefault("maxOutputUsd", 10)
-        index = {}
+        index, loose_index = {}, {}
         for entry in data.get("models") or []:
             for key in (norm(entry.get("name")), norm(entry.get("modelId"))):
                 if key:
                     index.setdefault(key, entry)
+            for key in (loose(entry.get("name")), loose(entry.get("modelId"))):
+                if key:
+                    loose_index.setdefault(key, entry)
         data["_index"] = index
+        data["_loose"] = loose_index
         _TABLE.update(mtime=mtime, val=data)
     return _TABLE["val"]
 
 
 def _keys(model: dict):
     """Every spelling of this catalog model worth trying, most specific first."""
-    spellings = [model.get("id"), model.get("label") or model.get("displayName")]
-    spellings += list(model.get("aliases") or [])
     seen = []
-    for s in spellings:
+    for s in _spellings(model):
         k = norm(s)
         if not k or k in seen:
             continue
@@ -73,12 +90,21 @@ def _keys(model: dict):
     return seen
 
 
+def _spellings(model: dict):
+    spellings = [model.get("id"), model.get("label") or model.get("displayName")]
+    return spellings + list(model.get("aliases") or [])
+
+
 def price_of(model: dict, table: dict | None = None):
     """The price-table entry for a catalog model, or None when it is not priced there."""
-    index = (table or load_prices())["_index"]
+    table = table or load_prices()
     for key in _keys(model):
-        if key in index:
-            return index[key]
+        if key in table["_index"]:
+            return table["_index"][key]
+    for spelling in _spellings(model):  # last resort: same words in a different order
+        key = loose(spelling)
+        if key and key in table["_loose"]:
+            return table["_loose"][key]
     return None
 
 
@@ -104,11 +130,13 @@ def publish(models: list, table: dict | None = None):
     """
     table = table or load_prices()
     cap = float(table.get("maxOutputUsd", 10))
-    kept, over, fast, unpriced = [], [], [], []
+    kept, over, fast, unpriced, routed = [], [], [], [], []
     for m in models:
         entry = price_of(m, table)
         label = m.get("label") or m.get("id")
-        if entry is None:
+        if entry is None and ROUTER.match(str(m.get("id") or "")):
+            routed.append(m.get("id"))  # Cursor's own picker ("default", "auto-smart"): no fixed price
+        elif entry is None:
             unpriced.append({"id": m.get("id"), "name": label})
         elif is_fast(m) or entry.get("fast"):
             fast.append({"id": m.get("id"), "name": label})
@@ -123,6 +151,7 @@ def publish(models: list, table: dict | None = None):
         "shown": len(kept),
         "overCap": len(over),
         "fast": len(fast),
+        "routed": len(routed),
         "unpriced": unpriced,
         "capUsd": cap,
         "pricesChecked": table.get("checked"),

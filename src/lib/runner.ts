@@ -350,6 +350,8 @@ export interface CursorCatalogInfo {
   shown: number
   overCap: number
   fast: number
+  /** Cursor's automatic pickers (default, auto-*) — no fixed price, never offered. */
+  routed?: number
   unpriced: { id: string; name: string }[]
   capUsd: number
   pricesChecked?: string | null

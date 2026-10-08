@@ -70,6 +70,43 @@ class Publishing(unittest.TestCase):
         self.assertEqual((kept, info["total"], info["shown"]), ([], 0, 0))
 
 
+class RealCatalog(unittest.TestCase):
+    """The ids a real key's `GET /v1/models` returned (2026-10-08). The list once shrank to three
+    models because ids were matched exactly; this pins what a real catalog must yield."""
+
+    IDS = [
+        "composer-2.5", "grok-4.5", "grok-4.6", "grok-4.7", "claude-sonnet-5", "gpt-5.6-luna", "gpt-5.4-nano",
+        "gpt-5-mini", "gpt-5.4-mini", "gemini-2.5-flash", "gemini-3-flash", "gemini-3.6-flash", "gemini-3.5-flash",
+        "glm-5.2", "kimi-k2.7-code",
+        "auto-smart", "default", "claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5",
+        "claude-haiku-4-5", "claude-sonnet-4-5", "gpt-5.1", "claude-sonnet-4",
+    ]
+
+    def test_it_yields_sixteen_models_not_three(self):
+        kept, info = cp.publish(catalog(*self.IDS))
+        self.assertEqual(len(kept), 16)
+        self.assertEqual(info["total"], 25)
+
+    def test_word_order_does_not_hide_a_model(self):
+        # the API says claude-haiku-4-5; Cursor's table says "Claude 4.5 Haiku"
+        kept, _ = cp.publish(catalog("claude-haiku-4-5"))
+        self.assertEqual(kept[0]["priceName"], "Claude 4.5 Haiku")
+        self.assertEqual(kept[0]["price"]["output"], 5)
+
+    def test_expensive_claude_models_are_counted_as_over_the_cap_not_unpriced(self):
+        _, info = cp.publish(catalog("claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-5", "claude-sonnet-4-5", "claude-sonnet-4"))
+        self.assertEqual((info["overCap"], len(info["unpriced"])), (5, 0))
+
+    def test_routers_are_not_unpriced_models_and_gpt_5_1_is_reported(self):
+        _, info = cp.publish(catalog("default", "auto-smart", "gpt-5.1"))
+        self.assertEqual(info["routed"], 2)
+        self.assertEqual([u["id"] for u in info["unpriced"]], ["gpt-5.1"])
+
+    def test_version_digits_keep_their_order(self):
+        self.assertIsNone(cp.price_of({"id": "claude-haiku-5-4"}))  # 5.4 is not 4.5
+        self.assertEqual(cp.price_of({"id": "claude-haiku-5-5"})["name"], "Claude Haiku 5.5")
+
+
 class Allowed(unittest.TestCase):
     def test_priced_cheap_models_may_run_without_the_catalog(self):
         self.assertTrue(cp.allowed("gpt-5.6-luna"))
