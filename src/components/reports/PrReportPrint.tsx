@@ -1,10 +1,11 @@
-import type { ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type {
   PrReport,
   ReportBlock,
   ReportCard,
   ReportCardsBlock,
   ReportKvBlock,
+  ReportLink,
   ReportListBlock,
   ReportStat,
   ReportTab,
@@ -19,30 +20,28 @@ import { APP_CONFIG } from '../../lib/appConfig'
 import { hrefForKey, shareableLinks } from '../../lib/reportLinks'
 import { ReportHtml } from './ReportHtml'
 import { safeHref } from '../common/ui'
+import { columnWidths, paginate, type MeasuredBlock, type MeasuredSection, type Page } from './printPlan'
+import { fitToHeight } from './printFit'
 
 /**
  * The report as a widescreen slide deck — a separate render from the on-screen overlay.
  *
- * Each page is one 16:9 slide, so the exported PDF can be cast or dropped straight into a
+ * Each page is one 16:9 slide (13.33 × 7.5 in), so the exported PDF can be cast or dropped into a
  * presentation. Slides are ordered for the audience: the first two answer "is it done, and what
- * happens next" for leadership; the middle carries the evidence a PM, Scrum Master or architect
- * wants; the appendix keeps sources for anyone auditing it. Every block in the report lands on
- * some slide — anything the planner does not place on purpose goes to "Additional detail".
+ * happens next"; the middle carries the evidence; the appendix keeps sources. Every block in the
+ * report lands on some slide — anything not placed on purpose goes to "Additional detail".
  *
- * Hidden on screen and shown only in @media print.
+ * Layout happens in three passes, all before the print dialog can open:
+ *   1. MEASURE — every block is rendered once, offscreen, at true slide width; the height of each
+ *      block, its repeating head and each of its rows / card rows / list entries is read.
+ *   2. PAGINATE — printPlan.paginate turns those heights into slides (split between rows only,
+ *      heads repeated, nearly empty tail slides rebalanced, short sections merged).
+ *   3. FIT — printFit scales each slide's content to fill its slide without overflowing.
+ * No running footer: the key, title and date are on the cover, and page numbers add nothing to a
+ * deck that is cast or skimmed.
  */
 
 type Audience = 'Leadership' | 'PM / Scrum Master' | 'Architect / Tech lead' | 'Everyone'
-
-interface Slide {
-  id: string
-  section: string
-  title: string
-  audience: Audience[]
-  body: ReactNode
-  /** The cover is drawn full-bleed and carries no running header or footer. */
-  cover?: boolean
-}
 
 const RAG: Record<ReportTone, string> = {
   success: 'Green',
@@ -53,51 +52,248 @@ const RAG: Record<ReportTone, string> = {
   neutral: 'Grey',
 }
 
+/** Each section owns a hue, carried by its slide band, eyebrow, rule and table header. */
+const SECTION_COLOR: Record<string, string> = {
+  'Executive summary': '#4f46e5',
+  'Delivery gates': '#0d9488',
+  'Open items': '#ea580c',
+  'Code review': '#7c3aed',
+  Evidence: '#2563eb',
+  'Quality and security': '#16a34a',
+  'Technical assessment': '#0891b2',
+  Risk: '#dc2626',
+  'Additional detail': '#64748b',
+  Appendix: '#475569',
+}
+const sectionColor = (s: string) => SECTION_COLOR[s] ?? '#475569'
+
+/** One block of a section. Items are table rows, rows of cards, or list entries; atoms never split. */
+interface BlockDef {
+  id: string
+  atom: boolean
+  /** Number of items (rows). 0 for an atom. */
+  count: number
+  /** Cards per grid row: the DOM has one element per card, pagination works in rows. */
+  perRow?: number
+  /** Items [from, to); an atom ignores both. */
+  render: (from: number, to: number) => ReactNode
+  /** A composite laid out as these blocks when it is taller than a slide. */
+  fallback?: BlockDef[]
+}
+
+interface SectionDef {
+  id: string
+  section: string
+  title: string
+  contTitle: string
+  audience: Audience[]
+  blocks: BlockDef[]
+  mergeable: boolean
+}
+
+interface Deck {
+  summary: { decision: ReportBlock | null; facts: Fact[]; gateTally: GateTally | null; riskCount: number | null; fileCount: number | null }
+  sections: SectionDef[]
+}
+
 export function PrReportPrintDoc({ report, tabs }: { report: PrReport; tabs: ReportTab[] }) {
-  const slides = planSlides(report, tabs)
-  const total = slides.length
-  const zone = report.timeZone ?? APP_CONFIG.timeZone
+  const deck = useMemo(() => planDeck(report, tabs), [report, tabs])
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [generation, setGeneration] = useState(0)
+  // The pages belong to the deck (and font generation) they were measured for; anything else means
+  // "measure again", so a new report can never be drawn with the previous report's pagination.
+  const [layout, setLayout] = useState<{ deck: Deck; generation: number; pages: Page[] } | null>(null)
+  const pages = layout && layout.deck === deck && layout.generation === generation ? layout.pages : null
+
+  // Pass 1 + 2: measure the offscreen render, paginate. A layout effect, so it completes before
+  // paint — the deck is ready long before anyone reaches the print button.
+  useLayoutEffect(() => {
+    if (pages || !rootRef.current) return
+    setLayout({ deck, generation, pages: measureAndPaginate(rootRef.current, deck.sections) })
+  }, [pages, deck, generation])
+
+  // Pass 3: fit every slide; again right before printing (fonts or the window may have changed).
+  useLayoutEffect(() => {
+    if (pages && rootRef.current) fitAll(rootRef.current)
+  }, [pages])
+  useEffect(() => {
+    const before = () => rootRef.current && fitAll(rootRef.current)
+    window.addEventListener('beforeprint', before)
+    // Web fonts arriving late change every text height: measure again once they are in.
+    let live = true
+    document.fonts?.ready.then(() => live && setGeneration((g) => g + 1)).catch(() => {})
+    return () => {
+      live = false
+      window.removeEventListener('beforeprint', before)
+    }
+  }, [])
+
+  const byId = useMemo(() => new Map(deck.sections.map((s) => [s.id, s])), [deck])
+
   return (
-    <div className="jb-pdf">
-      {slides.map((s, i) =>
-        s.cover ? (
-          <section key={s.id} className="jb-slide jb-slide-cover">
-            {s.body}
+    <div className="jb-pdf" ref={rootRef} aria-hidden>
+      {!pages ? (
+        <MeasureLayer sections={deck.sections} />
+      ) : (
+        <>
+          <section className="jb-slide jb-slide-cover" style={secVars('Executive summary')}>
+            <CoverSlide report={report} sections={deck.sections} />
           </section>
-        ) : (
-          <section key={s.id} className="jb-slide">
-            <header className="jb-slide-head">
-              <div>
-                <div className="jb-slide-eyebrow">{s.section}</div>
-                <h2 className="jb-slide-title">{s.title}</h2>
-              </div>
-              <div className="jb-slide-aud">
-                {s.audience.map((a) => (
-                  <span key={a} className="jb-chip jb-chip-quiet">
-                    {a}
-                  </span>
-                ))}
-              </div>
-            </header>
-            <div className="jb-slide-body">{s.body}</div>
-            <footer className="jb-slide-foot">
-              <span className="jb-slide-foot-key">{report.key}</span>
-              <span className="jb-slide-foot-title">{report.title}</span>
-              <span>{fmtDate(report.generatedAt, zone)}</span>
-              <span className="jb-slide-num">
-                {i + 1} / {total}
-              </span>
-            </footer>
-          </section>
-        ),
+          <Slide section="Executive summary" title="Where this ticket stands" audience={['Leadership', 'PM / Scrum Master']}>
+            <SummarySlide report={report} {...deck.summary} />
+          </Slide>
+          {pages.map((page, i) => {
+            const first = byId.get(page.sections[0].sectionId)!
+            const sectionNames = [...new Set(page.sections.map((ps) => byId.get(ps.sectionId)!.section))]
+            const audience = [...new Set(page.sections.flatMap((ps) => byId.get(ps.sectionId)!.audience))]
+            return (
+              <Slide
+                key={i}
+                section={first.section}
+                eyebrow={sectionNames.join(' · ')}
+                title={page.sections[0].continued ? first.contTitle : first.title}
+                audience={audience}
+              >
+                <div className="jb-flow">
+                  {page.sections.map((ps, k) => {
+                    const sec = byId.get(ps.sectionId)!
+                    const blocks = flatBlocks(sec.blocks)
+                    return (
+                      <Fragment key={ps.sectionId}>
+                        {k > 0 && (
+                          <div className="jb-subhead" style={secVars(sec.section)}>
+                            <span>{sec.section}</span>
+                            {sec.title}
+                          </div>
+                        )}
+                        {ps.pieces.map((p) => {
+                          const b = blocks.get(p.blockId)
+                          return b ? <Fragment key={`${p.blockId}:${p.from}`}>{b.render(p.from, p.to)}</Fragment> : null
+                        })}
+                      </Fragment>
+                    )
+                  })}
+                </div>
+              </Slide>
+            )
+          })}
+        </>
       )}
     </div>
   )
 }
 
-// ── Planning ────────────────────────────────────────────────────────────────
+function Slide({ section, eyebrow, title, audience, children }: { section: string; eyebrow?: string; title: string; audience: Audience[]; children: ReactNode }) {
+  return (
+    <section className="jb-slide" style={secVars(section)}>
+      <span className="jb-slide-band" />
+      <header className="jb-slide-head">
+        <div className="jb-slide-head-text">
+          <div className="jb-slide-eyebrow">{eyebrow ?? section}</div>
+          <h2 className="jb-slide-title">{title}</h2>
+        </div>
+        <div className="jb-slide-aud">
+          {audience.map((a) => (
+            <span key={a} className="jb-chip jb-chip-quiet">
+              {a}
+            </span>
+          ))}
+        </div>
+      </header>
+      <div className="jb-slide-body">
+        <div className="jb-slide-content">{children}</div>
+      </div>
+    </section>
+  )
+}
 
-function planSlides(report: PrReport, tabs: ReportTab[]): Slide[] {
+const secVars = (section: string) => ({ '--sec': sectionColor(section) }) as CSSProperties
+
+// ── Pass 1: measure ─────────────────────────────────────────────────────────
+
+/** Every block (and every fallback part) rendered whole inside a slide-sized probe. */
+function MeasureLayer({ sections }: { sections: SectionDef[] }) {
+  const all = sections.flatMap((s) => [...flatBlocks(s.blocks).values()])
+  return (
+    <section className="jb-slide" data-probe>
+      <span className="jb-slide-band" />
+      <header className="jb-slide-head">
+        <div className="jb-slide-head-text">
+          <div className="jb-slide-eyebrow">Probe</div>
+          <h2 className="jb-slide-title">Probe</h2>
+        </div>
+      </header>
+      <div className="jb-slide-body" data-probe-body>
+        <div className="jb-flow" data-probe-flow>
+          <div className="jb-subhead" data-probe-subhead>
+            <span>Probe</span>
+            Probe
+          </div>
+          {all.map((b) => (
+            <div key={b.id} data-mblock={b.id}>
+              {b.render(0, b.count)}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function measureAndPaginate(root: HTMLElement, sections: SectionDef[]): Page[] {
+  const body = root.querySelector<HTMLElement>('[data-probe-body]')
+  const flow = root.querySelector<HTMLElement>('[data-probe-flow]')
+  const sub = root.querySelector<HTMLElement>('[data-probe-subhead]')
+  const budget = body?.clientHeight ?? 0
+  // No layout (a test DOM, or the deck mounted under a hidden ancestor): every height is zero.
+  // One slide per section is the honest fallback — the fit pass still shrinks each to fit.
+  if (!budget) {
+    return sections.map((s) => ({
+      height: 0,
+      sections: [{ sectionId: s.id, continued: false, height: 0, pieces: s.blocks.map((b) => ({ blockId: b.id, from: 0, to: b.count, continued: false })) }],
+    }))
+  }
+  const gap = flow ? parseFloat(getComputedStyle(flow).rowGap) || 0 : 0
+  const subhead = sub?.getBoundingClientRect().height ?? 0
+
+  const measureBlock = (b: BlockDef): MeasuredBlock => {
+    const el = root.querySelector<HTMLElement>(`[data-mblock="${b.id}"]`)
+    const box = el?.getBoundingClientRect()
+    const whole = box?.height ?? 0
+    const fallback = b.fallback?.map(measureBlock)
+    if (!el || !box || b.atom || !b.count) return { id: b.id, head: 0, items: [], whole, atom: true, fallback }
+    const nodes = [...el.querySelectorAll<HTMLElement>('[data-item]')]
+    const per = b.perRow ?? 1
+    const tops: number[] = []
+    for (let r = 0; r * per < nodes.length; r++) {
+      tops.push(Math.min(...nodes.slice(r * per, r * per + per).map((n) => n.getBoundingClientRect().top)))
+    }
+    if (!tops.length) return { id: b.id, head: 0, items: [], whole, atom: true, fallback }
+    const items = tops.map((t, r) => (r + 1 < tops.length ? tops[r + 1] : box.bottom) - t)
+    return { id: b.id, head: Math.max(0, tops[0] - box.top), items, whole, atom: false, fallback }
+  }
+
+  const measured: MeasuredSection[] = sections.map((s) => ({ id: s.id, mergeable: s.mergeable, blocks: s.blocks.map(measureBlock) }))
+  return paginate(measured, { budget, gap, subhead })
+}
+
+// ── Pass 3: fit ─────────────────────────────────────────────────────────────
+
+function fitAll(root: HTMLElement) {
+  for (const slide of root.querySelectorAll<HTMLElement>('.jb-slide')) {
+    const body = slide.querySelector<HTMLElement>('.jb-slide-body')
+    const content = slide.querySelector<HTMLElement>('.jb-slide-content')
+    if (body && content) fitToHeight(content, body.clientHeight)
+    const cover = slide.querySelector<HTMLElement>('.jb-cover-left')
+    const coverMain = slide.querySelector<HTMLElement>('.jb-cover-main')
+    // A long title or lead must not push the cover's agenda off the slide; never enlarged.
+    if (cover && coverMain) fitToHeight(cover, coverMain.clientHeight, { grow: false })
+  }
+}
+
+// ── Planning: what goes in which section ───────────────────────────────────
+
+function planDeck(report: PrReport, tabs: ReportTab[]): Deck {
   const used = new Set<ReportBlock>()
   const take = <T extends ReportBlock>(match: (b: ReportBlock, tab: ReportTab) => boolean): T | null => {
     for (const tab of tabs) {
@@ -110,8 +306,7 @@ function planSlides(report: PrReport, tabs: ReportTab[]): Slide[] {
     }
     return null
   }
-  const titled = (re: RegExp, kind?: ReportBlock['kind']) => (b: ReportBlock) =>
-    (!kind || b.kind === kind) && re.test(b.title ?? '')
+  const titled = (re: RegExp, kind?: ReportBlock['kind']) => (b: ReportBlock) => (!kind || b.kind === kind) && re.test(b.title ?? '')
 
   const decision = take(titled(/^decision$/i, 'callout'))
   take((b) => b.kind === 'stats' && sameStats(b.items, report.stats))
@@ -134,232 +329,363 @@ function planSlides(report: PrReport, tabs: ReportTab[]): Slide[] {
   const links = take((b) => b.kind === 'links')
   const runMeta = take<ReportKvBlock>(titled(/run metadata|metadata/i, 'kv'))
 
-  const facts = deliveryFacts(report, evidence, prCards)
   const gateTally = tallyGates(gates)
   const riskCount = risks?.rows.filter((r) => !/none inferred/i.test(plain(r.cells[0] ?? ''))).length ?? 0
-
-  const slides: Slide[] = []
-  const add = (s: Omit<Slide, 'id'> & { id?: string }) => slides.push({ ...s, id: s.id ?? `s${slides.length}` })
-
-  add({
-    id: 'cover',
-    section: '',
-    title: '',
-    audience: ['Everyone'],
-    cover: true,
-    body: <CoverSlide report={report} />,
-  })
-
-  add({
-    id: 'summary',
-    section: 'Executive summary',
-    title: 'Where this ticket stands',
-    audience: ['Leadership', 'PM / Scrum Master'],
-    body: (
-      <SummarySlide
-        report={report}
-        decision={decision}
-        facts={facts}
-        gateTally={gateTally}
-        riskCount={risks ? riskCount : null}
-        fileCount={perFile?.items.length ?? null}
-      />
-    ),
-  })
-
-  if (gates) {
-    for (const [i, rows] of chunk(gates.rows, 11).entries()) {
-      add({
-        section: 'Delivery gates',
-        title: i === 0 ? 'Is it ready to close?' : 'Delivery gates (continued)',
-        audience: ['PM / Scrum Master', 'Leadership'],
-        body: (
-          <>
-            {i === 0 && gateTally && <GateBar tally={gateTally} />}
-            <StatusTable block={{ ...gates, rows }} report={report} />
-            {i === 0 && releaseGate && releaseGate.kind === 'callout' && (
-              <Callout title="Release gate" tone={releaseGate.tone} html={releaseGate.body} report={report} />
-            )}
-          </>
-        ),
-      })
-    }
-  } else if (releaseGate && releaseGate.kind === 'callout') {
-    add({
-      section: 'Delivery gates',
-      title: 'Release gate',
-      audience: ['PM / Scrum Master', 'Leadership'],
-      body: <Callout title="Release gate" tone={releaseGate.tone} html={releaseGate.body} report={report} />,
-    })
+  const r = report
+  const sections: SectionDef[] = []
+  const section = (s: Omit<SectionDef, 'mergeable' | 'contTitle'> & { contTitle?: string; mergeable?: boolean }) => {
+    const blocks = s.blocks.filter(Boolean)
+    if (blocks.length) sections.push({ mergeable: true, contTitle: `${s.title} (continued)`, ...s, blocks })
   }
 
+  // Delivery gates
+  section({
+    id: 'gates',
+    section: 'Delivery gates',
+    title: gates ? 'Is it ready to close?' : 'Release gate',
+    contTitle: 'Delivery gates (continued)',
+    audience: ['PM / Scrum Master', 'Leadership'],
+    blocks: [
+      gateTally ? atom('gates-bar', <GateBar tally={gateTally} />) : null,
+      gates ? tableDef('gates-table', gates, r, { status: true }) : null,
+      releaseGate?.kind === 'callout' ? atom('gates-release', <Callout title="Release gate" tone={releaseGate.tone} html={releaseGate.body} report={r} />) : null,
+    ].filter(isDef),
+  })
+
+  // Open items
   if (blocking || nextActions || consistency) {
-    add({
+    const side = [
+      nextActions ? listDef('open-actions', nextActions, r) : null,
+      consistency?.kind === 'callout'
+        ? atom('open-consistency', <Callout title={consistency.title ?? 'Status consistency'} tone={consistency.tone} html={consistency.body} report={r} />)
+        : null,
+    ].filter(isDef)
+    section({
+      id: 'open',
       section: 'Open items',
       title: blocking && blocking.rows.length ? 'What still needs to happen' : 'Nothing is blocking closure',
       audience: ['PM / Scrum Master', 'Leadership'],
-      body: (
-        <div className="jb-grid-2">
-          <div className="jb-col-span">
-            {blocking && blocking.rows.length > 0 ? (
-              <StatusTable block={blocking} report={report} />
-            ) : (
-              <Callout title="Open scope" tone="success" html="<p>No open item blocks closure.</p>" report={report} />
-            )}
-          </div>
-          {nextActions && <ActionList block={nextActions} report={report} />}
-          {consistency && consistency.kind === 'callout' && (
-            <Callout title={consistency.title ?? 'Status consistency'} tone={consistency.tone} html={consistency.body} report={report} />
-          )}
-        </div>
-      ),
+      blocks: [
+        blocking && blocking.rows.length
+          ? tableDef('open-blocking', blocking, r, { status: true })
+          : atom('open-none', <Callout title="Open scope" tone="success" html="<p>No open item blocks closure.</p>" report={r} />),
+        side.length === 2 ? splitDef('open-side', [side[0]], [side[1]]) : side[0] ?? null,
+      ].filter(isDef),
     })
   }
 
+  // Code review
   if (prCards || timeline) {
-    const cardChunks = prCards ? chunk(prCards.items, 4) : [[]]
-    cardChunks.forEach((cards, i) => {
-      add({
-        section: 'Code review',
-        title: i === 0 ? 'Pull requests and delivery timeline' : 'Pull requests (continued)',
-        audience: ['Architect / Tech lead', 'PM / Scrum Master'],
-        body: (
-          <div className={timeline && i === 0 ? 'jb-split' : ''}>
-            <div>
-              {cards.length > 0 && <h3 className="jb-h3">Pull requests</h3>}
-              <div className="jb-cards jb-cards-2">
-                {cards.map((c, j) => (
-                  <Card key={j} card={c} report={report} />
-                ))}
-              </div>
-            </div>
-            {timeline && i === 0 && <Timeline block={timeline} report={report} />}
-          </div>
-        ),
-      })
+    const cards = prCards?.items.length ? cardsDef('review-prs', prCards.items, r, { perRow: 2, title: 'Pull requests' }) : null
+    const tl = timeline ? timelineDef('review-timeline', timeline, r) : null
+    section({
+      id: 'review',
+      section: 'Code review',
+      title: cards && tl ? 'Pull requests and delivery timeline' : cards ? 'Pull requests' : 'Delivery timeline',
+      contTitle: 'Code review (continued)',
+      audience: ['Architect / Tech lead', 'PM / Scrum Master'],
+      blocks: [cards && tl ? splitDef('review-split', [cards], [tl], '1.35fr 1fr') : cards ?? tl].filter(isDef),
     })
   }
 
+  // Evidence
   if (evidence) {
-    for (const [i, rows] of chunk(evidence.rows, 9).entries()) {
-      add({
-        section: 'Evidence',
-        title: i === 0 ? 'What the systems show' : 'Evidence (continued)',
-        audience: ['Architect / Tech lead', 'PM / Scrum Master'],
-        body: <PlainTable block={{ ...evidence, rows }} report={report} />,
-      })
-    }
+    section({
+      id: 'evidence',
+      section: 'Evidence',
+      title: 'What the systems show',
+      contTitle: 'Evidence (continued)',
+      audience: ['Architect / Tech lead', 'PM / Scrum Master'],
+      blocks: [tableDef('evidence-table', evidence, r, { status: false })],
+    })
   }
 
+  // Quality and security
   if (proofs.length) {
-    add({
+    section({
+      id: 'proof',
       section: 'Quality and security',
       title: 'Build, scan and runtime proof',
       audience: ['Architect / Tech lead'],
-      body: (
-        <div className="jb-stack">
-          {proofs.map((p, i) => (
-            <div key={i}>
-              <h3 className="jb-h3">{p.title?.replace(/^proof\s*·?\s*/i, '') || 'Proof'}</h3>
-              <StatusTable block={p} report={report} />
-            </div>
-          ))}
-        </div>
-      ),
+      blocks: proofs.map((p, i) => tableDef(`proof-${i}`, p, r, { status: true, title: p.title?.replace(/^proof\s*·?\s*/i, '') || 'Proof' })),
     })
   }
 
+  // Technical assessment — change overview
   if (changeShape || reviewFocus || deployment || prodProof) {
-    add({
+    const right = [
+      deployment ? atom('tech-deploy', <KvCard block={deployment} report={r} />) : null,
+      prodProof?.kind === 'callout' ? atom('tech-prod', <Callout title="Production proof" tone={prodProof.tone} html={prodProof.body} report={r} />) : null,
+    ].filter(isDef)
+    const left = reviewFocus ? [listDef('tech-focus', reviewFocus, r, 'Review focus')] : []
+    section({
+      id: 'tech',
       section: 'Technical assessment',
       title: 'Change overview and release readiness',
       audience: ['Architect / Tech lead'],
-      body: (
-        <div className="jb-grid-2">
-          {changeShape && changeShape.kind === 'stats' && (
-            <div className="jb-col-span">
-              <Kpis stats={changeShape.items} />
-            </div>
-          )}
-          {reviewFocus && <ActionList block={reviewFocus} report={report} title="Review focus" />}
-          <div className="jb-stack">
-            {deployment && <KvCard block={deployment} report={report} />}
-            {prodProof && prodProof.kind === 'callout' && (
-              <Callout title="Production proof" tone={prodProof.tone} html={prodProof.body} report={report} />
-            )}
-          </div>
-        </div>
-      ),
+      blocks: [
+        changeShape?.kind === 'stats' ? atom('tech-shape', <Kpis stats={changeShape.items} />) : null,
+        left.length && right.length ? splitDef('tech-split', left, right) : null,
+        ...(left.length && right.length ? [] : [...left, ...right]),
+      ].filter(isDef),
     })
   }
 
+  // Risk
   if (risks) {
-    add({
+    section({
+      id: 'risk',
       section: 'Risk',
       title: riskCount ? `${riskCount} risk${riskCount === 1 ? '' : 's'} and how to handle ${riskCount === 1 ? 'it' : 'them'}` : 'No risks found',
+      contTitle: 'Risks (continued)',
       audience: ['Architect / Tech lead', 'Leadership'],
-      body: <PlainTable block={risks} report={report} />,
+      blocks: [tableDef('risk-table', risks, r, { status: false })],
     })
   }
 
+  // Technical assessment — file by file
   if (perFile && perFile.items.length) {
-    for (const [i, cards] of chunk(perFile.items, 6).entries()) {
-      add({
-        section: 'Technical assessment',
-        title: i === 0 ? `What changed, file by file (${perFile.items.length})` : 'What changed (continued)',
-        audience: ['Architect / Tech lead'],
-        body: (
-          <div className="jb-cards jb-cards-3">
-            {cards.map((c, j) => (
-              <Card key={j} card={c} report={report} compact />
-            ))}
-          </div>
-        ),
-      })
-    }
-  }
-
-  const leftovers = tabs.flatMap((t) => (t.blocks ?? []).filter((b) => !used.has(b)).map((b) => ({ tab: t, block: b })))
-  for (const group of chunk(leftovers, 2)) {
-    add({
-      section: 'Additional detail',
-      title: group.map((g) => g.block.title || g.tab.title).join(' · '),
-      audience: ['Everyone'],
-      body: (
-        <div className="jb-stack">
-          {group.map((g, i) => (
-            <GenericBlock key={i} block={g.block} report={report} />
-          ))}
-        </div>
-      ),
+    section({
+      id: 'files',
+      section: 'Technical assessment',
+      title: `What changed, file by file (${perFile.items.length})`,
+      contTitle: 'What changed (continued)',
+      audience: ['Architect / Tech lead'],
+      blocks: [cardsDef('files-cards', perFile.items, r, { perRow: 3, compact: true })],
     })
   }
 
-  add({
+  // Additional detail — everything the plan above did not place on purpose.
+  const leftovers = tabs.flatMap((t) => (t.blocks ?? []).filter((b) => !used.has(b)).map((b) => ({ tab: t, block: b })))
+  if (leftovers.length) {
+    section({
+      id: 'extra',
+      section: 'Additional detail',
+      title: leftovers.length === 1 ? leftovers[0].block.title || leftovers[0].tab.title : 'Additional detail',
+      contTitle: 'Additional detail (continued)',
+      audience: ['Everyone'],
+      blocks: leftovers.map((l, i) => genericDef(`extra-${i}`, l.block, r, l.block.title || l.tab.title)),
+    })
+  }
+
+  // Appendix
+  const allLinks = [...(links && links.kind === 'links' ? links.items : []), ...shareableLinks(report)]
+  const seen = new Set<string>()
+  const uniqLinks = allLinks.filter((l) => safeHref(l.href) && (seen.has(l.href) ? false : (seen.add(l.href), true)))
+  const linkList = uniqLinks.length ? linksDef('appendix-links', uniqLinks) : null
+  const made = atom('appendix-made', <MadeWith report={r} runMeta={runMeta} />)
+  section({
     id: 'appendix',
     section: 'Appendix',
     title: 'Sources and how this report was made',
     audience: ['Everyone'],
-    body: <AppendixSlide report={report} links={links} runMeta={runMeta} />,
+    blocks: [linkList ? splitDef('appendix-split', [linkList], [made], '1.35fr 1fr') : made],
   })
 
-  const cover = slides[0]
-  cover.body = <CoverSlide report={report} agenda={slides.slice(1)} />
-  return slides
+  return {
+    summary: { decision, facts: deliveryFacts(report, evidence, prCards), gateTally, riskCount: risks ? riskCount : null, fileCount: perFile?.items.length ?? null },
+    sections,
+  }
 }
 
-// ── Slides ──────────────────────────────────────────────────────────────────
+const isDef = (b: BlockDef | null | undefined): b is BlockDef => !!b
 
-function CoverSlide({ report, agenda = [] }: { report: PrReport; agenda?: Slide[] }) {
+/** Every block of a section, composites' fallback parts included, by id. */
+function flatBlocks(blocks: BlockDef[]): Map<string, BlockDef> {
+  const out = new Map<string, BlockDef>()
+  const walk = (bs: BlockDef[]) =>
+    bs.forEach((b) => {
+      out.set(b.id, b)
+      if (b.fallback) walk(b.fallback)
+    })
+  walk(blocks)
+  return out
+}
+
+// ── Block definitions ───────────────────────────────────────────────────────
+
+function atom(id: string, node: ReactNode): BlockDef {
+  return { id, atom: true, count: 0, render: () => node }
+}
+
+/** Two columns side by side; taller than a slide, it becomes its parts one after another. */
+function splitDef(id: string, left: BlockDef[], right: BlockDef[], cols = '1fr 1fr'): BlockDef {
+  return {
+    id,
+    atom: true,
+    count: 0,
+    render: () => (
+      <div className="jb-split" style={{ gridTemplateColumns: cols }}>
+        <div className="jb-col">{left.map((b) => <Fragment key={b.id}>{b.render(0, b.count)}</Fragment>)}</div>
+        <div className="jb-col">{right.map((b) => <Fragment key={b.id}>{b.render(0, b.count)}</Fragment>)}</div>
+      </div>
+    ),
+    fallback: [...left, ...right],
+  }
+}
+
+function tableDef(id: string, block: ReportTableBlock, report: PrReport, opts: { status: boolean; title?: string }): BlockDef {
+  const widths = columnWidths(
+    block.headers,
+    block.rows.map((row) => row.cells.map(plain)),
+  )
+  return {
+    id,
+    atom: false,
+    count: block.rows.length,
+    render: (from, to) => <TableBlock block={block} report={report} status={opts.status} title={opts.title} widths={widths} from={from} to={to} />,
+  }
+}
+
+function cardsDef(id: string, items: ReportCard[], report: PrReport, opts: { perRow: number; title?: string; compact?: boolean }): BlockDef {
+  return {
+    id,
+    atom: false,
+    count: Math.ceil(items.length / opts.perRow),
+    perRow: opts.perRow,
+    render: (from, to) => (
+      <section>
+        {opts.title && <h3 className="jb-h3">{opts.title}</h3>}
+        <div className="jb-cards" style={{ gridTemplateColumns: `repeat(${opts.perRow}, minmax(0, 1fr))` }}>
+          {items.slice(from * opts.perRow, to * opts.perRow).map((c, j) => (
+            <Card key={j} card={c} report={report} compact={opts.compact} />
+          ))}
+        </div>
+      </section>
+    ),
+  }
+}
+
+function listDef(id: string, block: ReportListBlock, report: PrReport, title?: string): BlockDef {
+  return {
+    id,
+    atom: false,
+    count: block.items.length,
+    render: (from, to) => (
+      <section>
+        <h3 className="jb-h3">{title ?? block.title ?? 'Next actions'}</h3>
+        <ol className="jb-actions">
+          {block.items.slice(from, to).map((it, i) => (
+            <li key={i} data-item>
+              <span className="jb-action-n" style={{ background: toneColor(it.tone) }}>
+                {from + i + 1}
+              </span>
+              <span>
+                <ReportHtml html={it.text} report={report} inline />
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+    ),
+  }
+}
+
+/** Long histories keep the newest entries; the rest stay in the app. */
+const TIMELINE_MAX = 16
+
+function timelineDef(id: string, block: ReportTimelineBlock, report: PrReport): BlockDef {
+  const zone = report.timeZone ?? APP_CONFIG.timeZone
+  const items = block.items.slice(0, TIMELINE_MAX)
+  const more = block.items.length - items.length
+  return {
+    id,
+    atom: false,
+    count: items.length,
+    render: (from, to) => (
+      <section>
+        <h3 className="jb-h3">{block.title ?? 'Timeline'}</h3>
+        <ol className="jb-timeline">
+          {items.slice(from, to).map((e, i) => (
+            <li key={i} data-item>
+              <span className="jb-tl-dot" style={{ background: toneColor(e.tone) }} />
+              <span className="jb-tl-when">{fmtWhen(e.when, zone)}</span>
+              <span className="jb-tl-what">
+                <b>
+                  <ReportHtml html={e.label} report={report} inline />
+                </b>
+                {e.detail ? (
+                  <>
+                    {' '}
+                    — <ReportHtml html={e.detail} report={report} inline />
+                  </>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ol>
+        {more > 0 && to === items.length && <p className="jb-muted jb-small">+{more} earlier events in the app</p>}
+      </section>
+    ),
+  }
+}
+
+function linksDef(id: string, links: ReportLink[]): BlockDef {
+  return {
+    id,
+    atom: false,
+    count: links.length,
+    render: (from, to) => (
+      <section>
+        <h3 className="jb-h3">Links</h3>
+        <ul className="jb-links">
+          {links.slice(from, to).map((l) => (
+            <li key={l.href} data-item>
+              <a href={l.href}>
+                <b>{l.label}</b>
+                <span>{l.href}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ),
+  }
+}
+
+function genericDef(id: string, block: ReportBlock, report: PrReport, heading: string): BlockDef {
+  switch (block.kind) {
+    case 'table':
+      return tableDef(id, block, report, { status: true, title: heading })
+    case 'cards':
+      return cardsDef(id, block.items, report, { perRow: 3, title: heading, compact: true })
+    case 'list':
+      return listDef(id, block, report, heading)
+    case 'timeline':
+      return timelineDef(id, block, report)
+    case 'links':
+      return linksDef(id, block.items.filter((l) => safeHref(l.href)))
+    case 'callout':
+      return atom(id, <Callout title={block.title ?? heading} tone={block.tone} html={block.body} report={report} />)
+    case 'stats':
+      return atom(
+        id,
+        <section>
+          <h3 className="jb-h3">{heading}</h3>
+          <Kpis stats={block.items} />
+        </section>,
+      )
+    case 'kv':
+      return atom(id, <KvCard block={block} report={report} />)
+    default:
+      return atom(id, null)
+  }
+}
+
+// ── Fixed slides ────────────────────────────────────────────────────────────
+
+function CoverSlide({ report, sections }: { report: PrReport; sections: SectionDef[] }) {
   const v = report.verdict
   const tone = v?.tone ?? 'neutral'
   const c = toneColor(tone)
   const zone = report.timeZone ?? APP_CONFIG.timeZone
   const ticketHref = safeHref(hrefForKey(report, report.key))
-  const sections = dedupeSections(agenda)
+  const agenda = ['Executive summary', ...new Set(sections.map((s) => s.section))]
+  const long = (report.title ?? '').length > 90
   return (
-    <div className="jb-cover">
-      <div className="jb-cover-band" style={{ background: c }} />
+    <div className="jb-cover" style={{ '--tone': c } as CSSProperties}>
+      <div className="jb-cover-band" />
+      <div className="jb-cover-glow" />
       <div className="jb-cover-top">
         <span>PR readiness report</span>
         <span>{fmtDate(report.generatedAt, zone)}</span>
@@ -373,7 +699,7 @@ function CoverSlide({ report, agenda = [] }: { report: PrReport; agenda?: Slide[
           ) : (
             <div className="jb-cover-key">{report.key}</div>
           )}
-          <h1 className="jb-cover-title">{report.title}</h1>
+          <h1 className={`jb-cover-title${long ? ' jb-cover-title-long' : ''}`}>{report.title}</h1>
           <div className="jb-cover-verdict">
             <span className="jb-rag" style={{ background: c }}>
               {RAG[tone]}
@@ -388,7 +714,7 @@ function CoverSlide({ report, agenda = [] }: { report: PrReport; agenda?: Slide[
         </div>
         {typeof v?.score === 'number' && (
           <div className="jb-cover-score">
-            <ScoreRing score={v.score} color={c} size={150} dark />
+            <ScoreRing score={v.score} color={c} size={170} dark />
             <span>Readiness score</span>
           </div>
         )}
@@ -397,10 +723,12 @@ function CoverSlide({ report, agenda = [] }: { report: PrReport; agenda?: Slide[
         <div>
           <div className="jb-cover-foot-label">In this deck</div>
           <ol className="jb-cover-agenda">
-            {sections.map((s) => (
-              <li key={s.section}>
-                <span className="jb-cover-agenda-n">{s.first}</span>
-                {s.section}
+            {agenda.map((s, i) => (
+              <li key={s}>
+                <span className="jb-cover-agenda-n" style={{ background: sectionColor(s) }}>
+                  {i + 1}
+                </span>
+                {s}
               </li>
             ))}
           </ol>
@@ -415,6 +743,8 @@ function CoverSlide({ report, agenda = [] }: { report: PrReport; agenda?: Slide[
   )
 }
 
+type Fact = { label: string; value: string; href?: string | null }
+
 function SummarySlide({
   report,
   decision,
@@ -425,7 +755,7 @@ function SummarySlide({
 }: {
   report: PrReport
   decision: ReportBlock | null
-  facts: { label: string; value: string; href?: string | null }[]
+  facts: Fact[]
   gateTally: GateTally | null
   riskCount: number | null
   fileCount: number | null
@@ -445,7 +775,7 @@ function SummarySlide({
 
   return (
     <div className="jb-summary">
-      <div className="jb-summary-status" style={{ borderColor: c }}>
+      <div className="jb-summary-status" style={{ borderColor: c, background: `${c}0d` }}>
         <div className="jb-summary-row">
           <span className="jb-rag" style={{ background: c }}>
             {RAG[tone]}
@@ -474,7 +804,7 @@ function SummarySlide({
       </div>
 
       <div className="jb-summary-side">
-        <div className="jb-next" style={{ borderColor: next ? c : toneColor('success') }}>
+        <div className="jb-next" style={{ borderColor: next ? c : toneColor('success'), background: `${next ? c : toneColor('success')}0f` }}>
           <div className="jb-next-label">Next step</div>
           {next?.action ? (
             <>
@@ -517,84 +847,72 @@ function SummarySlide({
   )
 }
 
-function AppendixSlide({ report, links, runMeta }: { report: PrReport; links: ReportBlock | null; runMeta: ReportKvBlock | null }) {
+function MadeWith({ report, runMeta }: { report: PrReport; runMeta: ReportKvBlock | null }) {
   const zone = report.timeZone ?? APP_CONFIG.timeZone
-  const all = [...(links && links.kind === 'links' ? links.items : []), ...shareableLinks(report)]
-  const seen = new Set<string>()
-  const uniq = all.filter((l) => (seen.has(l.href) ? false : (seen.add(l.href), true)))
   return (
-    <div className="jb-split">
+    <div className="jb-col">
       <div>
-        <h3 className="jb-h3">Links</h3>
-        <ul className="jb-links">
-          {uniq.filter((l) => safeHref(l.href)).map((l) => (
-            <li key={l.href}>
-              <a href={l.href}>
-                <b>{l.label}</b>
-                <span>{l.href}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
+        <h3 className="jb-h3">How this report was made</h3>
+        <p className="jb-prose">
+          {report.enriched
+            ? 'Status, reviews and gates are measured directly from Jira and Bitbucket. An AI pass then read the ticket, the pull requests and linked specs to add business impact, per-file notes and risks. AI findings are marked as such in the app.'
+            : 'Status, reviews and gates are measured directly from Jira and Bitbucket. No AI interpretation was applied.'}
+        </p>
+        {report.sources && <p className="jb-prose jb-muted">Sources: {report.sources}</p>}
       </div>
-      <div className="jb-stack">
+      {report.warnings && report.warnings.length > 0 && (
+        <Callout title="Not covered" tone="warning" html={`<p>${report.warnings.map(esc).join(' · ')}</p>`} report={report} />
+      )}
+      <dl className="jb-facts">
         <div>
-          <h3 className="jb-h3">How this report was made</h3>
-          <p className="jb-prose">
-            {report.enriched
-              ? 'Status, reviews and gates are measured directly from Jira and Bitbucket. An AI pass then read the ticket, the pull requests and linked specs to add business impact, per-file notes and risks. AI findings are marked as such in the app.'
-              : 'Status, reviews and gates are measured directly from Jira and Bitbucket. No AI interpretation was applied.'}
-          </p>
-          {report.sources && <p className="jb-prose jb-muted">Sources: {report.sources}</p>}
+          <dt>Generated</dt>
+          <dd>{fmtDateTime(report.generatedAt, zone)}</dd>
         </div>
-        {report.warnings && report.warnings.length > 0 && (
-          <Callout title="Not covered" tone="warning" html={`<p>${report.warnings.map(esc).join(' · ')}</p>`} report={report} />
-        )}
-        <dl className="jb-facts">
+        {report.enriched && report.enrichedAt && (
           <div>
-            <dt>Generated</dt>
-            <dd>{fmtDateTime(report.generatedAt, zone)}</dd>
+            <dt>AI reviewed</dt>
+            <dd>{fmtDateTime(report.enrichedAt, zone)}</dd>
           </div>
-          {report.enriched && report.enrichedAt && (
-            <div>
-              <dt>AI reviewed</dt>
-              <dd>{fmtDateTime(report.enrichedAt, zone)}</dd>
+        )}
+        {report.generator && (
+          <div>
+            <dt>Generator</dt>
+            <dd>{report.generator}</dd>
+          </div>
+        )}
+        {runMeta?.items
+          .filter((kv) => !/^generated$/i.test(kv.label))
+          .map((kv) => (
+            <div key={kv.label}>
+              <dt>{kv.label}</dt>
+              <dd>
+                <ReportHtml html={fmtReportMetadata(kv.label, kv.value, zone)} report={report} inline />
+              </dd>
             </div>
-          )}
-          {report.generator && (
-            <div>
-              <dt>Generator</dt>
-              <dd>{report.generator}</dd>
-            </div>
-          )}
-          {runMeta?.items
-            .filter((kv) => !/^generated$/i.test(kv.label))
-            .map((kv) => (
-              <div key={kv.label}>
-                <dt>{kv.label}</dt>
-                <dd>
-                  <ReportHtml html={fmtReportMetadata(kv.label, kv.value, zone)} report={report} inline />
-                </dd>
-              </div>
-            ))}
-        </dl>
-      </div>
+          ))}
+      </dl>
     </div>
   )
 }
 
 // ── Pieces ──────────────────────────────────────────────────────────────────
 
+/** Tiles per row: never more than four (a cast slide needs big numbers), rows as even as possible. */
+export function kpiColumns(n: number): number {
+  if (n <= 4) return Math.max(1, n)
+  return Math.ceil(n / Math.ceil(n / 4))
+}
+
 function Kpis({ stats }: { stats: ReportStat[] }) {
   return (
-    <div className="jb-kpis" style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(stats.length, 8))}, minmax(0, 1fr))` }}>
+    <div className="jb-kpis" style={{ gridTemplateColumns: `repeat(${kpiColumns(stats.length)}, minmax(0, 1fr))` }}>
       {stats.map((s, i) => {
         const toned = s.tone && s.tone !== 'neutral'
         const c = toneColor(s.tone)
         return (
-          <div key={i} className="jb-kpi" style={{ borderTopColor: toned ? c : '#cbd2de' }}>
+          <div key={i} className="jb-kpi" style={{ borderTopColor: toned ? c : '#cbd2de', background: toned ? `${c}10` : undefined }}>
             <div className="jb-kpi-label">{s.label}</div>
-            <div className="jb-kpi-value" style={toned ? { color: c } : undefined}>
+            <div className={`jb-kpi-value${String(s.value ?? '').length <= 14 ? ' jb-nowrap' : ''}`} style={toned ? { color: c } : undefined}>
               <Segments text={sentenceCase(String(s.value ?? ''))} />
             </div>
             {s.hint && <div className="jb-kpi-hint">{s.hint}</div>}
@@ -636,98 +954,81 @@ function GateBar({ tally }: { tally: GateTally }) {
   )
 }
 
-/** A table whose state-like column is drawn as a coloured chip, so pass/fail reads from across a room. */
-function StatusTable({ block, report }: { block: ReportTableBlock; report: PrReport }) {
-  const stateCol = block.headers.findIndex((h) => /^(state|status|result)$/i.test(h.trim()))
-  const blockCol = block.headers.findIndex((h) => /blocks closure/i.test(h))
+/**
+ * Rows [from, to) of a table, with its heading and header on every slide it spans. Fixed column
+ * widths keep a split table's columns aligned slide to slide. With `status`, the state-like column
+ * is a coloured chip, so pass/fail reads from across a room.
+ */
+function TableBlock({
+  block,
+  report,
+  status,
+  title,
+  widths,
+  from,
+  to,
+}: {
+  block: ReportTableBlock
+  report: PrReport
+  status: boolean
+  title?: string
+  widths: number[]
+  from: number
+  to: number
+}) {
+  const stateCol = status ? block.headers.findIndex((h) => /^(state|status|result)$/i.test(h.trim())) : -1
+  const blockCol = status ? block.headers.findIndex((h) => /blocks closure/i.test(h)) : -1
   return (
-    <table className="jb-table">
-      <thead>
-        <tr>
-          {block.headers.map((h, i) => (
-            <th key={i}>{h}</th>
+    <section>
+      {title && <h3 className="jb-h3">{title}</h3>}
+      <table className="jb-table">
+        <colgroup>
+          {widths.map((w, i) => (
+            <col key={i} style={{ width: `${w}%` }} />
           ))}
-        </tr>
-      </thead>
-      <tbody>
-        {block.rows.map((r, i) => {
-          const t = rowTone(r, stateCol)
-          return (
-            <tr key={i} style={{ boxShadow: `inset 3px 0 0 ${toneColor(t)}` }}>
-              {r.cells.map((cell, j) => (
-                <td key={j} className={j === 0 ? 'jb-td-lead' : undefined}>
-                  {j === stateCol ? (
-                    <span className="jb-chip" style={{ color: toneColor(t), borderColor: toneColor(t), background: `${toneColor(t)}14` }}>
-                      {plain(cell)}
-                    </span>
-                  ) : j === blockCol ? (
-                    <span className={/^yes/i.test(plain(cell)) ? 'jb-strong' : 'jb-muted'}>{plain(cell)}</span>
-                  ) : (
-                    <ReportHtml html={cell} report={report} inline />
-                  )}
-                </td>
-              ))}
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
-  )
-}
-
-function PlainTable({ block, report }: { block: ReportTableBlock; report: PrReport }) {
-  return (
-    <table className="jb-table">
-      <thead>
-        <tr>
-          {block.headers.map((h, i) => (
-            <th key={i}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {block.rows.map((r, i) => (
-          <tr key={i} style={r.tone && r.tone !== 'neutral' ? { boxShadow: `inset 3px 0 0 ${toneColor(r.tone)}` } : undefined}>
-            {r.cells.map((cell, j) => (
-              <td key={j} className={j === 0 ? 'jb-td-lead' : undefined}>
-                <ReportHtml html={cell} report={report} inline />
-              </td>
+        </colgroup>
+        <thead>
+          <tr>
+            {block.headers.map((h, i) => (
+              <th key={i}>{h}</th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {block.rows.slice(from, to).map((row, i) => {
+            const t = status ? rowTone(row, stateCol) : row.tone && row.tone !== 'neutral' ? row.tone : null
+            return (
+              <tr key={i} data-item style={t ? { boxShadow: `inset 4px 0 0 ${toneColor(t)}` } : undefined}>
+                {row.cells.map((cell, j) => (
+                  <td key={j} className={j === 0 ? 'jb-td-lead' : undefined}>
+                    {j === stateCol && t ? (
+                      <span className="jb-chip" style={{ color: toneColor(t), borderColor: toneColor(t), background: `${toneColor(t)}14` }}>
+                        {plain(cell)}
+                      </span>
+                    ) : j === blockCol ? (
+                      <span className={/^yes/i.test(plain(cell)) ? 'jb-strong' : 'jb-muted'}>{plain(cell)}</span>
+                    ) : (
+                      <ReportHtml html={cell} report={report} inline />
+                    )}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </section>
   )
 }
 
 function Callout({ title, tone, html, report }: { title: string; tone?: ReportTone; html: string; report: PrReport }) {
   const c = toneColor(tone)
   return (
-    <section className="jb-callout" style={{ borderLeftColor: c, background: `${c}0f` }}>
+    <section className="jb-callout" style={{ borderLeftColor: c, background: `${c}10` }}>
       <div className="jb-callout-title" style={{ color: c }}>
         {title}
       </div>
       <ReportHtml html={html} report={report} className="jb-prose" />
-    </section>
-  )
-}
-
-function ActionList({ block, report, title }: { block: ReportListBlock; report: PrReport; title?: string }) {
-  return (
-    <section>
-      <h3 className="jb-h3">{title ?? block.title ?? 'Next actions'}</h3>
-      <ol className="jb-actions">
-        {block.items.map((it, i) => (
-          <li key={i}>
-            <span className="jb-action-n" style={{ background: toneColor(it.tone) }}>
-              {i + 1}
-            </span>
-            <span>
-              <ReportHtml html={it.text} report={report} inline />
-            </span>
-          </li>
-        ))}
-      </ol>
     </section>
   )
 }
@@ -774,100 +1075,16 @@ function Card({ card, report, compact }: { card: ReportCard; report: PrReport; c
     </>
   )
   const cardHref = safeHref(card.href)
+  const style = { borderTopColor: c, background: `linear-gradient(180deg, ${c}0d, #fff 46px)` }
   return cardHref ? (
-    <a href={cardHref} className="jb-card" style={{ borderTopColor: c }}>
+    <a href={cardHref} className="jb-card" style={style} data-item>
       {inner}
     </a>
   ) : (
-    <div className="jb-card" style={{ borderTopColor: c }}>
+    <div className="jb-card" style={style} data-item>
       {inner}
     </div>
   )
-}
-
-function Timeline({ block, report }: { block: ReportTimelineBlock; report: PrReport }) {
-  const items = block.items.slice(0, 12)
-  return (
-    <section>
-      <h3 className="jb-h3">{block.title ?? 'Timeline'}</h3>
-      <ol className="jb-timeline">
-        {items.map((e, i) => (
-          <li key={i}>
-            <span className="jb-tl-dot" style={{ background: toneColor(e.tone) }} />
-            <span className="jb-tl-when">{e.when ?? '—'}</span>
-            <span className="jb-tl-what">
-              <b>
-                <ReportHtml html={e.label} report={report} inline />
-              </b>
-              {e.detail ? (
-                <>
-                  {' '}
-                  — <ReportHtml html={e.detail} report={report} inline />
-                </>
-              ) : null}
-            </span>
-          </li>
-        ))}
-      </ol>
-      {block.items.length > items.length && <p className="jb-muted jb-small">+{block.items.length - items.length} earlier events in the app</p>}
-    </section>
-  )
-}
-
-function GenericBlock({ block, report }: { block: ReportBlock; report: PrReport }) {
-  switch (block.kind) {
-    case 'callout':
-      return <Callout title={block.title ?? ''} tone={block.tone} html={block.body} report={report} />
-    case 'stats':
-      return (
-        <section>
-          {block.title && <h3 className="jb-h3">{block.title}</h3>}
-          <Kpis stats={block.items} />
-        </section>
-      )
-    case 'table':
-      return (
-        <section>
-          {block.title && <h3 className="jb-h3">{block.title}</h3>}
-          <StatusTable block={block} report={report} />
-        </section>
-      )
-    case 'cards':
-      return (
-        <section>
-          {block.title && <h3 className="jb-h3">{block.title}</h3>}
-          <div className="jb-cards jb-cards-3">
-            {block.items.map((c, i) => (
-              <Card key={i} card={c} report={report} compact />
-            ))}
-          </div>
-        </section>
-      )
-    case 'list':
-      return <ActionList block={block} report={report} />
-    case 'timeline':
-      return <Timeline block={block} report={report} />
-    case 'kv':
-      return <KvCard block={block} report={report} />
-    case 'links':
-      return (
-        <section>
-          <h3 className="jb-h3">{block.title ?? 'Links'}</h3>
-          <ul className="jb-links">
-            {block.items.filter((l) => safeHref(l.href)).map((l) => (
-              <li key={l.href}>
-                <a href={l.href}>
-                  <b>{l.label}</b>
-                  <span>{l.href}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )
-    default:
-      return null
-  }
 }
 
 function ScoreRing({ score, color, size, dark }: { score: number; color: string; size: number; dark?: boolean }) {
@@ -914,8 +1131,8 @@ function Segments({ text }: { text: string }) {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function deliveryFacts(report: PrReport, evidence: ReportTableBlock | null, prCards: ReportCardsBlock | null) {
-  const facts: { label: string; value: string; href?: string | null }[] = []
+function deliveryFacts(report: PrReport, evidence: ReportTableBlock | null, prCards: ReportCardsBlock | null): Fact[] {
+  const facts: Fact[] = []
   const epic = report.links?.find((l) => /^epic\b/i.test(l.label))
   if (epic) facts.push({ label: 'Epic', value: epic.label.replace(/^epic\s*/i, ''), href: epic.href })
   const fix = evidence?.rows.find((r) => /fixversion/i.test(plain(r.cells[0] ?? '')))
@@ -966,19 +1183,10 @@ function italicLine(html: string): string | null {
   return /^(task|bug|story|sub-task|epic|dev task|security)\s·/i.test(plain(text)) ? null : text
 }
 
-function dedupeSections(slides: Slide[]) {
-  const out: { section: string; first: number }[] = []
-  slides.forEach((s, i) => {
-    if (!out.some((o) => o.section === s.section)) out.push({ section: s.section, first: i + 2 })
-  })
-  return out
-}
-
-function chunk<T>(items: T[], size: number): T[][] {
-  if (!items.length) return []
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
-  return out
+/** Only a real ISO timestamp is reformatted — "Oct 7" would parse as a date in 2001. */
+function fmtWhen(when: string | null | undefined, zone: string | null | undefined): string {
+  if (!when) return '—'
+  return /^\d{4}-\d{2}-\d{2}T/.test(when) ? fmtDateTime(when, zone) : when
 }
 
 function plain(html: string): string {
