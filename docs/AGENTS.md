@@ -135,6 +135,9 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
   sub-task (unless the PR title / branch name has the sub-task's key) in every path that fills
   `prs`/`branches` — and the Done gate (`transition.py::evaluate(is_subtask=…)`, mirrored in
   `src/demo/gates.ts`) lets a sub-ticket close with no PR but not with an unmerged one of its own.
+- Jira's dev-status links a PR to every ticket named in ANY of its commits (release PRs, merges from
+  dev). `devinfo.scope_to_ticket` keeps only PRs whose title/branch name this ticket (or no ticket);
+  on real data that removed about half the PRs attached to tickets. Run it in every path that fills `prs`.
 - Jira's dev-status index can list a branch that does not exist and claim a PR comes from it. An open PR's
   `sourceBranch` comes from Bitbucket's PR record, and a branch Bitbucket 404s is dropped (`devinfo.branch_head`).
   None of that works while Bitbucket is unreachable from the container — check `bb_ok` in the refresh log first;

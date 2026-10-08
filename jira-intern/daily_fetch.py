@@ -193,9 +193,9 @@ def bb_search_all_prs(key):
 def code_for(key, prior=None, parent_key=None):
     """Branches + PRs for one ticket, or None when nothing could be looked up.
 
-    A sub-task (`parent_key`) gets only ITS OWN code: a PR or branch it merely shares with its
-    parent — because its commits sit on the parent's branch — belongs to the parent
-    (devinfo.scope_to_subtask).
+    Only the ticket's OWN code: a PR naming other tickets and not this one is theirs
+    (devinfo.scope_to_ticket), and a sub-task (`parent_key`) also loses any PR or branch it merely
+    shares with its parent because its commits sit on the parent's branch (scope_to_subtask).
 
     Jira's dev-status index is authoritative and repo-agnostic, so it leads. The Bitbucket
     key-scan (up to repos × 3 listings per ticket) only runs when dev-status has no PRs for
@@ -228,7 +228,7 @@ def code_for(key, prior=None, parent_key=None):
         branches += (prior or {}).get("branches") or []
 
     branches = list(dict.fromkeys(b for b in branches if b))
-    info = {"branches": branches, "prs": prs, "times": (dev or {}).get("times")}
+    info = devinfo.scope_to_ticket(key, {"branches": branches, "prs": prs, "times": (dev or {}).get("times")})
     if parent_key:
         info = devinfo.scope_to_subtask(key, info, DEV.get(parent_key))
     # The ticket's branch is the one with the newest commit (devinfo reads those times from

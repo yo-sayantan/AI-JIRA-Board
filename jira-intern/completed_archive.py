@@ -119,6 +119,7 @@ def dev_fields(key, dev_map, prior, parent_key=None):
         }
     # Same primary-branch rule as the daily fetch; last run's branch breaks a tie when this
     # lookup carried no commit times.
+    info = devinfo.scope_to_ticket(key, info)
     if parent_key:
         info = devinfo.scope_to_subtask(key, info, dev_map.get(parent_key))
     info = devinfo.settle(info, (prior or {}).get("branch"))

@@ -408,5 +408,58 @@ class GoneBranchesAreDropped(unittest.TestCase):
         self.assertEqual(info["pr"]["sourceBranch"], PLAIN)
 
 
+class ScopeToTicketTests(unittest.TestCase):
+    """Jira links a PR to every ticket named in any commit inside it; a ticket keeps only PRs that
+    are its own. Shaped on a real case: one merged fix for the ticket plus PRs for other tickets
+    that carried its commits after a merge from dev."""
+
+    KEY = "FIDM-5219"
+
+    def _pr(self, pid, title, branch):
+        return {"id": pid, "state": "merged", "merged": True, "title": title, "sourceBranch": branch,
+                "url": f"https://code.example/projects/P/repos/r/pull-requests/{pid}"}
+
+    def test_prs_naming_only_other_tickets_are_dropped(self):
+        own = self._pr(280, "Bugfix/FIDM-5219", "bugfix/FIDM-5219")
+        others = [
+            self._pr(300, "Feature/PIRE-14462 rebase from dev", "feature/PIRE-14462-rebase-from-dev"),
+            self._pr(311, "Feature/FIDM-5213 revert feature", "feature/FIDM-5213-revert-feature"),
+        ]
+        info = {"prs": [own, *others], "branches": ["bugfix/FIDM-5219_popup_alignment_issues", "bugfix/FIDM-5219",
+                                                     "feature/PIRE-14462-rebase-from-dev", "feature/FIDM-5213-revert-feature"]}
+        out = devinfo.scope_to_ticket(self.KEY, info)
+        self.assertEqual([p["id"] for p in out["prs"]], [280])
+        self.assertEqual(out["branches"], ["bugfix/FIDM-5219_popup_alignment_issues", "bugfix/FIDM-5219"])
+
+    def test_a_pr_naming_this_ticket_and_others_stays(self):
+        both = self._pr(1, "FIDM-5219, PIRE-1: shared fix", "feature/shared")
+        self.assertEqual(devinfo.scope_to_ticket(self.KEY, {"prs": [both], "branches": []})["prs"], [both])
+
+    def test_a_pr_naming_no_ticket_at_all_stays(self):
+        anon = self._pr(2, "Bump the base image", "chore/base-image")
+        self.assertEqual(devinfo.scope_to_ticket(self.KEY, {"prs": [anon], "branches": ["chore/base-image"]})["prs"], [anon])
+
+    def test_look_alikes_and_lower_case_are_not_tickets(self):
+        for title, branch in [("Fix UTF-8 export", "bugfix/utf-8"), ("Move to SHA-256 and JDK-17", "chore/hashes"), ("Patch CVE-2024-1234", "security/cve")]:
+            pr = self._pr(3, title, branch)
+            self.assertEqual(devinfo.scope_to_ticket(self.KEY, {"prs": [pr], "branches": []})["prs"], [pr], title)
+
+    def test_this_tickets_key_in_underscore_spelling_counts(self):
+        pr = self._pr(4, "Popup alignment", "bugfix/FIDM_5219_popup")
+        self.assertEqual(devinfo.scope_to_ticket(self.KEY, {"prs": [pr], "branches": []})["prs"], [pr])
+
+    def test_a_branch_a_kept_pr_comes_from_stays_even_if_it_names_another_ticket(self):
+        pr = self._pr(5, "FIDM-5219: popup", "feature/PIRE-9-shared")
+        out = devinfo.scope_to_ticket(self.KEY, {"prs": [pr], "branches": ["feature/PIRE-9-shared"]})
+        self.assertEqual(out["branches"], ["feature/PIRE-9-shared"])
+
+    def test_without_a_key_nothing_is_touched(self):
+        info = {"prs": [self._pr(6, "PIRE-1: x", "feature/PIRE-1")], "branches": []}
+        self.assertIs(devinfo.scope_to_ticket("", info), info)
+
+    def test_other_keys(self):
+        self.assertEqual(devinfo.other_keys("ABC-1", "ABC-1 and DEF-22, ABC-12", "feature/GHI_3_x utf-8 SHA-256"), {"DEF-22", "ABC-12", "GHI-3"})
+
+
 if __name__ == "__main__":
     unittest.main()
