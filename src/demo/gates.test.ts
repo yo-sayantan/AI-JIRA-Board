@@ -123,3 +123,29 @@ describe('demo dump', () => {
     for (const url of json.match(/https?:\/\/[^"\\\s]+/g) ?? []) expect(url).toMatch(/\/\/[a-z.]*example\.com(\/|$)/)
   })
 })
+
+describe('demo move gates — sub-tickets', () => {
+  const sub: Ticket = { ...base, key: 'T-1-2', parentKey: 'T-1' }
+
+  it('lets a sub-ticket reach Done with no PR and no QA ticket of its own', () => {
+    expect(evaluateMove('done', sub)).toEqual({ blocker: null, warnings: [] })
+  })
+
+  it('still blocks a sub-ticket whose own PR is not merged', () => {
+    const t: Ticket = { ...sub, pr: { state: 'comments', id: 9, merged: false } }
+    expect(evaluateMove('done', t).blocker).toContain('#9 not merged yet')
+  })
+
+  it('allows it once that PR is merged', () => {
+    const t: Ticket = { ...sub, pr: { state: 'merged', id: 9, merged: true } }
+    expect(evaluateMove('done', t).blocker).toBeNull()
+  })
+
+  it('still blocks a sub-ticket with an open QA ticket', () => {
+    expect(evaluateMove('done', { ...sub, subtasks: [qaSub('In Progress')] }).blocker).toContain('QA not done')
+  })
+
+  it('does not warn a sub-ticket about a missing PR when it moves to review', () => {
+    expect(evaluateMove('rev', sub).warnings).toEqual([])
+  })
+})

@@ -214,5 +214,43 @@ class RefreshOneKey(unittest.TestCase):
                 daily_fetch.refresh_one("  ")
 
 
+REPO = "https://code.example/projects/PROJ/repos/svc"
+PARENT_BRANCH = "feature/PROJ-1_do_the_thing_1"
+
+
+def _dev_pr(pid, branch, title):
+    return {"id": pid, "state": "approved", "title": title, "url": f"{REPO}/pull-requests/{pid}",
+            "sourceBranch": branch, "merged": False}
+
+
+class SubtaskCodeScope(unittest.TestCase):
+    """A sub-task committed on its parent's branch must not inherit the parent's PR or branch."""
+
+    DEV = {
+        "PROJ-1": {"branches": [PARENT_BRANCH], "prs": [_dev_pr(61, PARENT_BRANCH, "PROJ-1: the feature")], "times": {}},
+        "PROJ-2": {"branches": [PARENT_BRANCH], "prs": [_dev_pr(61, PARENT_BRANCH, "PROJ-1: the feature")], "times": {}},
+    }
+
+    def _code_for(self, key, parent_key):
+        with mock.patch.object(daily_fetch, "DEV", self.DEV), mock.patch.object(daily_fetch, "BB_OK", False):
+            return daily_fetch.code_for(key, None, parent_key)
+
+    def test_the_subtask_has_no_code_of_its_own(self):
+        info = self._code_for("PROJ-2", "PROJ-1")
+        self.assertEqual((info["prs"], info["branches"], info["branch"]), ([], [], None))
+        self.assertEqual(info["pr"], {"state": "none"})
+
+    def test_the_parent_keeps_its_pr(self):
+        info = self._code_for("PROJ-1", None)
+        self.assertEqual([p["id"] for p in info["prs"]], [61])
+        self.assertEqual(info["branch"], PARENT_BRANCH)
+
+    def test_apply_code_reads_the_parent_from_the_ticket(self):
+        sub = {"key": "PROJ-2", "parentKey": "PROJ-1", "prs": [], "pr": {"state": "none"}}
+        with mock.patch.object(daily_fetch, "DEV", self.DEV), mock.patch.object(daily_fetch, "BB_OK", False):
+            out = daily_fetch.apply_code(sub, "PROJ-2", {})
+        self.assertEqual(out["prs"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

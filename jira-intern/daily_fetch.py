@@ -190,8 +190,12 @@ def bb_search_all_prs(key):
     return found
 
 
-def code_for(key, prior=None):
+def code_for(key, prior=None, parent_key=None):
     """Branches + PRs for one ticket, or None when nothing could be looked up.
+
+    A sub-task (`parent_key`) gets only ITS OWN code: a PR or branch it merely shares with its
+    parent — because its commits sit on the parent's branch — belongs to the parent
+    (devinfo.scope_to_subtask).
 
     Jira's dev-status index is authoritative and repo-agnostic, so it leads. The Bitbucket
     key-scan (up to repos × 3 listings per ticket) only runs when dev-status has no PRs for
@@ -224,12 +228,12 @@ def code_for(key, prior=None):
         branches += (prior or {}).get("branches") or []
 
     branches = list(dict.fromkeys(b for b in branches if b))
+    info = {"branches": branches, "prs": prs, "times": (dev or {}).get("times")}
+    if parent_key:
+        info = devinfo.scope_to_subtask(key, info, DEV.get(parent_key))
     # The ticket's branch is the one with the newest commit (devinfo reads those times from
     # Bitbucket); last run's choice breaks the tie when no time could be read this run.
-    return devinfo.settle(
-        {"branches": branches, "prs": prs, "times": (dev or {}).get("times")},
-        (prior or {}).get("branch"),
-    )
+    return devinfo.settle(info, (prior or {}).get("branch"))
 
 
 def apply_code(ticket, key, prior=None):
@@ -237,7 +241,7 @@ def apply_code(ticket, key, prior=None):
     be made, keep what `prior` had — by default the ticket itself, carried forward from the
     previous dump."""
     prior = ticket if prior is None else prior
-    info = code_for(key, prior)
+    info = code_for(key, prior, ticket.get("parentKey"))
     if info is None:
         if prior is ticket:
             return ticket
@@ -399,7 +403,7 @@ def build_ticket(issue, prior, state_entry, force_refresh=False):
     )
 
     # Branches/PRs from Jira dev-status (+ Bitbucket supplement); carry forward on failure.
-    info = code_for(key, prior)
+    info = code_for(key, prior, (f.get("parent") or {}).get("key"))
     if info is None:
         prs = copy.deepcopy((prior or {}).get("prs") or [])
         branches = copy.deepcopy((prior or {}).get("branches") or [])
@@ -609,8 +613,17 @@ def _main(existing_path, state_path):
     dev_keys = list(active_keys)
     for subs in (subs_by_parent or {}).values():
         dev_keys.extend(si["key"] for si in subs)
+    # A sub-task of mine whose parent is someone else's ticket is judged against that parent's
+    # code too (devinfo.scope_to_subtask), so the parent joins the batch.
+    parent_ids = {}
+    for i in issues:
+        ref = (i.get("fields") or {}).get("parent") or {}
+        if ref.get("key"):
+            dev_keys.append(ref["key"])
+            if ref.get("id"):
+                parent_ids[ref["key"]] = ref["id"]
     try:
-        DEV = devinfo.fetch_many(list(dict.fromkeys(dev_keys)), ids=_issue_ids(issues, *(subs_by_parent or {}).values()), workers=WORKERS)
+        DEV = devinfo.fetch_many(list(dict.fromkeys(dev_keys)), ids={**parent_ids, **_issue_ids(issues, *(subs_by_parent or {}).values())}, workers=WORKERS)
     except Exception as e:
         sys.stderr.write(f"WARN dev-status batch failed, PR data carried forward: {e}\n")
         DEV = {}
@@ -852,12 +865,16 @@ def refresh_one(key):
     dev_keys = [key]
     for si in (subs_by_parent or {}).get(key, []):
         dev_keys.append(si["key"])
+    parent_ref = (issue.get("fields") or {}).get("parent") or {}
+    if parent_ref.get("key"):
+        dev_keys.append(parent_ref["key"])  # a sub-task is judged against its parent's code
     try:
         # enrich_open=False: skip Bitbucket activity pages (30s timeouts each). Jira
         # dev-status still supplies branches/PRs/approvals — enough for the card badge.
         DEV = devinfo.fetch_many(
             list(dict.fromkeys(dev_keys)),
-            ids=_issue_ids([issue], (subs_by_parent or {}).get(key, [])),
+            ids={**_issue_ids([issue], (subs_by_parent or {}).get(key, [])),
+                 **({parent_ref["key"]: parent_ref["id"]} if parent_ref.get("key") and parent_ref.get("id") else {})},
             workers=6,
             enrich_open=False,
         )

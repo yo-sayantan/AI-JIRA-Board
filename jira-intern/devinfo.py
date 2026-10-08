@@ -66,13 +66,15 @@ def pr_comment_stats(proj, slug, pid):
     return total, resolved, max(0, total - resolved)
 
 
-def _needs_work(proj, slug, pid):
+def _bb_pull_request(proj, slug, pid):
+    """Bitbucket's own record of one pull request, or None when it cannot be read. Unlike the
+    copy Jira's dev-status index keeps, this is current: it is the authority for which branch
+    the PR really comes from and goes to, and for reviewer verdicts."""
     try:
-        data = bb_get(f"/projects/{proj}/repos/{slug}/pull-requests/{pid}", timeout=30)
-        return any(r.get("status") == "NEEDS_WORK" for r in data.get("reviewers") or [])
+        return bb_get(f"/projects/{proj}/repos/{slug}/pull-requests/{pid}", timeout=30)
     except Exception as e:
-        sys.stderr.write(f"WARN bitbucket PR reviewers {proj}/{slug}#{pid}: {e}\n")
-        return False
+        sys.stderr.write(f"WARN bitbucket PR {proj}/{slug}#{pid}: {e}\n")
+        return None
 
 
 def _to_pr(raw, enrich_open=True):
@@ -87,11 +89,17 @@ def _to_pr(raw, enrich_open=True):
 
     total = resolved = open_c = 0
     needs_work = False
+    source_branch, destination_branch = src.get("branch"), dst.get("branch")
     m = _PR_URL_RE.search(url or "")
     if m and enrich_open and not (merged or declined):
         proj, slug, pid = m.groups()
         total, resolved, open_c = pr_comment_stats(proj, slug, pid)
-        needs_work = _needs_work(proj, slug, pid)
+        bb = _bb_pull_request(proj, slug, pid)
+        if bb:
+            needs_work = any(r.get("status") == "NEEDS_WORK" for r in bb.get("reviewers") or [])
+            # Jira's copy of the branch names can be stale or wrong; Bitbucket's record is not.
+            source_branch = (bb.get("fromRef") or {}).get("displayId") or source_branch
+            destination_branch = (bb.get("toRef") or {}).get("displayId") or destination_branch
 
     if merged:
         state = "merged"
@@ -115,8 +123,8 @@ def _to_pr(raw, enrich_open=True):
         "commentsTotal": total,
         "commentsResolved": resolved,
         "reviewers": [r.get("name") for r in reviewers_raw if r.get("name")],
-        "sourceBranch": src.get("branch"),
-        "destinationBranch": dst.get("branch"),
+        "sourceBranch": source_branch,
+        "destinationBranch": destination_branch,
         # Which repository the review actually happened in. With dev-status a single ticket
         # can span several repos, so the badge is meaningless without it.
         "repo": (src.get("repository") or {}).get("name") or (m.group(2) if m else None),
@@ -219,6 +227,44 @@ def prs_from_branch(proj, slug, branch, enrich_open=True):
 def _pr_identity(p):
     m = _PR_URL_RE.search(p.get("url") or "")
     return (m.group(1).upper(), m.group(2).lower(), m.group(3)) if m else (None, (p.get("repo") or "").lower(), str(p.get("id")))
+
+
+def mentions_key(key, *texts):
+    """Does any of `texts` (a PR title, a branch name) name `key` as a whole ticket key?
+    "ABC-12" is not in "ABC-123"; the underscore spelling used in branch names counts."""
+    if not key:
+        return False
+    spellings = "|".join(re.escape(k) for k in dict.fromkeys((key, key.replace("-", "_"))))
+    pattern = re.compile(rf"(?<![A-Za-z0-9])(?:{spellings})(?![0-9])", re.IGNORECASE)
+    return any(pattern.search(t) for t in texts if t)
+
+
+def scope_to_subtask(key, info, parent_info):
+    """A sub-task's own code, without the code of the ticket it belongs to.
+
+    Jira links a PR to every ticket with a commit on its branch, so when the sub-tasks are
+    committed on the parent's branch the parent's PR shows up on every one of them. That PR is
+    the parent's, not theirs. A PR or branch the sub-task shares with its parent is dropped
+    unless its own title / branch name names the sub-task's key. Code only the sub-task has is
+    never touched. `parent_info` is the parent's fetch_one result; without it (the lookup
+    failed) nothing can be told apart, so `info` is returned as it is."""
+    if not info or not parent_info:
+        return info
+    parent_prs = {_pr_identity(p) for p in parent_info.get("prs") or []}
+    parent_branches = {b for b in parent_info.get("branches") or [] if b}
+    prs = [
+        p for p in info.get("prs") or []
+        if _pr_identity(p) not in parent_prs or mentions_key(key, p.get("title"), p.get("sourceBranch"))
+    ]
+    own_pr_branches = {p.get("sourceBranch") for p in prs}
+    shared_pr_branches = {
+        p.get("sourceBranch") for p in info.get("prs") or [] if p not in prs and p.get("sourceBranch")
+    }
+    branches = [
+        b for b in info.get("branches") or []
+        if mentions_key(key, b) or b in own_pr_branches or not (b in parent_branches or b in shared_pr_branches)
+    ]
+    return {**info, "prs": prs, "branches": branches}
 
 
 def choose_primary(branches, prs, times=None, prior_branch=None):

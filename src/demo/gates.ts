@@ -35,19 +35,24 @@ export function qaIssuesOf(t: Ticket): QaIssue[] {
 export function evaluateMove(target: ColumnKey, t: Ticket): { blocker: string | null; warnings: string[] } {
   const live = prListOf(t).filter((p) => p.state !== 'declined')
   const qa = qaIssuesOf(t)
+  // A sub-ticket's work usually rides on its parent's PR: no PR (or QA ticket) of its own is fine,
+  // but a PR of its own that is not merged yet still blocks Done.
+  const isSub = !!t.parentKey
   const warnings: string[] = []
-  if (target === 'rev' && live.length === 0) warnings.push('No pull request found for this ticket — raise one for review.')
+  if (target === 'rev' && live.length === 0 && !isSub) warnings.push('No pull request found for this ticket — raise one for review.')
   if (target === 'qa' && qa.length === 0) warnings.push('No QA ticket found for this ticket — QA needs one.')
   if (target !== 'done') return { blocker: null, warnings }
 
   const problems: string[] = []
-  if (live.length === 0) problems.push('it has no merged pull request')
-  else {
+  if (live.length === 0) {
+    if (!isSub) problems.push('it has no merged pull request')
+  } else {
     const unmerged = live.filter((p) => !p.merged)
     if (unmerged.length) problems.push(`${unmerged.map((p) => (p.id ? `#${p.id}` : 'a PR')).join(', ')} not merged yet`)
   }
-  if (qa.length === 0) problems.push('it has no QA ticket')
-  else {
+  if (qa.length === 0) {
+    if (!isSub) problems.push('it has no QA ticket')
+  } else {
     const open = qa.filter((q) => mapStatusToColumn(q.status) !== 'done')
     if (open.length) problems.push(`QA not done (${open.map((q) => `${q.key} is ${q.status ?? 'open'}`).join(', ')})`)
   }

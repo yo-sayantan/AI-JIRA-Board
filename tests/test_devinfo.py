@@ -200,5 +200,109 @@ class SettleTests(unittest.TestCase):
         self.assertEqual(info["branches"], [PLAIN, MID])
 
 
+def _pr(pid, branch, title=None, **extra):
+    return {"id": pid, "state": "approved", "title": title or f"PROJ-1: change {pid}",
+            "url": f"{REPO}/pull-requests/{pid}", "sourceBranch": branch, **extra}
+
+
+class MentionsKeyTests(unittest.TestCase):
+    def test_whole_key_only(self):
+        self.assertTrue(devinfo.mentions_key("PROJ-12", "feature/PROJ-12_do_it"))
+        self.assertTrue(devinfo.mentions_key("PROJ-12", "PROJ-12: fix the build"))
+        self.assertFalse(devinfo.mentions_key("PROJ-12", "feature/PROJ-123_other"))  # a different ticket
+        self.assertFalse(devinfo.mentions_key("PROJ-12", "XPROJ-12"))
+
+    def test_underscore_spelling_and_case(self):
+        self.assertTrue(devinfo.mentions_key("PROJ-12", "bugfix/proj_12_thing"))
+
+    def test_nothing_to_search(self):
+        self.assertFalse(devinfo.mentions_key("PROJ-12", None, ""))
+        self.assertFalse(devinfo.mentions_key("", "PROJ-12"))
+
+
+class ScopeToSubtaskTests(unittest.TestCase):
+    """Jira links a PR to every ticket with a commit on its branch, so a parent's PR appears on all
+    its sub-tasks. A sub-task keeps only code that is its own."""
+
+    PARENT = {"branches": [PLAIN, MID, NEWEST], "prs": [_pr(61, NEWEST, "PROJ-1: the whole feature")]}
+
+    def test_the_parents_pr_and_branch_are_not_the_subtasks(self):
+        info = {"branches": [NEWEST], "prs": [_pr(61, NEWEST, "PROJ-1: the whole feature")], "times": {}}
+        out = devinfo.scope_to_subtask("PROJ-2", info, self.PARENT)
+        self.assertEqual((out["prs"], out["branches"]), ([], []))
+
+    def test_a_shared_pr_naming_the_subtask_is_its_own(self):
+        shared = _pr(61, NEWEST, "PROJ-1, PROJ-2: the whole feature")
+        out = devinfo.scope_to_subtask("PROJ-2", {"branches": [NEWEST], "prs": [shared]}, self.PARENT)
+        self.assertEqual(out["prs"], [shared])
+        self.assertEqual(out["branches"], [NEWEST])
+
+    def test_a_pr_from_a_branch_named_for_the_subtask_is_its_own(self):
+        own = _pr(70, "feature/PROJ-2_parent_pom", "Parent POM")
+        parent = {**self.PARENT, "prs": self.PARENT["prs"] + [own]}  # even if the parent index rolls it up
+        out = devinfo.scope_to_subtask("PROJ-2", {"branches": ["feature/PROJ-2_parent_pom"], "prs": [own]}, parent)
+        self.assertEqual(out["prs"], [own])
+
+    def test_code_only_the_subtask_has_is_kept(self):
+        own = _pr(70, "feature/PROJ-2_x", "no key in the title")
+        info = {"branches": ["feature/PROJ-2_x", NEWEST], "prs": [own, _pr(61, NEWEST)]}
+        out = devinfo.scope_to_subtask("PROJ-2", info, self.PARENT)
+        self.assertEqual([p["id"] for p in out["prs"]], [70])
+        self.assertEqual(out["branches"], ["feature/PROJ-2_x"])
+
+    def test_without_the_parents_code_nothing_can_be_told_apart(self):
+        info = {"branches": [NEWEST], "prs": [_pr(61, NEWEST)]}
+        self.assertIs(devinfo.scope_to_subtask("PROJ-2", info, None), info)
+
+    def test_does_not_mutate_its_input_and_keeps_other_fields(self):
+        info = {"branches": [NEWEST], "prs": [_pr(61, NEWEST)], "times": {NEWEST: 5}}
+        out = devinfo.scope_to_subtask("PROJ-2", info, self.PARENT)
+        self.assertEqual(len(info["prs"]), 1)
+        self.assertEqual(out["times"], {NEWEST: 5})
+
+    def test_the_same_pr_number_in_another_repo_is_a_different_pr(self):
+        other_repo = {**_pr(61, NEWEST), "url": "https://code.example/projects/PROJ/repos/other/pull-requests/61"}
+        out = devinfo.scope_to_subtask("PROJ-2", {"branches": [NEWEST], "prs": [other_repo]}, self.PARENT)
+        self.assertEqual(out["prs"], [other_repo])
+
+
+class BitbucketIsTheAuthorityForBranchNames(unittest.TestCase):
+    """Jira's dev-status copy of a PR's branch can be stale; Bitbucket's own record is not."""
+
+    def _stub(self, record):
+        def bb_get(path, timeout=45):
+            if "/activities" in path:
+                return {"values": [], "isLastPage": True}
+            if record is None:
+                raise RuntimeError("bitbucket down")
+            return record
+
+        return bb_get
+
+    def test_open_pr_takes_its_branches_from_bitbucket(self):
+        record = {"fromRef": {"displayId": NEWEST}, "toRef": {"displayId": "release/aws"}, "reviewers": []}
+        with mock.patch.object(devinfo, "bb_get", self._stub(record)):
+            pr = devinfo._to_pr(_dev_pr(61, PLAIN))  # Jira says PLAIN
+        self.assertEqual((pr["sourceBranch"], pr["destinationBranch"]), (NEWEST, "release/aws"))
+
+    def test_bitbucket_down_keeps_jiras_value(self):
+        with mock.patch.object(devinfo, "bb_get", self._stub(None)):
+            pr = devinfo._to_pr(_dev_pr(61, PLAIN))
+        self.assertEqual((pr["sourceBranch"], pr["destinationBranch"]), (PLAIN, "release/x"))
+
+    def test_reviewer_needs_work_still_read_from_the_same_record(self):
+        record = {"fromRef": {"displayId": PLAIN}, "reviewers": [{"status": "NEEDS_WORK"}]}
+        with mock.patch.object(devinfo, "bb_get", self._stub(record)):
+            self.assertEqual(devinfo._to_pr(_dev_pr(61, PLAIN))["state"], "changes")
+
+    def test_without_enrichment_no_bitbucket_call_is_made(self):
+        with mock.patch.object(devinfo, "bb_get", side_effect=AssertionError("no call expected")):
+            self.assertEqual(devinfo._to_pr(_dev_pr(61, PLAIN), enrich_open=False)["sourceBranch"], PLAIN)
+
+    def test_a_merged_pr_is_not_looked_up(self):
+        with mock.patch.object(devinfo, "bb_get", side_effect=AssertionError("no call expected")):
+            self.assertEqual(devinfo._to_pr(_dev_pr(61, PLAIN, status="MERGED"))["sourceBranch"], PLAIN)
+
+
 if __name__ == "__main__":
     unittest.main()

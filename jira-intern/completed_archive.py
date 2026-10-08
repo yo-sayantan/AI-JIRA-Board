@@ -105,9 +105,10 @@ def _read_cache(key):
         return None
 
 
-def dev_fields(key, dev_map, prior):
+def dev_fields(key, dev_map, prior, parent_key=None):
     """Branch/PR block for a ticket. A key missing from dev_map means the lookup failed —
-    keep whatever the cache already had rather than blanking real review history."""
+    keep whatever the cache already had rather than blanking real review history.
+    A sub-task (`parent_key`) keeps only its own code, not what it shares with its parent."""
     info = dev_map.get(key)
     if info is None:
         return {
@@ -118,6 +119,8 @@ def dev_fields(key, dev_map, prior):
         }
     # Same primary-branch rule as the daily fetch; last run's branch breaks a tie when this
     # lookup carried no commit times.
+    if parent_key:
+        info = devinfo.scope_to_subtask(key, info, dev_map.get(parent_key))
     info = devinfo.settle(info, (prior or {}).get("branch"))
     return {"branch": info["branch"], "branches": info["branches"], "pr": info["pr"], "prs": info["prs"]}
 
@@ -146,7 +149,7 @@ def build_subtask(si, parent_key, dev_map, pr_overrides, mine=True):
         "created": iso(sf.get("created")),
         "resolved": iso(sf.get("resolutiondate")) or (changelog_done_date(si.get("changelog")) if col == "done" else None),
     }
-    sub.update(dev_fields(sk, dev_map, None))
+    sub.update(dev_fields(sk, dev_map, None, parent_key))
     if pr_overrides.get(sk) and sub["pr"].get("state") == "none":
         sub["pr"] = pr_overrides[sk]
     return sub
@@ -232,7 +235,7 @@ def build_completed(issue, prior, dev_map, children, pr_overrides, mine, inherit
         "subtaskCount": len(subtasks),
     }
     apply_sprint(ticket, f.get("customfield_10404"))
-    ticket.update(dev_fields(key, dev_map, prior))
+    ticket.update(dev_fields(key, dev_map, prior, parent_key))
     if pr_overrides.get(key) and ticket["pr"].get("state") == "none":
         ticket["pr"] = pr_overrides[key]
     return ticket
@@ -471,8 +474,15 @@ def _main(ts):
     # ticket build has to make its own branch/PR calls.
     set_progress("archive", done=0, total=total, phase="devinfo", pct=5)
     dev_targets = set(stale)
+    dev_ids = {}
     for key in stale:
         dev_targets.update(c["key"] for c in children_by_parent.get(key, []))
+        # A sub-ticket is judged against its parent's code, so the parent joins the batch.
+        ref = (issues[key].get("fields") or {}).get("parent") or {} if key in issues else {}
+        if ref.get("key"):
+            dev_targets.add(ref["key"])
+            if ref.get("id"):
+                dev_ids[ref["key"]] = ref["id"]
 
     def dev_progress(done, phase_total, key):
         weighted = 5 + (50 * done / phase_total if phase_total else 50)
@@ -483,7 +493,7 @@ def _main(ts):
         try:
             dev_map = devinfo.fetch_many(
                 sorted(dev_targets),
-                ids={k: issues[k]["id"] for k in dev_targets if k in issues and issues[k].get("id")},
+                ids={**dev_ids, **{k: issues[k]["id"] for k in dev_targets if k in issues and issues[k].get("id")}},
                 workers=WORKERS,
                 on_progress=dev_progress,
             )

@@ -59,6 +59,18 @@ authoritative, includes reviewers/approvals); a Bitbucket **key-scan** of hinted
   could not reach Bitbucket never flips it back); with no prior either, the in-flight PR's
   source branch decides, as before. The UI follows `pr` (`primaryPrOf` in `src/lib/format.ts`).
   The readiness report still weighs every PR of the ticket.
+- **Bitbucket's PR record wins over Jira's copy.** For an open PR (the run that enriches PRs)
+  `devinfo._to_pr` reads `fromRef`/`toRef` from `GET …/pull-requests/<id>` and uses those as the
+  PR's `sourceBranch`/`destinationBranch`; dev-status's value is only the fallback (Bitbucket down,
+  or a closed PR / single-ticket refresh, which skip that call). The ticket's branch list is built
+  from those names, so a stale dev-status branch name no longer leaks onto the card.
+- **A sub-task shows only its OWN code.** Jira links a PR to every ticket with a commit on its
+  branch, so sub-tasks committed on the parent's branch used to mirror the parent's PR and branch.
+  `devinfo.scope_to_subtask` drops, from a sub-task, any PR or branch it shares with its parent
+  unless the PR title / branch name names the sub-task's own key (whole-key match: `ABC-12` is not
+  `ABC-123`). It runs in the daily fetch (`code_for(key, prior, parent_key)`), the single-ticket
+  refresh (the parent joins the dev-status batch), the completed archive (`dev_fields`) and the
+  Done gate. If the parent's lookup failed nothing is dropped.
 - Review activity never bumps Jira's `updated` → even "unchanged" tickets re-check PRs on the
   daily fast path.
 
@@ -100,7 +112,7 @@ shared mounts: ./jira-intern (DATA — follows the deploy directory!), ./config,
 ```
 
 Image build: stage `dist-build` (npm ci + vite) **or** stage `dist-prebuilt` (host-built `dist/`
-copied in), selected by `--build-arg DIST_SOURCE`; `start-jira-board.sh` host-builds and passes
+copied in), selected by `--build-arg DIST_SOURCE`; `scripts/start-jira-board.sh` host-builds and passes
 `prebuilt` because in-image npm over the Docker VM's network silently drops optional native
 binaries (TypeScript 7 platform packages). The runtime stage seeds `/opt/jira-intern-seed` so an
 empty mounted volume gets a working skeleton on first boot.
