@@ -158,7 +158,7 @@ export const FEATURES = [
     key: 'onHold',
     default: true,
     label: 'On Hold section',
-    hint: 'The strip for blocked tickets',
+    hint: 'The strip for paused and waiting tickets',
     detail: 'Shows On Hold under the board. Off puts those tickets back in To Do instead of hiding them.',
   },
   {

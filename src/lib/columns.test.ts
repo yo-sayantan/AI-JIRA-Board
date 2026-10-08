@@ -1,20 +1,40 @@
 import { describe, expect, it } from 'vitest'
-import { mapStatusToColumn } from './columns'
+import { BOARD_COLUMNS, PIPELINE_COLUMNS, isQaInProgress, mapStatusToColumn, qaStage } from './columns'
+
+describe('board columns', () => {
+  it('runs To Do · Blocked · In Progress · In Review · QA · Done', () => {
+    expect(BOARD_COLUMNS.map((c) => c.key)).toEqual(['todo', 'blocked', 'prog', 'rev', 'qa', 'done'])
+  })
+  it('keeps Blocked out of the lifecycle pipeline', () => {
+    expect(PIPELINE_COLUMNS.map((c) => c.key)).toEqual(['todo', 'prog', 'rev', 'qa', 'done'])
+  })
+})
 
 describe('mapStatusToColumn', () => {
-  it('maps closed-without-work statuses to done', () => {
-    expect(mapStatusToColumn("won't fix")).toBe('done')
-    expect(mapStatusToColumn('Cancelled')).toBe('done')
-    expect(mapStatusToColumn('Rejected')).toBe('done')
+  it('files Blocked and Impeded in the Blocked column, not On Hold', () => {
+    expect(mapStatusToColumn('Blocked')).toBe('blocked')
+    expect(mapStatusToColumn('Impeded')).toBe('blocked')
+    expect(mapStatusToColumn('Blocked by vendor')).toBe('blocked')
   })
-  it('prefers QA over "in progress" for "QA In Progress"', () => {
-    expect(mapStatusToColumn('QA In Progress')).toBe('qa')
+  it('still parks paused work on hold', () => {
+    expect(mapStatusToColumn('On Hold')).toBe('hold')
+    expect(mapStatusToColumn('Waiting')).toBe('hold')
   })
-  it('maps Ready4Review to review', () => {
-    expect(mapStatusToColumn('Ready4Review')).toBe('rev')
+  it('does not mistake Awaiting Deployment for waiting', () => {
+    expect(mapStatusToColumn('Awaiting Deployment')).not.toBe('hold')
   })
-  it('falls back to todo for unknown or empty statuses', () => {
-    expect(mapStatusToColumn('Something Odd')).toBe('todo')
-    expect(mapStatusToColumn(null)).toBe('todo')
+})
+
+describe('QA shelves', () => {
+  it('ready-for-QA statuses sit on the top shelf', () => {
+    for (const s of ['QA', 'Ready for QA', 'Ready4QA', 'Awaiting QA', 'Ready for Testing']) expect(isQaInProgress(s)).toBe(false)
+  })
+  it('statuses the QA team sets sit on QA In Progress', () => {
+    for (const s of ['In QA', 'Under QA', 'QA In Progress', 'In Testing', 'Testing', 'Verification']) expect(isQaInProgress(s)).toBe(true)
+  })
+  it('qaStage is null outside the QA column', () => {
+    expect(qaStage({ column: 'prog', status: 'In Testing' })).toBeNull()
+    expect(qaStage({ column: 'qa', status: 'In Testing' })).toBe('inprogress')
+    expect(qaStage({ column: 'qa', status: 'QA' })).toBe('ready')
   })
 })

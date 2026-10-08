@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { BOARD_COLUMNS } from '../../lib/columns'
 import type { ColumnKey, Ticket } from '../../types'
 import { priorityMeta } from '../../lib/format'
@@ -48,12 +48,22 @@ export const Board = memo(function Board({
     return groups
   }, [tickets, bottomOrder])
   const cols = focus ? BOARD_COLUMNS.filter((c) => c.key === focus) : BOARD_COLUMNS
+  // Card drags start inside this element and bubble up, so one pair of listeners tells every
+  // column that a drag is in flight — the collapsed Blocked rail opens up to accept it.
+  const [dragActive, setDragActive] = useState(false)
   return (
-    <div className="flex gap-3 overflow-x-auto pb-3">
+    <div
+      className="flex items-stretch gap-3 overflow-x-auto pb-3"
+      onDragStart={() => setDragActive(true)}
+      onDragEnd={() => setDragActive(false)}
+      onDrop={() => setDragActive(false)}
+    >
       {cols.map((meta) => (
         <Column
           key={meta.key}
           meta={meta}
+          dragActive={dragActive}
+          focused={cols.length === 1}
           tickets={byColumn.get(meta.key) ?? []}
           now={now}
           onOpen={onOpen}

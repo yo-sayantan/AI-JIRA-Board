@@ -262,8 +262,9 @@ def verdict_for(t, a, required):
         return dict(id=vid, label=label, tone=tone, reason=reason,
                     next={"owner": owner, "action": action, "due": due} if action else None)
 
-    if a["col"] == "hold":
-        return V("on_hold", "On hold", "neutral", f"{len(a['prs'])} PR(s) shown, not judged while the ticket is on hold.",
+    if a["col"] in ("hold", "blocked"):
+        state = "blocked" if a["col"] == "blocked" else "on hold"
+        return V("on_hold", state.capitalize(), "neutral", f"{len(a['prs'])} PR(s) shown, not judged while the ticket is {state}.",
                  owner_of(t), "clear the blocker, then re-run the report")
     if a["col"] == "done" and a["open"]:
         return V("done_code_not_merged", "Closed in Jira, code not merged", "danger",

@@ -476,7 +476,7 @@ export async function stopReportRun(): Promise<void> {
   await fetchWithTimeout('/api/reports/stop', { method: 'POST' }).catch(() => {})
 }
 
-export type MoveTarget = 'todo' | 'prog' | 'rev' | 'qa' | 'done'
+export type MoveTarget = 'todo' | 'blocked' | 'prog' | 'rev' | 'qa' | 'done'
 
 export interface MoveVerdict {
   ok: boolean

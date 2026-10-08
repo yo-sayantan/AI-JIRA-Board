@@ -29,7 +29,7 @@ export const ticketRefresh = new KeyQueue({
   isBlocked: dataWriterBusy,
 })
 
-export const MOVE_TARGETS = new Set(['todo', 'prog', 'rev', 'qa', 'done'])
+export const MOVE_TARGETS = new Set(['todo', 'blocked', 'prog', 'rev', 'qa', 'done'])
 const moving = new Set()
 
 /**

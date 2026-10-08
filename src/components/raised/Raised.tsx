@@ -44,7 +44,7 @@ function shortName(raw?: string | null): string {
 
 /** Status buckets for the filter chips — coarser than the five board columns on purpose. */
 const BUCKETS = [
-  { key: 'open', label: 'Open', color: '#64748b', cols: ['todo', 'hold'] as ColumnKey[] },
+  { key: 'open', label: 'Open', color: '#64748b', cols: ['todo', 'blocked', 'hold'] as ColumnKey[] },
   { key: 'prog', label: 'In progress', color: '#3b82f6', cols: ['prog'] as ColumnKey[] },
   { key: 'review', label: 'Review / QA', color: '#8b5cf6', cols: ['rev', 'qa'] as ColumnKey[] },
   { key: 'done', label: 'Fixed', color: FIXED, cols: ['done'] as ColumnKey[] },
