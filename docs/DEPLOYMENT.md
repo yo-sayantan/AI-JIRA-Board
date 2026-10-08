@@ -40,7 +40,7 @@ docker compose up -d --build      # rebuild + redeploy after a code change
 
 ### Deploy pitfalls (read once, save hours)
 
-- **Prefer `./scripts/start-jira-board.sh` over raw compose.** It builds `dist/` on the HOST and passes
+- **Prefer `./start-jira-board.sh` over raw compose.** It builds `dist/` on the HOST and passes
   `--build-arg DIST_SOURCE=prebuilt`. Building inside the image needs `npm ci` over the Docker
   VM's network, which can silently skip optional native packages — TypeScript 7's platform
   binaries among them — and the build then dies with
@@ -60,12 +60,12 @@ docker compose up -d --build      # rebuild + redeploy after a code change
 
 ### macOS: the double-click launcher
 
-`scripts/start-jira-board.sh` wraps all of this: it starts Docker if needed, frees the fixed port,
+`start-jira-board.sh` wraps all of this: it starts Docker if needed, frees the fixed port,
 rebuilds, redeploys the same container on the same port, waits for health, and opens the board.
 Clicking it repeatedly is always safe.
 
 ```bash
-./scripts/start-jira-board.sh
+./start-jira-board.sh
 ```
 
 To make it a Desktop shortcut, use [`setup/Start Jira Board.command.template`](../setup/Start%20Jira%20Board.command.template).
@@ -141,7 +141,7 @@ Settings, or `docker exec JIRA-AI-Ollama ollama pull qwen2.5-coder:7b`.
 |---|---|
 | Board loads but is empty | No dump yet. Run a fetch (Option A refetches on boot; or run `run-intern.sh`). |
 | "no JIRA_PERSONAL_TOKEN found — skipping fetch" | Your secrets file isn't mounted/readable. Check `~/.cursor/mcp-secrets.env` exists and has `JIRA_PERSONAL_TOKEN`. |
-| Port 4321 in use | `scripts/start-jira-board.sh` frees it automatically; otherwise `docker compose down` or stop the process on that port. |
+| Port 4321 in use | `start-jira-board.sh` frees it automatically; otherwise `docker compose down` or stop the process on that port. |
 | `Name or service not known` for your Jira host | Docker DNS (common on VPN). Uncomment the `dns:` block in `docker-compose.yml` and recreate. |
 | Container exits immediately | `docker logs JIRA-Board` — usually a bad token or unreachable host. |
 | Changed `src/` but UI looks old | Rebuild the image: `docker compose up -d --build`. |

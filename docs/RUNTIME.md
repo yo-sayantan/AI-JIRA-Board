@@ -12,7 +12,7 @@ checking on all of it. Written for both engineers and AI agents operating this d
 | **AI-Ollama** | `ollama/ollama` | `11434` (internal) | Local inference for the worker when backend=local and Host Ollama is OFF | volume `jira-ai-models` (weights) |
 
 All three restart `unless-stopped`. The **data mount follows the deploy directory**: whichever
-checkout last ran `scripts/start-jira-board.sh` owns `jira-intern/` — see `DEPLOYMENT.md` before
+checkout last ran `start-jira-board.sh` owns `jira-intern/` — see `DEPLOYMENT.md` before
 deploying from a new folder.
 
 Optional host-side process: **Ollama.app** on the host (Settings → Host Ollama) — the worker then
@@ -74,7 +74,7 @@ Stop things: `docker compose down` (everything) · `POST /api/run-archive/stop` 
 `POST /api/reports/stop` (report queue) · locks from dead processes clear themselves (server and
 runners both prune dead-PID locks; PID-less locks expire after 45 min).
 
-Redeploy after a code change: `bash scripts/start-jira-board.sh` — reclaims port 4321, host-builds
+Redeploy after a code change: `bash start-jira-board.sh` — reclaims port 4321, host-builds
 `dist/`, rebuilds images with the prebuilt dist, force-recreates the stack, health-checks, opens
 the board. Safe to run repeatedly; never stacks containers or drifts ports.
 
@@ -82,7 +82,7 @@ the board. Safe to run repeatedly; never stacks containers or drifts ports.
 
 ```
 HOST (your machine)
-│  scripts/start-jira-board.sh (deploy)        Ollama.app (optional, Metal)
+│  start-jira-board.sh (deploy)        Ollama.app (optional, Metal)
 │  npm run serve / dev (alt run modes)      ▲ host.docker.internal:11434
 │
 └─ Docker VM ────────────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ The Ollama container runs only while **both** conditions hold (`server/ollama.mj
 
 | Moment | Behaviour |
 |---|---|
-| Deploy (`scripts/start-jira-board.sh`) | `node server/ollama.mjs wanted` → **yes** only when both hold. Otherwise the container is *created but left stopped* and `jira-board`/`jira-ai` come up with `--no-deps`. A one-time migration copies models from the old `jira-ai-models` volume when the directory is still empty. |
+| Deploy (`start-jira-board.sh`) | `node server/ollama.mjs wanted` → **yes** only when both hold. Otherwise the container is *created but left stopped* and `jira-board`/`jira-ai` come up with `--no-deps`. A one-time migration copies models from the old `jira-ai-models` volume when the directory is still empty. |
 | Board server boot | Same rule via the Docker socket: stops a running Ollama that is not wanted, starts a wanted one. |
 | Toggle flipped | On → start (or `no-models`, surfaced as an error toast naming the directory); off → stop. The toggle row shows the live container state and the models found. |
 | Model pull | Starts the container on demand (toggle permitting) and waits for it to answer before proxying the pull. |

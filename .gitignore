@@ -2,8 +2,7 @@ node_modules
 *.log
 .DS_Store
 __pycache__/
-.claude/*
-!.claude/CLAUDE.md
+.claude/
 *.swap
 
 # ── SECRETS — never commit real tokens ──────────────────────────────────────

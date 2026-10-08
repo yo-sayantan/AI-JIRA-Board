@@ -81,7 +81,7 @@ inlined) so it runs from a double-click. It reads `window.__JIRA_DATA__` at load
 | `src/lib/runner.ts` | Typed client for the local server's API. |
 | `src/lib/columns.ts` · `format.ts` · `search.ts` | Status → column mapping, display helpers, ticket search. |
 | `src/components/` | Feature folders: `board/`, `header/`, `ticket/`, `completed/`, `reports/`, `settings/`, `common/`. |
-| `tooling/vite.config.ts` | Single-file build; injects the external `../jira-intern/data.js` `<script>`. |
+| `vite.config.ts` | Single-file build; injects the external `../jira-intern/data.js` `<script>`. |
 
 ### 3. `server/` (entry `serve.mjs`) — the optional local server
 

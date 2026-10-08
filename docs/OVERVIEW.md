@@ -97,15 +97,15 @@ AI-JIRA-Board/
 ├── jira-intern/             ← 🐍 the fetch pipeline ("the intern") + its config
 ├── server/                  ← 🖥️ optional zero-dep server for live mode (entry: serve.mjs)
 ├── docker/                  ← 🐳 Dockerfile + docker-entrypoint.sh (compose builds with context = repo root)
-├── scripts/                 ← 🧰 start-jira-board.sh (build + deploy + open) · open-guide.sh/.bat · Open Board.html
-├── tooling/                 ← 🔧 vite.config.ts · vitest.config.ts (npm scripts pass --config)
-└── docker-compose.yml       ← containerised deploy (`docker compose up -d --build`)
+├── scripts/                 ← 🧰 open-guide.sh / open-guide.bat (open the guide, no server needed) · Open Board.html
+├── docker-compose.yml       ← containerised deploy (`docker compose up -d --build`)
+└── start-jira-board.sh      ← build + deploy + open, in one script (Desktop-launcher friendly)
 ```
 
-> The repo root keeps only what tools look for there: `package.json` / `package-lock.json` (npm),
-> Vite's `index.html`, `README.md` and `LICENSE` (GitHub), `.dockerignore`, `.nvmrc`, `.gitignore`,
-> `.gitattributes` and `docker-compose.yml` (its `./jira-intern` bind mount is relative to it).
-> `tsconfig.json` lives in `src/`, the Vite/Vitest configs in `tooling/`, `CLAUDE.md` in `.claude/`.
+> The repo root keeps only what tools or habits look for there: `package.json`, `tsconfig.json`,
+> `vite.config.ts`, `vitest.config.ts`, Vite's `index.html`, `.dockerignore`, `docker-compose.yml`
+> (its `./jira-intern` bind mount is relative to it) and `start-jira-board.sh` (the Desktop
+> launcher calls it by path). Everything else lives in `docker/`, `scripts/` or `server/`.
 
 ## Setup
 

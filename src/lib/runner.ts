@@ -169,7 +169,7 @@ export function aiModelLabel(ai: AiInternStatus | null): string | null {
 
 // ── PR Readiness Reports ──────────────────────────────────────────────────────
 // Served mode talks to /api/reports*. file:// mode reads window.__JIRA_PR_REPORTS__, written by
-// local-runner/sync-reports.mjs and injected by the build next to data.js (see tooling/vite.config.ts).
+// local-runner/sync-reports.mjs and injected by the build next to data.js (see vite.config.ts).
 
 export interface PrReportsIndex {
   reports: Record<string, PrReportSummary>
