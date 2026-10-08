@@ -3,7 +3,7 @@ import { motion } from 'motion/react'
 import type { Ticket } from '../../types'
 import { COLUMN_META } from '../../lib/columns'
 import { DONE_BOARD_DAYS } from '../../lib/appConfig'
-import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, branchesOf, relTime, hexToRgba } from '../../lib/format'
+import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, primaryPrOf, branchesOf, relTime, hexToRgba } from '../../lib/format'
 import { Pill, PriorityGlyph, PrBadge, Approvals, PointsTag } from '../common/ui'
 import { TypeIcon, RefreshIcon, TrophyIcon } from '../common/Icons'
 
@@ -82,7 +82,9 @@ export const TicketCard = memo(function TicketCard({
   const urgent = prio.rank >= 4
   const rel = relTime(ticket.lastUpdate, now)
   const prs = prListOf(ticket)
-  const pr = prs[0] ?? null
+  // The banner follows the ticket's primary branch; PRs on other branches are counted below.
+  const pr = primaryPrOf(ticket)
+  const otherPrs = prs.length - (pr ? 1 : 0)
   const prKnownState = pr && pr.state && pr.state !== 'none'
   const branches = branchesOf(ticket)
   const archiveIn = archivesInDays(ticket, now)
@@ -270,9 +272,9 @@ export const TicketCard = memo(function TicketCard({
         )}
         {pr && (prKnownState ? <PrBadge state={pr.state} /> : <Pill color="#94a3b8" title="Pull request linked">⊙ PR</Pill>)}
         {pr && !isClosedPr(pr) && <Approvals approvals={pr.approvals} />}
-        {prs.length > 1 && (
-          <Pill color="#a855f7" title={`${prs.length} pull requests`}>
-            +{prs.length - 1} PR
+        {otherPrs > 0 && (
+          <Pill color="#a855f7" title={`${otherPrs} other pull request${otherPrs > 1 ? 's' : ''}`}>
+            +{otherPrs} PR
           </Pill>
         )}
         {overflow && (

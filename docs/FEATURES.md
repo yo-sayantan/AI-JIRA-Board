@@ -9,7 +9,7 @@ are the fastest way into any feature.
 |---|---|---|
 | Columns | To Do · In Progress · In Review (folds Ready4Review/Code Review) · QA · Done, fixed order | `src/lib/columns.ts` (`BOARD_COLUMNS`), mapping fallback `mapStatusToColumn` |
 | Column assignment | The intern maps raw Jira status → `column`; the app trusts it, with a word-boundary fallback for unknown statuses | `jira-intern/_jira.py::status_column`, `src/data.ts::normalizeTicket` |
-| Cards | Key, title, type/priority glyphs, points, branch, PR badge, comment count, age, sprint-carryover marker | `src/components/board/TicketCard.tsx` |
+| Cards | Key, title, type/priority glyphs, points, branch, PR badge (the PR of the ticket's newest branch), `+N PR` for the others, comment count, age, sprint-carryover marker | `src/components/board/TicketCard.tsx` |
 | Done retirement | A Done ticket stays ~3 days as a "recent win", then auto-retires into Completed (`app.doneBoardDays`) | `src/data.ts::prepare` |
 | Manual archive | Trophy button on a Done card/drawer moves it to Completed immediately; undoable until reload drops it | `src/data.ts` (localStorage `jb-archived`), `ArchivedUndo` in `board/BoardNotices.tsx` |
 | Empty board | Celebration state when nothing is active | `board/FunEmptyBoard.tsx` |

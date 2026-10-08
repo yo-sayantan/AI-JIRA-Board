@@ -133,6 +133,18 @@ export function prListOf(t: { prs?: PullRequest[] | null; pr?: PullRequest | nul
   return hasPr(t.pr) ? [t.pr as PullRequest] : []
 }
 
+/**
+ * The one PR the banners describe (card badge, approvals, drawer badge): the pipeline's primary
+ * PR for the ticket's primary branch. `pr` of {state:"none"} is a real answer — that branch has
+ * no PR of its own, even when another branch's PR sits in `prs` — so it yields null rather than
+ * borrowing a PR from a different branch. Dumps that carry no `pr` at all fall back to the
+ * first listed PR.
+ */
+export function primaryPrOf(t: { prs?: PullRequest[] | null; pr?: PullRequest | null }): PullRequest | null {
+  if (t.pr != null) return hasPr(t.pr) ? t.pr : null
+  return prListOf(t)[0] ?? null
+}
+
 /** All real branches for a ticket, falling back to the single `branch`. */
 export function branchesOf(t: { branches?: string[] | null; branch?: string | null }): string[] {
   if (t.branches && t.branches.length) return t.branches

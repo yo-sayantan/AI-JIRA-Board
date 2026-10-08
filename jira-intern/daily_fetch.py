@@ -224,13 +224,12 @@ def code_for(key, prior=None):
         branches += (prior or {}).get("branches") or []
 
     branches = list(dict.fromkeys(b for b in branches if b))
-    pr = devinfo.pick_primary_pr(prs)
-    return {
-        "branches": branches,
-        "prs": prs,
-        "pr": pr,
-        "branch": pr.get("sourceBranch") or (branches[0] if branches else None),
-    }
+    # The ticket's branch is the one with the newest commit (devinfo reads those times from
+    # Bitbucket); last run's choice breaks the tie when no time could be read this run.
+    return devinfo.settle(
+        {"branches": branches, "prs": prs, "times": (dev or {}).get("times")},
+        (prior or {}).get("branch"),
+    )
 
 
 def apply_code(ticket, key, prior=None):
