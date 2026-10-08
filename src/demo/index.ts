@@ -5,8 +5,9 @@
 // calls outright while demo mode is on (see `setDemoMode`), and moves are judged locally by
 // `gates.ts`, which mirrors `jira-intern/transition.py`.
 import type { JiraData } from '../types'
-import { buildDemoDump } from './data'
+import { bundledDemoDump } from './data'
 
+export { fetchDemoDump } from './data'
 export { demoMoveVerdict, evaluateMove, qaIssuesOf } from './gates'
 export { demoReports } from './reports'
 
@@ -15,8 +16,12 @@ export const DEMO_REFUSED = 'Demo mode — nothing is sent to Jira or the AI int
 
 let dump: JiraData | null = null
 
-/** The sample board. Built once per session so dates (and object identity) stay stable. */
+/**
+ * The sample board, from the copy compiled into the bundle. Read once per session so dates (and
+ * object identity) stay stable. Served mode then swaps in `jira-intern/demo/data.json` itself, so
+ * hand edits to that folder show up without a rebuild.
+ */
 export function demoDump(): JiraData {
-  if (!dump) dump = buildDemoDump()
+  if (!dump) dump = bundledDemoDump()
   return dump
 }

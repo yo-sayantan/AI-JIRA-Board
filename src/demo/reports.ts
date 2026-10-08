@@ -14,7 +14,7 @@ function build(now: number): PrReport[] {
 
   const ready: PrReport = {
     schemaVersion: 1,
-    key: 'DEMO-220',
+    key: 'DEMO-230',
     title: 'Signed download links for exported files',
     timeZone: 'UTC',
     generatedAt: ago(2),
@@ -54,7 +54,7 @@ function build(now: number): PrReport[] {
             items: [
               { label: 'Pull request', value: '#425 · approved', tone: 'success', href: `${BB}/projects/DEMO/repos/demo-service/pull-requests/425` },
               { label: 'Target branch', value: 'main' },
-              { label: 'QA sub-task', value: 'DEMO-220-1 · Done', tone: 'success' },
+              { label: 'QA sub-task', value: 'DEMO-230-1 · Done', tone: 'success' },
               { label: 'Release', value: '2026.11' },
             ],
           },
@@ -73,7 +73,7 @@ function build(now: number): PrReport[] {
             rows: [
               { cells: ['Approvals (2 required)', 'Pass', 'r.okafor, m.lindqvist', 'Yes'], tone: 'success' },
               { cells: ['Unresolved comments', 'Pass', '0 of 7 still open', 'Yes'], tone: 'success' },
-              { cells: ['QA / test sub-task done', 'Pass', 'DEMO-220-1 (Done, Rahul Okafor)', 'Yes'], tone: 'success' },
+              { cells: ['QA / test sub-task done', 'Pass', 'DEMO-230-1 (Done, Rahul Okafor)', 'Yes'], tone: 'success' },
               { cells: ['Other sub-tasks & dependencies', 'Pass', 'none open', 'Yes'], tone: 'success' },
               { cells: ['Security scan', 'Pass', 'no new findings', 'Yes'], tone: 'success' },
               { cells: ['Changelog entry', 'Pass', 'added in the PR', 'No'], tone: 'success' },
@@ -117,7 +117,7 @@ function build(now: number): PrReport[] {
       },
     ],
     links: [
-      { label: 'DEMO-220 in Jira', href: `${JIRA}/browse/DEMO-220` },
+      { label: 'DEMO-230 in Jira', href: `${JIRA}/browse/DEMO-230` },
       { label: 'Pull request #425', href: `${BB}/projects/DEMO/repos/demo-service/pull-requests/425` },
       { label: 'Link signing standard', href: `${CONF}/x/link-signing` },
     ],

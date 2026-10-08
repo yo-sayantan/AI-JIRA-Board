@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { injectedDump, loadArchivedKeys, loadData, persistArchivedKeys } from '../data'
-import { demoDump } from '../demo'
+import { demoDump, fetchDemoDump } from '../demo'
 import { getDataDump } from '../lib/runner'
 
 /**
@@ -21,6 +21,19 @@ export function useBoardData(served: boolean, onError?: (msg: string) => void, d
     setRaw(demo ? demoDump() : injectedDump())
     setArchived(demo ? new Set() : loadArchivedKeys(injectedDump()))
   }
+  // Prefer the folder on disk — editing jira-intern/demo/data.json then reloading is the point of
+  // keeping the sample tickets out there. The bundled copy is already on screen meanwhile.
+  useEffect(() => {
+    if (!demo || !served) return
+    let cancelled = false
+    void fetchDemoDump().then((d) => {
+      if (d && !cancelled) setRaw(d)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [demo, served])
+
   const latestReload = useRef(0)
   const onErrorRef = useRef(onError)
   onErrorRef.current = onError

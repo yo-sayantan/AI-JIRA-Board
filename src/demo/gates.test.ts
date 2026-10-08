@@ -27,8 +27,7 @@ describe('demo move gates', () => {
   })
 
   it('blocks Done when the pull request is not merged', () => {
-    const t = { ...withPr(false), subtasks: [qaSub('Done')] }
-    expect(evaluateMove('done', t).blocker).toContain('#7 not merged yet')
+    expect(evaluateMove('done', { ...withPr(false), subtasks: [qaSub('Done')] }).blocker).toContain('#7 not merged yet')
   })
 
   it('blocks Done when there is no pull request at all', () => {
@@ -36,8 +35,7 @@ describe('demo move gates', () => {
   })
 
   it('blocks Done when the QA ticket is still open', () => {
-    const t = { ...withPr(true), subtasks: [qaSub('In Progress')] }
-    expect(evaluateMove('done', t).blocker).toContain('QA not done')
+    expect(evaluateMove('done', { ...withPr(true), subtasks: [qaSub('In Progress')] }).blocker).toContain('QA not done')
   })
 
   it('blocks Done when no QA ticket exists', () => {
@@ -45,8 +43,7 @@ describe('demo move gates', () => {
   })
 
   it('allows Done once the PR is merged and QA is done', () => {
-    const t = { ...withPr(true), subtasks: [qaSub('Done')] }
-    expect(evaluateMove('done', t)).toEqual({ blocker: null, warnings: [] })
+    expect(evaluateMove('done', { ...withPr(true), subtasks: [qaSub('Done')] })).toEqual({ blocker: null, warnings: [] })
   })
 
   it('ignores a declined PR when judging Done', () => {
@@ -61,26 +58,68 @@ describe('demo move gates', () => {
 })
 
 describe('demo dump', () => {
+  const d = demoDump()
+  const byKey = (k: string) => d.tickets.find((t) => t.key === k)!
+  const prStates = new Set(d.tickets.flatMap((t) => (t.prs ?? (t.pr ? [t.pr] : [])).map((p) => p.state)))
+
   it('fills every board column, both QA shelves and the side sections', () => {
-    const d = demoDump()
     const cols = new Set(d.tickets.map((t) => t.column))
     for (const c of ['todo', 'blocked', 'prog', 'rev', 'qa', 'done', 'hold']) expect(cols).toContain(c)
     expect(d.tickets.some((t) => t.column === 'qa' && /^(QA|Ready for QA)$/.test(t.status))).toBe(true)
-    expect(d.tickets.some((t) => t.column === 'qa' && /^(In QA|In Testing)$/.test(t.status))).toBe(true)
-    expect(d.completed.length).toBeGreaterThan(5)
-    expect((d.raised ?? []).length).toBeGreaterThan(3)
+    expect(d.tickets.some((t) => t.column === 'qa' && /^(In QA|In Testing|Under QA)$/.test(t.status))).toBe(true)
+    expect(d.tickets.some((t) => t.sprint?.includes('future'))).toBe(true)
+  })
+
+  it('covers every pull-request state', () => {
+    for (const s of ['merged', 'approved', 'comments', 'changes', 'declined']) expect(prStates).toContain(s)
+    expect(d.tickets.some((t) => !t.pr && !t.prs?.length)).toBe(true) // and tickets with none
+  })
+
+  it('covers the review edge cases', () => {
+    expect(byKey('DEMO-233').pr).toMatchObject({ approvals: 1, openComments: 0 }) // one approval short
+    expect(byKey('DEMO-234').pr).toMatchObject({ approvals: 2 }) // approved, comments still open
+    expect(byKey('DEMO-234').pr!.openComments).toBeGreaterThan(0)
+    expect(byKey('DEMO-232').pr).toMatchObject({ approvals: 0, openComments: 0 }) // nobody looked yet
+    expect(byKey('DEMO-235').prs!.every((p) => p.state === 'declined')).toBe(true) // every attempt rejected
+    expect(byKey('DEMO-253').pr!.merged).toBeFalsy() // closed in Jira, code never merged
+    expect(byKey('DEMO-212').pr!.merged).toBe(true) // merged, yet still blocked
+  })
+
+  it('gives one ticket that passes the Done gate, and one for each refusal', () => {
+    expect(evaluateMove('done', byKey('DEMO-242')).blocker).toBeNull() // merged + QA done
+    expect(evaluateMove('done', byKey('DEMO-240')).blocker).toContain('QA not done') // QA not started
+    expect(evaluateMove('done', byKey('DEMO-241')).blocker).toContain('no QA ticket')
+    expect(evaluateMove('done', byKey('DEMO-244')).blocker).toContain('not merged yet') // QA failed, fix open
+    expect(evaluateMove('done', byKey('DEMO-201')).blocker).toContain('no merged pull request')
+  })
+
+  it('mixes ownership and nests sub-tasks', () => {
+    expect(d.tickets.some((t) => t.mine === false)).toBe(true) // someone else's ticket
+    expect(d.tickets.some((t) => t.assignee == null)).toBe(true) // unassigned
+    expect(byKey('DEMO-220').subtasks!.some((s) => s.mine === false)).toBe(true) // sub-task owned by QA
+    expect(byKey('DEMO-220').subtasks!.some((s) => (s.subtasks ?? []).length > 0)).toBe(true) // nested child
+    expect(byKey('DEMO-223').mine).toBe(false) // their parent…
+    expect(byKey('DEMO-223').subtasks![0].mine).not.toBe(false) // …carrying my sub-task
+  })
+
+  it('covers the card edges', () => {
+    expect(d.tickets.some((t) => t.storyPoints == null)).toBe(true)
+    expect(d.tickets.some((t) => (t.storyPoints ?? 0) >= 21)).toBe(true)
+    expect(d.tickets.some((t) => !t.description)).toBe(true)
+    expect(d.tickets.some((t) => t.title.length > 90)).toBe(true)
+    expect(d.tickets.some((t) => t.sprintOverflow)).toBe(true)
+    expect(d.tickets.some((t) => (t.branches ?? []).length > 1)).toBe(true)
+  })
+
+  it('has history and raised rows worth browsing', () => {
+    expect(d.completed.length).toBeGreaterThan(10)
+    expect(d.completed.some((c) => c.mine === false)).toBe(true)
+    expect((d.raised ?? []).some((r) => (r.assigneeLog ?? []).length >= 4)).toBe(true)
+    expect((d.raised ?? []).some((r) => r.assignee == null)).toBe(true)
   })
 
   it('never points at a real host', () => {
-    const json = JSON.stringify(demoDump())
+    const json = JSON.stringify(d)
     for (const url of json.match(/https?:\/\/[^"\\\s]+/g) ?? []) expect(url).toMatch(/\/\/[a-z.]*example\.com(\/|$)/)
-  })
-
-  it('has a Done ticket that is still inside the board window, and one that can be dropped on Done', () => {
-    const d = demoDump()
-    expect(d.tickets.some((t) => t.column === 'done')).toBe(true)
-    // DEMO-230 is merged with a QA sub-task that is NOT done — the Done gate must refuse it.
-    const qaTicket = d.tickets.find((t) => t.key === 'DEMO-230')!
-    expect(evaluateMove('done', qaTicket).blocker).toContain('QA not done')
   })
 })
