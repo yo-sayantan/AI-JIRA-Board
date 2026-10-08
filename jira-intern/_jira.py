@@ -37,6 +37,11 @@ ISSUE_KEY_RE = re.compile(r"[A-Z][A-Z0-9]+-\d+")
 _SSL_CTX = None
 
 
+# Drop the company's root CA(s) here (PEM) and every fetch — on the host and in both containers,
+# which mount ~/.ai — trusts it with no further configuration. JIRA_CA_BUNDLE overrides the path.
+DEFAULT_CA_BUNDLE = os.path.expanduser("~/.ai/ca-bundle.pem")
+
+
 def ssl_context():
     global _SSL_CTX
     if _SSL_CTX is not None:
@@ -47,11 +52,18 @@ def ssl_context():
         ctx.verify_mode = ssl.CERT_NONE
         sys.stderr.write("WARN: TLS verification disabled (JIRA_INSECURE_TLS=1)\n")
     else:
-        bundle = (os.environ.get("JIRA_CA_BUNDLE") or "").strip() or None
-        try:
-            ctx = ssl.create_default_context(cafile=bundle)
-        except (OSError, ssl.SSLError) as e:
-            raise RuntimeError(f"JIRA_CA_BUNDLE is not a readable PEM bundle: {bundle} ({e})") from e
+        # The system roots always stay: Jira often sits behind a public CDN certificate while
+        # Bitbucket uses the company's private CA, so the bundle ADDS trust, never replaces it.
+        ctx = ssl.create_default_context()
+        explicit = (os.environ.get("JIRA_CA_BUNDLE") or "").strip()
+        bundle = explicit or (DEFAULT_CA_BUNDLE if os.path.isfile(DEFAULT_CA_BUNDLE) else "")
+        if bundle:
+            try:
+                ctx.load_verify_locations(cafile=bundle)
+            except (OSError, ssl.SSLError) as e:
+                if explicit:
+                    raise RuntimeError(f"JIRA_CA_BUNDLE is not a readable PEM bundle: {bundle} ({e})") from e
+                sys.stderr.write(f"WARN: CA bundle {bundle} not loaded ({e}); system roots only\n")
     _SSL_CTX = ctx
     return ctx
 

@@ -59,11 +59,20 @@ authoritative, includes reviewers/approvals); a Bitbucket **key-scan** of hinted
   could not reach Bitbucket never flips it back); with no prior either, the in-flight PR's
   source branch decides, as before. The UI follows `pr` (`primaryPrOf` in `src/lib/format.ts`).
   The readiness report still weighs every PR of the ticket.
-- **Bitbucket's PR record wins over Jira's copy.** For an open PR (the run that enriches PRs)
-  `devinfo._to_pr` reads `fromRef`/`toRef` from `GET …/pull-requests/<id>` and uses those as the
-  PR's `sourceBranch`/`destinationBranch`; dev-status's value is only the fallback (Bitbucket down,
-  or a closed PR / single-ticket refresh, which skip that call). The ticket's branch list is built
-  from those names, so a stale dev-status branch name no longer leaks onto the card.
+- **Bitbucket's records win over Jira's index.** Jira's dev-status can name a branch that no longer
+  exists (or never existed under that name) and say a PR comes from it. So:
+  - for every **open** PR — daily run and single-ticket refresh alike — `devinfo._to_pr` reads
+    `fromRef`/`toRef` from `GET …/pull-requests/<id>` and uses those as `sourceBranch` /
+    `destinationBranch` (dev-status's value is only the fallback); comment counts stay enrich-only;
+  - when a ticket has several branches, `devinfo.branch_head` asks each for its newest commit; a
+    branch Bitbucket answers **404** for is dropped from `branches` (a merged/declined PR's source
+    branch stays — it is history, usually deleted on merge). Any other failure drops nothing.
+  - the first network-level failure (DNS, TLS, refused) marks Bitbucket unreachable for the rest of
+    that run (`_BB_UNREACHABLE`), so an outage costs one timeout, not one per PR and branch.
+  All of this needs Bitbucket reachable **from where the fetch runs** — in Docker that usually means
+  trusting the company CA (`~/.ai/ca-bundle.pem`, [SETUP.md](SETUP.md)). Until then the board can
+  only show what Jira's index says; refresh logs read `bb_ok: false` and
+  `WARN bitbucket unreachable … CERTIFICATE_VERIFY_FAILED`.
 - **A sub-task shows only its OWN code.** Jira links a PR to every ticket with a commit on its
   branch, so sub-tasks committed on the parent's branch used to mirror the parent's PR and branch.
   `devinfo.scope_to_subtask` drops, from a sub-task, any PR or branch it shares with its parent

@@ -244,5 +244,59 @@ class Formatters(unittest.TestCase):
         self.assertIsNone(_jira.ISSUE_KEY_RE.fullmatch("PROJ-1; rm -rf"))
 
 
+class CaBundle(unittest.TestCase):
+    """A company CA bundle ADDS trust (Jira may use a public certificate, Bitbucket the company CA),
+    and ~/.ai/ca-bundle.pem is picked up with no configuration."""
+
+    def setUp(self):
+        self.addCleanup(setattr, _jira, "_SSL_CTX", None)
+        _jira._SSL_CTX = None
+        self.env = mock.patch.dict(os.environ, {}, clear=False)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        os.environ.pop("JIRA_CA_BUNDLE", None)
+        os.environ.pop("JIRA_INSECURE_TLS", None)
+
+    def _ctx(self, default_exists, load=None):
+        load = load or mock.Mock()
+        with mock.patch.object(_jira.os.path, "isfile", return_value=default_exists), \
+                mock.patch.object(_jira.ssl.SSLContext, "load_verify_locations", load):
+            ctx = _jira.ssl_context()
+        return ctx, load
+
+    def test_system_roots_stay_when_a_bundle_is_added(self):
+        os.environ["JIRA_CA_BUNDLE"] = "/certs/company.pem"
+        factory = mock.Mock(wraps=ssl.create_default_context)
+        with mock.patch.object(_jira.ssl, "create_default_context", factory):
+            ctx, load = self._ctx(default_exists=False)
+        # Built with the system roots (no cafile, which would REPLACE them), then the bundle added.
+        factory.assert_called_once_with()
+        load.assert_called_once_with(cafile="/certs/company.pem")
+        self.assertEqual(ctx.verify_mode, ssl.CERT_REQUIRED)
+
+    def test_the_default_bundle_is_found_without_configuration(self):
+        _, load = self._ctx(default_exists=True)
+        load.assert_called_once_with(cafile=_jira.DEFAULT_CA_BUNDLE)
+
+    def test_no_bundle_anywhere_means_system_roots_only(self):
+        _, load = self._ctx(default_exists=False)
+        load.assert_not_called()
+
+    def test_a_broken_explicit_bundle_is_an_error(self):
+        os.environ["JIRA_CA_BUNDLE"] = "/certs/broken.pem"
+        with self.assertRaises(RuntimeError):
+            self._ctx(default_exists=False, load=mock.Mock(side_effect=ssl.SSLError("bad pem")))
+
+    def test_a_broken_default_bundle_only_warns(self):
+        ctx, _ = self._ctx(default_exists=True, load=mock.Mock(side_effect=OSError("unreadable")))
+        self.assertEqual(ctx.verify_mode, ssl.CERT_REQUIRED)
+
+    def test_insecure_switch_still_wins(self):
+        os.environ["JIRA_INSECURE_TLS"] = "1"
+        ctx, load = self._ctx(default_exists=True)
+        load.assert_not_called()
+        self.assertEqual(ctx.verify_mode, ssl.CERT_NONE)
+
+
 if __name__ == "__main__":
     unittest.main()
