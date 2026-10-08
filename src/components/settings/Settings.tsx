@@ -1033,17 +1033,19 @@ function CloudModelPicker({
   )
 }
 
-/** USD per 1M tokens at standard speed. Mirrors docs/index.html#ai-cloud-prices — keep both in step. */
-const CLOUD_RATES: Record<string, { input: string; cache: string; output: string }> = {
-  'gpt-5.6-luna': { input: '$0.20', cache: '$0.02', output: '$1.20' },
-  'composer-2.5': { input: '$0.50', cache: '$0.20', output: '$2.50' },
-  'gemini-3-flash': { input: '$0.50', cache: '$0.05', output: '$3' },
-  'kimi-k2.7-code': { input: '$0.95', cache: '$0.19', output: '$4' },
-  'glm-5.2': { input: '$1.40', cache: '$0.26', output: '$4.40' },
-  'grok-4.7': { input: '$2', cache: '$0.50', output: '$6' },
-  'grok-4.6': { input: '$2', cache: '$0.50', output: '$6' },
-  'gemini-3.6-flash': { input: '$1.50', cache: '$0.15', output: '$7.50' },
-  'claude-sonnet-5': { input: '$2', cache: '$0.20', output: '$10' },
+/**
+ * USD per 1M tokens at standard speed, from cursor.com/docs/models-and-pricing (checked 2026-10-08).
+ * Mirrors `_CURSOR_KEEP` in ai-intern/worker.py and docs/index.html#ai-cloud-prices — keep all
+ * three in step. `cacheWrite` is null where Cursor charges nothing extra to write the cache.
+ */
+const CLOUD_RATES: Record<string, { input: string; cacheWrite: string | null; cache: string; output: string }> = {
+  'claude-haiku-5-5': { input: '$0.10', cacheWrite: '$0.125', cache: '$0.01', output: '$0.50' },
+  'gpt-5.6-luna': { input: '$0.20', cacheWrite: '$0.25', cache: '$0.02', output: '$1.20' },
+  'composer-2.5': { input: '$0.50', cacheWrite: null, cache: '$0.20', output: '$2.50' },
+  'gemini-3.8-flash': { input: '$0.75', cacheWrite: null, cache: '$0.075', output: '$3.50' },
+  'muse-spark-1.3': { input: '$1.25', cacheWrite: null, cache: '$0.15', output: '$4.25' },
+  'grok-4.7': { input: '$2', cacheWrite: null, cache: '$0.50', output: '$6' },
+  'claude-sonnet-5-5': { input: '$2', cacheWrite: '$2.50', cache: '$0.10', output: '$10' },
 }
 
 function FactTile({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
@@ -1081,7 +1083,11 @@ function AiFacts({
       <>
         <FactTile label="Input / 1M" value={rate.input} hint="USD per million input tokens, standard speed" />
         <FactTile label="Output / 1M" value={rate.output} hint="USD per million output tokens — Low effort spends fewer" />
-        <FactTile label="Cache read / 1M" value={rate.cache} hint="USD per million cached input tokens" />
+        <FactTile
+          label="Cache read / 1M"
+          value={rate.cache}
+          hint={`USD per million cached input tokens${rate.cacheWrite ? ` · writing to the cache costs ${rate.cacheWrite} / 1M` : ''}`}
+        />
       </>
     ) : (
       <div className="col-span-3 flex min-w-0 items-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 text-[11px] text-[var(--muted)]">

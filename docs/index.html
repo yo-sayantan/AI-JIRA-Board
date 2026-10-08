@@ -756,25 +756,29 @@ ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
         <h3>What a report costs, per model</h3>
         <p class="small">The <b>i</b> button beside the cloud model list in Settings opens this table. Rates are
           <b>USD per 1 million tokens</b> at standard speed; <b>Low</b> effort uses fewer tokens than <b>Medium</b>.
-          The Cursor list is deliberately a value shortlist — capable models at or under $10 output per 1M tokens
-          (<code class="inl">_CURSOR_KEEP</code> in <code class="inl">ai-intern/worker.py</code>). Update both
-          places when Cursor changes its pricing.</p>
+          The Cursor list is a value shortlist — every model Cursor offers at or under <b>$10 output</b> per 1M tokens,
+          newest of each family only, cheapest first (<code class="inl">_CURSOR_KEEP</code> in
+          <code class="inl">ai-intern/worker.py</code>). Rates from
+          <a href="https://cursor.com/docs/models-and-pricing">Cursor's models &amp; pricing page</a>, checked 2026-10-08 —
+          update this table, the worker list and <code class="inl">CLOUD_RATES</code> in Settings together when they change.</p>
         <table>
           <thead>
-            <tr><th>Model</th><th>Id</th><th>Input</th><th>Cache read</th><th>Output</th></tr>
+            <tr><th>Model</th><th>Id</th><th>Input</th><th>Cache write</th><th>Cache read</th><th>Output</th></tr>
           </thead>
           <tbody>
-            <tr><td><b>GPT-5.6 Luna</b></td><td><code class="inl">gpt-5.6-luna</code></td><td>$0.20</td><td>$0.02</td><td>$1.20</td></tr>
-            <tr><td><b>Composer 2.5</b></td><td><code class="inl">composer-2.5</code></td><td>$0.50</td><td>$0.20</td><td>$2.50</td></tr>
-            <tr><td><b>Gemini 3 Flash</b></td><td><code class="inl">gemini-3-flash</code></td><td>$0.50</td><td>$0.05</td><td>$3</td></tr>
-            <tr><td><b>Kimi K2.7 Code</b></td><td><code class="inl">kimi-k2.7-code</code></td><td>$0.95</td><td>$0.19</td><td>$4</td></tr>
-            <tr><td><b>GLM 5.2</b></td><td><code class="inl">glm-5.2</code></td><td>$1.40</td><td>$0.26</td><td>$4.40</td></tr>
-            <tr><td><b>Grok 4.7</b></td><td><code class="inl">grok-4.7</code></td><td>$2</td><td>$0.50</td><td>$6</td></tr>
-            <tr><td><b>Grok 4.6</b></td><td><code class="inl">grok-4.6</code></td><td>$2</td><td>$0.50</td><td>$6</td></tr>
-            <tr><td><b>Gemini 3.6 Flash</b></td><td><code class="inl">gemini-3.6-flash</code></td><td>$1.50</td><td>$0.15</td><td>$7.50</td></tr>
-            <tr><td><b>Claude Sonnet 5</b></td><td><code class="inl">claude-sonnet-5</code></td><td>$2</td><td>$0.20</td><td>$10</td></tr>
+            <tr><td><b>Claude Haiku 5.5</b></td><td><code class="inl">claude-haiku-5-5</code></td><td>$0.10</td><td>$0.125</td><td>$0.01</td><td>$0.50</td></tr>
+            <tr><td><b>GPT-5.6 Luna</b></td><td><code class="inl">gpt-5.6-luna</code></td><td>$0.20</td><td>$0.25</td><td>$0.02</td><td>$1.20</td></tr>
+            <tr><td><b>Composer 2.5</b></td><td><code class="inl">composer-2.5</code></td><td>$0.50</td><td><span title="Cursor lists no cache-write price for this model">—</span></td><td>$0.20</td><td>$2.50</td></tr>
+            <tr><td><b>Gemini 3.8 Flash</b></td><td><code class="inl">gemini-3.8-flash</code></td><td>$0.75</td><td><span title="Cursor lists no cache-write price for this model">—</span></td><td>$0.075</td><td>$3.50</td></tr>
+            <tr><td><b>Muse Spark 1.3</b></td><td><code class="inl">muse-spark-1.3</code></td><td>$1.25</td><td><span title="Cursor lists no cache-write price for this model">—</span></td><td>$0.15</td><td>$4.25</td></tr>
+            <tr><td><b>Grok 4.7</b></td><td><code class="inl">grok-4.7</code></td><td>$2</td><td><span title="Cursor lists no cache-write price for this model">—</span></td><td>$0.50</td><td>$6</td></tr>
+            <tr><td><b>Claude Sonnet 5.5</b></td><td><code class="inl">claude-sonnet-5-5</code></td><td>$2</td><td>$2.50</td><td>$0.10</td><td>$10</td></tr>
           </tbody>
         </table>
+        <p class="small"><b>Cache write</b> is what storing a prompt prefix for reuse costs; <b>cache read</b> is what
+          reusing it costs instead of full input. <b>—</b> means Cursor lists no cache-write price for that model.
+          Left off on purpose: Gemini 3.1 Pro and GPT-5.6 Terra ($12 out), Claude Opus 5.5 and GPT-5.6 Sol ($20),
+          Claude Fable 5.1 ($50), every <i>Fast</i> variant, and the older Grok 4.6 / 4.5 (same price as 4.7).</p>
         <p class="small"><b>Claude</b> — Haiku only (Opus and Sonnet are left off the list); billed by Anthropic at
           console.anthropic.com. <b>Gemini</b> — Flash models from your Google API key (Pro and Ultra left off); billed
           at aistudio.google.com. Keys live in <code class="inl">~/.cursor/mcp-secrets.env</code>.</p>
