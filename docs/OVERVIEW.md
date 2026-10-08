@@ -20,8 +20,8 @@ React 19 · Vite 6 · Tailwind v4 · Motion · a Python fetch pipeline · one se
 >
 > | | |
 > |---|---|
-> | **macOS / Linux** | `./open-guide.sh` |
-> | **Windows** | double-click `open-guide.bat` |
+> | **macOS / Linux** | `./scripts/open-guide.sh` |
+> | **Windows** | double-click `scripts/open-guide.bat` |
 > | **Any OS** | open [`index.html`](index.html) directly |
 > | **Board running?** | click the **?** button in the header |
 >
@@ -71,8 +71,6 @@ AI-JIRA-Board/
 ├── README.md                ← short landing page — ALL documentation lives in docs/
 ├── LICENSE                  ← MIT
 ├── .github/                 ← CI (typecheck + build), Dependabot, issue & PR templates
-├── open-guide.sh            ← open the guide (macOS/Linux) — no server needed
-├── open-guide.bat           ← open the guide (Windows) — no server needed
 ├── docs/                    ← 📚 documentation
 │   ├── index.html           ←   Setup & Deployment guide (per-OS install, git/Docker commands)
 │   ├── doc.html             ←   styled in-browser viewer for all the .md files below
@@ -97,13 +95,17 @@ AI-JIRA-Board/
 │   └── Start Jira Board.command.template   ←   macOS double-click launcher
 ├── src/                     ← ⚛️ the React app (compiled to dist/index.html)
 ├── jira-intern/             ← 🐍 the fetch pipeline ("the intern") + its config
-├── serve.mjs                ← optional zero-dep server for live mode
-├── Dockerfile · docker-compose.yml · docker-entrypoint.sh   ← containerised deploy
+├── server/                  ← 🖥️ optional zero-dep server for live mode (entry: serve.mjs)
+├── docker/                  ← 🐳 Dockerfile + docker-entrypoint.sh (compose builds with context = repo root)
+├── scripts/                 ← 🧰 open-guide.sh / open-guide.bat (open the guide, no server needed) · Open Board.html
+├── docker-compose.yml       ← containerised deploy (`docker compose up -d --build`)
 └── start-jira-board.sh      ← build + deploy + open, in one script (Desktop-launcher friendly)
 ```
 
-> Working files (`Dockerfile`, `serve.mjs`, `start-jira-board.sh`, `vite.config.ts`) stay at the
-> repo root on purpose — the Docker build and Vite config reference them by path.
+> The repo root keeps only what tools or habits look for there: `package.json`, `tsconfig.json`,
+> `vite.config.ts`, `vitest.config.ts`, Vite's `index.html`, `.dockerignore`, `docker-compose.yml`
+> (its `./jira-intern` bind mount is relative to it) and `start-jira-board.sh` (the Desktop
+> launcher calls it by path). Everything else lives in `docker/`, `scripts/` or `server/`.
 
 ## Setup
 

@@ -9,7 +9,7 @@ AI agent to make a correct change without re-deriving the architecture.
 ```
  Jira / Bitbucket / Confluence  ──(your tokens)──▶  jira-intern/*.py  ──▶  jira-intern/data.json + data.js
                                                         (the "intern")           │
- AI-Intern container (worker.py) ◀── .ai-queue jobs ◀── serve.mjs ◀──────────────┤ reads
+ AI-Intern container (worker.py) ◀── .ai-queue jobs ◀── server ◀─────────────────┤ reads
         │ writes aiSummary/reports back into data.json / reports/                ▼
         └────────────────────────────────────────────────────▶  dist/index.html (React, single file)
 ```
@@ -34,7 +34,9 @@ AI agent to make a correct change without re-deriving the architecture.
 | `src/components/` | Feature folders: `board/` `header/` `ticket/` `completed/` `raised/` `reports/` `settings/` `common/`. |
 | `jira-intern/` | The data pipeline. `daily_fetch.py` (active tickets + raised list + single-ticket refresh), `completed_archive.py` (historical archive), `raised.py` (raised-by-me fetch, shared), `_jira.py` (HTTP + field formatting), `devinfo.py` (branches/PRs via Jira dev-status), `pr_report.py` (deterministic PR reports), `datafile.py` (atomic writes, data.js sync), `progress.py` (progress file for button fills). |
 | `jira-intern/local-runner/` | Shell entrypoints the server invokes: `run-intern.sh`, `update-completed.sh`, `refresh-ticket.sh`, `refresh-raised.sh`, `pr-report.sh`; `runner-env.sh` (env, locks, timeouts), `config.mjs` (config merge → shellenv/prompts), `sync-datajs.mjs`. |
-| `serve.mjs` + `server/` | Zero-dependency Node server: static allowlist + the `/api/*` routes (jobs, reports, settings, AI proxy, status). |
+| `server/` (entry: `server/serve.mjs`) | Zero-dependency Node server: static allowlist + the `/api/*` routes (jobs, reports, settings, AI proxy, status). |
+| `docker/` | `Dockerfile` (build context is the repo root — `docker-compose.yml` sets `dockerfile: docker/Dockerfile`) and `docker-entrypoint.sh`. `docker-compose.yml` and `start-jira-board.sh` stay at the root on purpose. |
+| `scripts/` | `open-guide.sh` / `open-guide.bat` (open `docs/index.html`, no server) and `Open Board.html`. |
 | `ai-intern/` | The AI worker container: `worker.py` (job queue + HTTP; Ollama local or Claude/Cursor/Gemini cloud), `models.json` (local model catalog). |
 | `config/` | `jira-board.config.json` — tracked, **generic** project defaults (+ JSON schema). Personal values live OUTSIDE the repo in `~/.ai/config.json`. |
 | `setup/` | Templates ONLY (secrets, personal config, MCP, Desktop launcher) — the guide for them is `docs/SETUP.md`. Shipped into the Docker image. |
@@ -90,7 +92,7 @@ assignee, hand-off history) is the most recent full-stack feature — copy its s
    (hero + stat tiles + sticky filter bar + year/month timeline + expandable rows), own colour
    identity. Entry chip in `board/Stats.tsx`, state in `App.tsx`.
 6. **Server job** — `local-runner/refresh-raised.sh` → `server/jobs.mjs::startRaised` (respects
-   `dataWriterBusy`) → route in `serve.mjs` → `src/lib/runner.ts` client → `useInternJobs`.
+   `dataWriterBusy`) → route in `server/serve.mjs` → `src/lib/runner.ts` client → `useInternJobs`.
 7. **Feature flag** — one entry in `src/lib/settings.ts::FEATURES` + colour/icon in
    `Settings.tsx::FEATURE_STYLE` (TypeScript forces this) + `FEATURE_ORDER`.
 8. **AI** — `ai-intern/worker.py::summarize_active` walks `raised[]` after `tickets[]`;

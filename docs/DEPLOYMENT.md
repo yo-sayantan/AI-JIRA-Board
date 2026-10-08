@@ -78,7 +78,7 @@ The production build is a single self-contained `dist/index.html`. If a data dum
 (`jira-intern/data.js`), just open it:
 
 ```bash
-open dist/index.html          # macOS — or double-click "Open Board.html"
+open dist/index.html          # macOS — or double-click "scripts/Open Board.html"
 ```
 
 It reads the last dump straight off `file://`. The header's **Reload** button (or press `r`)

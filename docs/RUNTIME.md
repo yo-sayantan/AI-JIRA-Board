@@ -7,7 +7,7 @@ checking on all of it. Written for both engineers and AI agents operating this d
 
 | Container | Image | Port | Role | Key mounts |
 |---|---|---|---|---|
-| **JIRA-Board** | `jira-board:latest` | `4321` (published) | `serve.mjs` (UI + API) under `tini`; runs every fetch script (python3 in-image); in-container refresh loop (`REFRESH_ON_START=1`, `REFRESH_INTERVAL=900`) + the Settings-cadence scheduler | `./jira-intern` (**DATA** — read-write), `./config`, `~/.cursor` (ro, tokens), `~/.ai` (ro, identity) |
+| **JIRA-Board** | `jira-board:latest` | `4321` (published) | `server/serve.mjs` (UI + API) under `tini`; runs every fetch script (python3 in-image); in-container refresh loop (`REFRESH_ON_START=1`, `REFRESH_INTERVAL=900`) + the Settings-cadence scheduler | `./jira-intern` (**DATA** — read-write), `./config`, `~/.cursor` (ro, tokens), `~/.ai` (ro, identity) |
 | **AI-Intern** | `ai-intern:latest` | `4322` (internal; board proxies it) | `worker.py` — the only model-calling process: AI briefs, PR-report enrichment, model pulls; small HTTP API (`/health`, `/api/models`, `/api/jobs`) | `./jira-intern` (rw — writes briefs/reports), `~/.cursor` (ro, cloud keys) |
 | **AI-Ollama** | `ollama/ollama` | `11434` (internal) | Local inference for the worker when backend=local and Host Ollama is OFF | volume `jira-ai-models` (weights) |
 
@@ -22,7 +22,7 @@ talks to `host.docker.internal:11434` instead of AI-Ollama (use for 14B+ models 
 
 | Process | Container | What it loops on |
 |---|---|---|
-| `serve.mjs` | JIRA-Board | HTTP; holds the in-memory writer flags (daily/archive/raised) + per-ticket FIFO queue. |
+| `server/serve.mjs` | JIRA-Board | HTTP; holds the in-memory writer flags (daily/archive/raised) + per-ticket FIFO queue. |
 | scheduler (`server/schedule.mjs`) | JIRA-Board | Settings cadences → same start gates as the buttons; stamps `.schedule.json`. |
 | entrypoint refresh loop | JIRA-Board | `REFRESH_INTERVAL` seconds → `run-intern.sh` (skips itself when a writer lock is held). |
 | `worker.py` | AI-Intern | Polls `jira-intern/.ai-queue/` for jobs; serves `/api/*`; streams pull progress. |
@@ -86,7 +86,7 @@ HOST (your machine)
 │  npm run serve / dev (alt run modes)      ▲ host.docker.internal:11434
 │
 └─ Docker VM ────────────────────────────────────────────────────────────────
-   JIRA-Board:4321 ── serve.mjs ── scheduler ── refresh loop ── fetch scripts
+   JIRA-Board:4321 ── server/serve.mjs ── scheduler ── refresh loop ── fetch scripts
    │         ▲ /api/ai-* proxy                      │ locks + queue files
    │         ▼                                      ▼
    AI-Intern:4322 ── worker.py ◀── .ai-queue ── jira-intern/  (shared bind mount = THE data)

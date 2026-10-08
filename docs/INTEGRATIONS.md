@@ -70,7 +70,7 @@ LLM-agent fallback may read Confluence through MCP (policy string from `config.m
 
 ## The local server — complete API
 
-`serve.mjs` routes (all under `http://localhost:4321`):
+`server/serve.mjs` routes (all under `http://localhost:4321`):
 
 | Route | Does |
 |---|---|

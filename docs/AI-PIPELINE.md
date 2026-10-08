@@ -27,7 +27,7 @@ same level/backend/model as the button.
 ## The components
 
 ```
- board (serve.mjs) ── enqueue ──▶ jira-intern/.ai-queue/*.json ──▶ ai-intern/worker.py
+ board (server/serve.mjs) ── enqueue ──▶ jira-intern/.ai-queue/*.json ──▶ ai-intern/worker.py
       ▲                                                             │  infer() → Ollama │ Claude │ Cursor │ Gemini
       └────────── /api/ai-status · /api/ai-models · /api/ai-jobs ◀──┘  writes briefs / enriched reports back
 ```

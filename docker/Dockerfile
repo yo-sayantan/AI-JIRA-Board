@@ -8,7 +8,7 @@
 # Build & run:
 #   docker compose up -d --build          # easiest (see docker-compose.yml)
 # or:
-#   docker build -t jira-board .
+#   docker build -f docker/Dockerfile -t jira-board .
 #   docker run -d --name JIRA-Board -p 127.0.0.1:4321:4321 \
 #     -v "$HOME/.cursor:/home/node/.cursor:ro" \
 #     jira-board
@@ -67,17 +67,17 @@ WORKDIR /app
 # App server + built board + the whole intern pipeline (scripts, config, baked data).
 # --chown on every COPY (instead of a trailing chown -R) so no layer is duplicated.
 COPY --from=build --chown=node:node /app/dist ./dist
-COPY --chown=node:node serve.mjs package.json ./
+COPY --chown=node:node package.json ./
 COPY --chown=node:node server ./server
 COPY --chown=node:node jira-intern ./jira-intern
 COPY --chown=node:node config ./config
 # The Setup & Deployment guide, served at /docs/index.html — this is what the board's
 # help (?) button opens, so it must exist inside the image, not just in the repo.
 COPY --chown=node:node docs ./docs
-# The guide links to /setup/ and /docs; serve.mjs allows both.
+# The guide links to /setup/ and /docs; server/serve.mjs allows both.
 COPY --chown=node:node setup ./setup
 COPY --chown=node:node ai-intern/models.json ai-intern/cursor-prices.json ./ai-intern/
-COPY --chown=node:node docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --chown=node:node docker/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh \
  # Pristine copy used to seed an empty mounted volume on first boot.
  && cp -a jira-intern /opt/jira-intern-seed \

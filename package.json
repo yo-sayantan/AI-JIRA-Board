@@ -18,7 +18,7 @@
     "test:config": "python3 tests/test_config.py",
     "config:validate": "node jira-intern/local-runner/config.mjs validate",
     "preview": "vite preview",
-    "serve": "node serve.mjs",
+    "serve": "node server/serve.mjs",
     "open": "open dist/index.html"
   },
   "dependencies": {

@@ -18,7 +18,7 @@ npm test                 # Python suite (tests/) + vitest suite
 npm run test:py          # python3 -m unittest discover -s tests -p 'test_*.py'
 npm run test:js          # vitest run
 npm run config:validate  # schema-check config/jira-board.config.json (+ your ~/.ai/config.json)
-bash -n jira-intern/local-runner/*.sh docker-entrypoint.sh start-jira-board.sh   # shell syntax
+bash -n jira-intern/local-runner/*.sh docker/docker-entrypoint.sh start-jira-board.sh scripts/open-guide.sh   # shell syntax
 python3 -m py_compile jira-intern/*.py ai-intern/worker.py                       # Python syntax
 ```
 
@@ -102,9 +102,9 @@ punctuation and case (`claude-sonnet-5-5` = `claude-sonnet-5.5` = "Claude Sonnet
 says how many were hidden as over the cap and lists catalog ids with no price on file. Claude and
 Gemini lists are filtered by name (`_cheap_rank`, `_gemini_keep`).
 
-**Add a server route.** Add the handler to `routes` in `serve.mjs` (or the prefix branch for
+**Add a server route.** Add the handler to `routes` in `server/serve.mjs` (or the prefix branch for
 path parameters), validate inputs with the regexes in `server/config.mjs`, add it to
-`JSON_BODY_ROUTES` if it takes a body, update the header comment in `serve.mjs` **and**
+`JSON_BODY_ROUTES` if it takes a body, update the header comment in `server/serve.mjs` **and**
 `docs/API.md`, and wire the client in `src/lib/runner.ts`.
 
 **Add a runtime file or lock.** Register it in `server/config.mjs PATHS`, `.gitignore`,

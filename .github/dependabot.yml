@@ -16,7 +16,7 @@ updates:
 
   # Docker — the base image in the board's Dockerfile
   - package-ecosystem: docker
-    directory: /
+    directory: /docker
     schedule:
       interval: weekly
     labels: [dependencies, docker]

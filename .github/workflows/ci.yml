@@ -37,7 +37,7 @@ jobs:
         # not turn CI red.
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          shellcheck -S error docker-entrypoint.sh start-jira-board.sh open-guide.sh jira-intern/local-runner/*.sh
+          shellcheck -S error docker/docker-entrypoint.sh start-jira-board.sh scripts/open-guide.sh jira-intern/local-runner/*.sh
 
       - name: Validate project config
         run: npm run config:validate
@@ -59,4 +59,4 @@ jobs:
           if-no-files-found: error
 
       - name: Docker build smoke test
-        run: docker build -t ci-smoke .
+        run: docker build -f docker/Dockerfile -t ci-smoke .

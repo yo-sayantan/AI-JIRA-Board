@@ -21,7 +21,7 @@
 # (the API rejects unknown Host headers so a web page cannot DNS-rebind onto it).
 #
 # The board image runs as the unprivileged `node` user (uid 1000, HOME=/home/node — see
-# Dockerfile). Its bind mounts must be writable by uid 1000: transparent on Docker Desktop
+# docker/Dockerfile). Its bind mounts must be writable by uid 1000: transparent on Docker Desktop
 # (macOS/Windows); on a Linux host run  sudo chown -R 1000:1000 ./jira-intern  once.
 #
 # Docker Desktop stack / Compose project: JIRA-Project
@@ -32,7 +32,9 @@
 name: jira-project
 services:
   jira-board:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     image: jira-board:latest
     container_name: JIRA-Board
     ports:

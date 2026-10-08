@@ -1,14 +1,14 @@
 # HTTP API
 
-Two small HTTP surfaces exist. The **board server** (`serve.mjs` + `server/`, port **4321**) is
+Two small HTTP surfaces exist. The **board server** (`server/serve.mjs` + the rest of `server/`, port **4321**) is
 what the browser talks to; the **AI-Intern worker** (`ai-intern/worker.py`, port **4322**, never
 published by compose) is reached only through the board's proxy routes. Neither has
 authentication: both are meant for loopback use (see [SECURITY.md](SECURITY.md)).
 
-The board routes below mirror the comment block at the top of `serve.mjs` — that comment is the
+The board routes below mirror the comment block at the top of `server/serve.mjs` — that comment is the
 source of truth; update both together.
 
-## Board server — `serve.mjs`
+## Board server — `server/serve.mjs`
 
 Responses are JSON unless noted; errors are `{ ok: false, error: '<short reason>' }`. `K` is a
 Jira ticket key (`^[A-Z][A-Z0-9]+-\d+$`, any case; normalised to upper case). Parameters are query
@@ -43,7 +43,7 @@ params unless marked `body:`.
 | `GET /jira-intern/data.json` · `/jira-intern/data.js` | file, `Cache-Control: no-store` — Jira data never hits the disk cache |
 | `GET /jira-intern/reports/index.js` | file, `Cache-Control: no-store` |
 
-Only paths matching the allow-list in `serve.mjs` are ever opened (`server/http.mjs`
+Only paths matching the allow-list in `server/serve.mjs` are ever opened (`server/http.mjs`
 `createStaticHandler`); everything else under the repo is 404, including `jira-intern/*.py`,
 `.settings.json` and `reports/*.json` (reports are served through the API instead).
 
