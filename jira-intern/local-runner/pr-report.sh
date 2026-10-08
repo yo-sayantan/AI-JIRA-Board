@@ -50,8 +50,15 @@ trap 'exit 143' TERM
 
 # ── 1. Deterministic base ─────────────────────────────────────────────────────
 echo "$(date): building deterministic base report for $KEY" | tee -a "$LOG"
-if ! python3 "$PY" base "$KEY" >>"$LOG" 2>&1; then
-  echo "$(date): $KEY has no pull request (or is not in data.json) — no report" | tee -a "$LOG"; exit 2
+python3 "$PY" base "$KEY" >>"$LOG" 2>&1
+base_code=$?
+if [ "$base_code" != "0" ]; then
+  case "$base_code" in
+    4) echo "$(date): $KEY has no pull request linked in Jira — nothing to assess, no report" | tee -a "$LOG" ;;
+    3) echo "$(date): $KEY is not in data.json — refresh it first, then retry" | tee -a "$LOG" ;;
+    *) echo "$(date): base report for $KEY failed (exit $base_code) — see above" | tee -a "$LOG" ;;
+  esac
+  exit "$base_code"
 fi
 node "$HERE/sync-reports.mjs" "$INTERN_DIR" >>"$LOG" 2>&1 || true   # base is visible immediately
 

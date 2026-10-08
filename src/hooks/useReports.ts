@@ -12,6 +12,7 @@ import {
   type ReportScope,
 } from '../lib/runner'
 import { DEMO_REFUSED, demoReports } from '../demo'
+import { reportFailureSummary } from '../lib/reportFailure'
 import type { ToastFn } from './useToasts'
 
 const EMPTY: ReadonlySet<string> = new Set()
@@ -52,7 +53,7 @@ export function useReports({
 
   const refreshIndex = useCallback(async () => {
     if (demo) {
-      const next = { reports: demoReports().summaries, generating: [] }
+      const next: PrReportsIndex = { reports: demoReports().summaries, generating: [] }
       setIndex(next)
       return next
     }
@@ -89,12 +90,7 @@ export function useReports({
       const ready = finished.filter((k) => idx?.reports?.[k])
       const failed = finished.filter((k) => !idx?.reports?.[k])
       if (ready.length) toast(plural(ready.length, `PR readiness report ready for ${ready[0]}.`, '# PR readiness reports ready.'), 'success')
-      if (failed.length) {
-        toast(
-          plural(failed.length, `Report generation for ${failed[0]} finished without a report — see jira-intern/logs/.`, '# reports finished without a file — see jira-intern/logs/.'),
-          'error',
-        )
-      }
+      if (failed.length) toast(reportFailureSummary(failed, idx?.exits), 'error')
     })
   }, [enabled, status, refreshIndex, toast])
 

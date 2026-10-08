@@ -81,6 +81,13 @@ so a refresh never wipes them (`carry_ai_fields`, `fetch_raised`'s prior-map).
    scope all/year/since/keys; `.status.json` records in-flight PIDs so even a cron-launched run
    shows a spinner in the drawer.
 
+**Why a report was not generated.** `pr_report.py base` exits `3` (ticket not in `data.json`), `4`
+(no pull request linked in Jira) or `1` (internal consistency failure); the server's report queue
+keeps each key's exit code and `GET /api/reports` returns it as `exits`. The board turns it into a
+sentence (`src/lib/reportFailure.ts`) — e.g. "Jira shows no pull request for it … link a PR, refresh
+the ticket, then try again" — and groups a bulk run's failures into one toast.
+
+
 ## Feature 3 — model management (`pull-model`)
 
 Settings' download icon enqueues a pull; the worker streams Ollama's progress (bytes/percent)
