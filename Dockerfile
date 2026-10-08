@@ -76,7 +76,7 @@ COPY --chown=node:node config ./config
 COPY --chown=node:node docs ./docs
 # The guide links to /setup/ and /docs; serve.mjs allows both.
 COPY --chown=node:node setup ./setup
-COPY --chown=node:node ai-intern/models.json ./ai-intern/models.json
+COPY --chown=node:node ai-intern/models.json ai-intern/cursor-prices.json ./ai-intern/
 COPY --chown=node:node docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh \
  # Pristine copy used to seed an empty mounted volume on first boot.

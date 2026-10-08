@@ -81,7 +81,7 @@ const serveStatic = createStaticHandler(
     /^\/dist\//,
     /^\/docs\//,
     /^\/setup\//,
-    /^\/ai-intern\/models\.json$/,
+    /^\/ai-intern\/(models|cursor-prices)\.json$/,
     /^\/jira-intern\/data\.js(on)?$/,
     /^\/jira-intern\/reports\/index\.js$/,
     // Demo mode's sample board, kept beside the real dump so it can be read and edited by hand.

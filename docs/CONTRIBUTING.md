@@ -89,13 +89,18 @@ Update the reference spec `jira-intern/prompts/pr-readiness-prompt.md` so the th
 **Add a local model.** Append an object to `ai-intern/models.json` (see its `howto` field: `id`
 must equal the Ollama tag you will pull or create; `level` low/moderate/full; `fits` container/host;
 `ramGb`; links). The file is bind-mounted into AI-Intern, so `docker compose restart jira-ai` is
-enough; the Settings dropdown and the offline guide read it. For a new **cloud** model on Cursor,
-add its id to `_CURSOR_KEEP` in `worker.py`, its rates to `CLOUD_RATES` in `Settings.tsx`, and a
-row to the guide's price table (`docs/index.html#ai-cloud-prices`). Copy the id from the **Model
-ID** field on the model's own page (`cursor.com/docs/models/<slug>`) — never derive it from the
-display name: the formats differ by provider (`gpt-5.6-luna`, but `claude-sonnet-5-5`), and a
-wrong id is silently filtered out. Claude and Gemini lists are filtered by name
-(`_cheap_rank`, `_gemini_keep`).
+enough; the Settings dropdown and the offline guide read it. For a **cloud** model on Cursor there is
+nothing to add in code: a model is offered when it is in the API key's Cursor catalog and priced at
+or under $10 per 1M output tokens in `ai-intern/cursor-prices.json` (the whole
+`cursor.com/docs/models-and-pricing` table). To add or re-price one, edit that file — one row with
+`name`, `provider`, the four rates and `fast`; the worker picks it up on the next catalog fetch, and
+the Settings list, the cache-read tile and the guide's price table all follow. Two name lists shape
+the result: `exclude` hides a model you never want offered, and `include` offers one above the cap
+(an exception). Models priced at $10 or more output get a ⚠ in the dropdown, the tile and the guide. Matching ignores
+punctuation and case (`claude-sonnet-5-5` = `claude-sonnet-5.5` = "Claude Sonnet 5.5"), see
+`ai-intern/cursor_prices.py`. If a model you expect is missing, hover the key strip in Settings: it
+says how many were hidden as over the cap and lists catalog ids with no price on file. Claude and
+Gemini lists are filtered by name (`_cheap_rank`, `_gemini_keep`).
 
 **Add a server route.** Add the handler to `routes` in `serve.mjs` (or the prefix branch for
 path parameters), validate inputs with the regexes in `server/config.mjs`, add it to

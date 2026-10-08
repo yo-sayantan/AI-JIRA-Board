@@ -21,7 +21,7 @@ const SCHEMA = {
   aiLocalModel: model(80),
   aiCloudModel: model(128),
   aiCloudProvider: oneOf(CLOUD_PROVIDERS),
-  aiCloudEffort: oneOf(['low', 'medium']),
+  aiCloudEffort: oneOf(['low', 'medium', 'high']),
   aiUseHostOllama: bool,
   ollamaEnabled: bool,
   reportParallel: int(1, 6),

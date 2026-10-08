@@ -6,7 +6,7 @@
     <!-- Help & support icon — a white ? on the brand gradient. Deliberately NOT the board's
          ticket favicon, so this tab reads as "the help page" at a glance. -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
-    <title>My Jira Board — Setup &amp; Deployment Guide</title>
+    <title>Jira Board Guide — Setup &amp; Deployment Guide</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -244,7 +244,7 @@
   <body>
     <nav class="top">
       <div class="inner">
-        <span class="brand">🎫 My Jira Board</span>
+        <span class="brand">🎫 Jira Board Guide</span>
         <a href="#tools">Requirements</a>
         <a href="#install">Install</a>
         <a href="#git">Git</a>
@@ -755,30 +755,35 @@ ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
       <div class="card">
         <h3>What a report costs, per model</h3>
         <p class="small">The <b>i</b> button beside the cloud model list in Settings opens this table. Rates are
-          <b>USD per 1 million tokens</b> at standard speed; <b>Low</b> effort uses fewer tokens than <b>Medium</b>.
-          The Cursor list is a value shortlist — every model Cursor offers at or under <b>$10 output</b> per 1M tokens,
-          newest of each family only, cheapest first (<code class="inl">_CURSOR_KEEP</code> in
-          <code class="inl">ai-intern/worker.py</code>). Rates from
-          <a href="https://cursor.com/docs/models-and-pricing">Cursor's models &amp; pricing page</a>, checked 2026-10-08 —
-          update this table, the worker list and <code class="inl">CLOUD_RATES</code> in Settings together when they change.</p>
+          <b>USD per 1 million tokens</b> at standard speed. The board offers a Cursor model when it is in
+          <b>your API key's Cursor catalog</b> and costs <b>$10 or less per 1M output tokens</b> — the whole
+          <a href="https://cursor.com/docs/models-and-pricing">Cursor models &amp; pricing</a> table is on file in
+          <code class="inl">ai-intern/cursor-prices.json</code> (<span id="cursor-checked">checked …</span>), so this table, the
+          Settings list and the worker's filter always agree. Edit that file to update a price; the worker reads it on the next
+          catalog fetch. <b>Effort</b> (Low · Medium · High) is offered per model, wherever Cursor's catalog allows it.</p>
         <table>
           <thead>
-            <tr><th>Model</th><th>Id</th><th>Input</th><th>Cache write</th><th>Cache read</th><th>Output</th></tr>
+            <tr><th>Model</th><th>Maker</th><th>Input</th><th>Cache write</th><th>Cache read</th><th>Output</th></tr>
           </thead>
-          <tbody>
-            <tr><td><b>Claude Haiku 5.5</b></td><td><code class="inl">claude-haiku-5-5</code></td><td>$0.10</td><td>$0.125</td><td>$0.01</td><td>$0.50</td></tr>
-            <tr><td><b>GPT-5.6 Luna</b></td><td><code class="inl">gpt-5.6-luna</code></td><td>$0.20</td><td>$0.25</td><td>$0.02</td><td>$1.20</td></tr>
-            <tr><td><b>Composer 2.5</b></td><td><code class="inl">composer-2.5</code></td><td>$0.50</td><td><span title="Cursor lists no cache-write price for this model">—</span></td><td>$0.20</td><td>$2.50</td></tr>
-            <tr><td><b>Gemini 3.8 Flash</b></td><td><code class="inl">gemini-3.8-flash</code></td><td>$0.75</td><td><span title="Cursor lists no cache-write price for this model">—</span></td><td>$0.075</td><td>$3.50</td></tr>
-            <tr><td><b>Muse Spark 1.3</b></td><td><code class="inl">muse-spark-1.3</code></td><td>$1.25</td><td><span title="Cursor lists no cache-write price for this model">—</span></td><td>$0.15</td><td>$4.25</td></tr>
-            <tr><td><b>Grok 4.7</b></td><td><code class="inl">grok-4.7</code></td><td>$2</td><td><span title="Cursor lists no cache-write price for this model">—</span></td><td>$0.50</td><td>$6</td></tr>
-            <tr><td><b>Claude Sonnet 5.5</b></td><td><code class="inl">claude-sonnet-5-5</code></td><td>$2</td><td>$2.50</td><td>$0.10</td><td>$10</td></tr>
+          <tbody id="cursor-price-rows">
+            <tr><td colspan="6">Loading prices…</td></tr>
           </tbody>
         </table>
         <p class="small"><b>Cache write</b> is what storing a prompt prefix for reuse costs; <b>cache read</b> is what
           reusing it costs instead of full input. <b>—</b> means Cursor lists no cache-write price for that model.
-          Left off on purpose: Gemini 3.1 Pro and GPT-5.6 Terra ($12 out), Claude Opus 5.5 and GPT-5.6 Sol ($20),
-          Claude Fable 5.1 ($50), every <i>Fast</i> variant, and the older Grok 4.6 / 4.5 (same price as 4.7).</p>
+          A model only appears in <i>Settings</i> if your key's catalog includes it — Cursor's catalog is per account and
+          team — and <i>Fast</i> variants are left out (they cost more). Two lists in that file shape it:
+          <code class="inl">include</code> offers a model above the cap (an exception), and <code class="inl">exclude</code> hides one
+          you do not want offered. <span style="color:#dc2626">⚠</span> (red, at the right) marks a model whose output costs <b>more than</b> $10 per 1M tokens.</p>
+        <details class="faq">
+          <summary>Not offered — over $10, Fast, or hidden (<span id="cursor-over-count">…</span>)</summary>
+          <div class="a">
+            <table>
+              <thead><tr><th>Model</th><th>Maker</th><th>Input</th><th>Output</th></tr></thead>
+              <tbody id="cursor-over-rows"><tr><td colspan="4">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </details>
         <p class="small"><b>Claude</b> — Haiku only (Opus and Sonnet are left off the list); billed by Anthropic at
           console.anthropic.com. <b>Gemini</b> — Flash models from your Google API key (Pro and Ultra left off); billed
           at aistudio.google.com. Keys live in <code class="inl">~/.cursor/mcp-secrets.env</code>.</p>
@@ -1066,6 +1071,73 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
           }).join('') || '<tr><td colspan="4">No models in catalog.</td></tr>';
         }
       }
+      // Cursor price table → the Cloud prices section. Same source as the worker and Settings.
+      function usd(n) {
+        if (n == null) return '\u2014';
+        if (Math.floor(n) === n) return '$' + n;
+        return '$' + n.toFixed(3).replace(/0$/, '');
+      }
+      function fillPrices(data) {
+        var cap = data.maxOutputUsd == null ? 10 : data.maxOutputUsd;
+        var rank = { Cursor: 0, Anthropic: 1, OpenAI: 2, Google: 3, 'Z.ai': 4, Moonshot: 5, Meta: 6 };
+        var all = (data.models || []).slice().sort(function (a, b) {
+          var ra = rank[a.provider] == null ? 9 : rank[a.provider], rb = rank[b.provider] == null ? 9 : rank[b.provider];
+          return ra - rb || (a.output || 0) - (b.output || 0) || a.name.localeCompare(b.name);
+        });
+        var hide = (data.exclude || []).map(function (n) { return n.toLowerCase(); });
+        var inc = (data.include || []).map(function (n) { return n.toLowerCase(); });
+        var shown = all.filter(function (m) {
+          var n = m.name.toLowerCase();
+          if (hide.indexOf(n) >= 0) return false;
+          return inc.indexOf(n) >= 0 || (!m.fast && m.output != null && m.output <= cap);
+        });
+        var rest = all.filter(function (m) { return shown.indexOf(m) < 0; });
+        var dash = '<span title="Cursor lists no cache-write price for this model">\u2014</span>';
+        var checked = document.getElementById('cursor-checked');
+        if (checked) checked.textContent = 'checked ' + (data.checked || 'recently');
+        var body = document.getElementById('cursor-price-rows');
+        if (body) {
+          body.innerHTML = shown.map(function (m) {
+            var note = m.note ? ' <span class="small" title="' + esc(m.note) + '">\u24d8</span>' : '';
+            if (m.output > cap) note += ' <i title="Offered although it costs more than $' + cap + '">(over the cap)</i>';
+       
+            return '<tr><td><b>' + esc(m.name) + '</b>' + note + '</td><td>' + esc(m.provider) + '</td><td>' + usd(m.input) +
+              '</td><td>' + (m.cacheWrite == null ? dash : usd(m.cacheWrite)) + '</td><td>' + usd(m.cacheRead) + '</td><td>' + usd(m.output) + (m.output > 10 ? ' <span title="Output costs more than $10 per 1M tokens" style="color:#dc2626;float:right">\u26a0</span>' : '') + '</td></tr>';
+          }).join('') || '<tr><td colspan="6">No models at or under $' + cap + '.</td></tr>';
+        }
+        var over = document.getElementById('cursor-over-rows');
+        var count = document.getElementById('cursor-over-count');
+        if (count) count.textContent = rest.length + ' models';
+        if (over) {
+          over.innerHTML = rest.map(function (m) {
+            return '<tr><td>' + esc(m.name) + (m.fast ? ' <i>(fast)</i>' : '') + (hide.indexOf(m.name.toLowerCase()) >= 0 ? ' <i>(hidden by exclude list)</i>' : '') + '</td><td>' + esc(m.provider) + '</td><td>' + usd(m.input) + '</td><td>' + usd(m.output) + '</td></tr>';
+          }).join('');
+        }
+      }
+      function loadPrices() {
+        var urls = [];
+        try { urls.push(new URL('../ai-intern/cursor-prices.json', location.href).href); } catch (e) { /* ignore */ }
+        try {
+          if (location.origin && location.origin !== 'null') urls.push(location.origin + '/ai-intern/cursor-prices.json');
+        } catch (e) { /* ignore */ }
+        var i = 0;
+        function next() {
+          if (i >= urls.length) {
+            var body = document.getElementById('cursor-price-rows');
+            if (body) body.innerHTML = '<tr><td colspan="6">Could not load <code class="inl">ai-intern/cursor-prices.json</code>. Open this guide from the board.</td></tr>';
+            if (window.JBAnchors) window.JBAnchors.refresh();
+            return;
+          }
+          fetch(urls[i++]).then(function (r) {
+            if (!r.ok) throw new Error(String(r.status));
+            return r.json();
+          }).then(function (data) {
+            fillPrices(data);
+            if (window.JBAnchors) window.JBAnchors.refresh();
+          }).catch(next);
+        }
+        next();
+      }
       function loadCatalog() {
         var urls = [];
         try { urls.push(new URL('../ai-intern/models.json', location.href).href); } catch (e) { /* ignore */ }
@@ -1095,6 +1167,7 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
         next();
       }
       loadCatalog();
+      loadPrices();
     </script>
   </body>
 </html>

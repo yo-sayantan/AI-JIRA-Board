@@ -140,6 +140,8 @@ services:
       - ./config:/app/config:ro
       # Model catalogue: edit it, then `docker compose restart jira-ai` — no rebuild.
       - ./ai-intern/models.json:/app/models.json:ro
+      # Cursor price table: edit it and the worker picks it up on the next catalog fetch — no rebuild.
+      - ./ai-intern/cursor-prices.json:/app/cursor-prices.json:ro
       # Private CA — same as the board (uncomment both or neither).
       # - ${JIRA_CA_BUNDLE_HOST:-/dev/null}:/etc/ssl/private-ca.pem:ro
     extra_hosts:

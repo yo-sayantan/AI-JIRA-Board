@@ -324,17 +324,55 @@ export async function startTicketRefresh(key: string): Promise<TicketRefreshStar
   }
 }
 
+/** USD per 1M tokens, from ai-intern/cursor-prices.json. null = Cursor lists no such charge. */
+export interface CloudPrice {
+  input: number | null
+  cacheWrite: number | null
+  cacheRead: number | null
+  output: number | null
+}
+
 export interface CloudModelChoice {
   id: string
   label: string
-  /** Cursor effort values this model accepts. Empty for Claude. */
+  /** Cursor effort values this model accepts (low / medium / high). Empty for Claude. */
   efforts?: string[]
+  /** Cursor models only: who makes it, and what it costs. */
+  provider?: string
+  price?: CloudPrice
+  /** A pricing caveat worth showing (e.g. a surcharge above 100k input tokens). */
+  note?: string | null
+  /** Offered although it costs more than the cap (your `include` list). */
+  exception?: boolean
+  /** False for a pinned model your key's Cursor catalog does not list — Cursor may reject it. */
+  inCatalog?: boolean
+}
+
+/** What the worker did with the key's Cursor catalog — why the list is as long as it is. */
+export interface CursorCatalogInfo {
+  total: number
+  shown: number
+  overCap: number
+  /** The over-cap models on this key, so a wanted one can be found and priced. */
+  over?: { id: string; name: string; output: number | null }[]
+  /** Models on this key that you chose not to offer (the `exclude` list in cursor-prices.json). */
+  hidden?: number
+  /** Pinned models (your `pin` list) that this key's catalog does not list. */
+  pinned?: string[]
+  exceptions?: number
+  fast: number
+  /** Cursor's automatic pickers (default, auto-*) — no fixed price, never offered. */
+  routed?: number
+  unpriced: { id: string; name: string }[]
+  capUsd: number
+  pricesChecked?: string | null
 }
 
 export interface CloudProviderModels {
   configured: boolean
   models: CloudModelChoice[]
   error?: string | null
+  catalog?: CursorCatalogInfo
 }
 
 export async function getCloudModels(): Promise<{

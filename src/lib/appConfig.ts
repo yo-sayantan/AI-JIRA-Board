@@ -44,7 +44,7 @@ export interface AppRuntimeConfig {
     localModel?: string
     cloudProvider?: 'claude' | 'cursor' | 'gemini'
     cloudModel?: string
-    cloudEffort?: 'low' | 'medium'
+    cloudEffort?: 'low' | 'medium' | 'high'
     useHostOllama?: boolean
     ollamaEnabled?: boolean
   }

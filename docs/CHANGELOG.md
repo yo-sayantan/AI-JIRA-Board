@@ -5,12 +5,21 @@ code does now, so a reader can check them against the tree.
 
 ## Unreleased — primary branch
 
-- **Cursor model shortlist refreshed** to every model Cursor sells at or under $10 output per 1M
-  tokens, newest of each family: Claude Haiku 5.5, GPT-5.6 Luna, Composer 2.5, **Gemini 3.8
-  Flash**, **Muse Spark 1.3**, Grok 4.7 and **Claude Sonnet 5.5**. Retired from the list (no longer
-  offered by Cursor, or an older same-price sibling): Gemini 3 Flash, Gemini 3.6 Flash, Kimi K2.7
-  Code, GLM 5.2, Grok 4.6 and Claude Sonnet 5. The guide's price table gains a **Cache write**
-  column. Ids and rates come from Cursor's own pages, checked 2026-10-08.
+- **Cursor models are offered by price, from the full table.** The hand-typed id allow-list is gone
+  (it had silently shrunk the Settings dropdown to three models, and an earlier refresh had read
+  only the first 20 of Cursor's 59 rows). `ai-intern/cursor-prices.json` holds the whole
+  cursor.com/docs/models-and-pricing table; a model is offered when it is in the API key's Cursor
+  catalog and costs $10 or less per 1M output tokens — 28 models across Cursor, Anthropic, OpenAI,
+  Google, Z.ai, Moonshot and Meta, grouped by maker and cheapest first. Ids are matched ignoring
+  punctuation and case, and a catalog model with no price on file is reported, not dropped. The
+  Settings key strip says how many were shown / over the cap / unpriced, the cache-read tile reads
+  the live price, and the guide's table (now with **Cache write**) renders from the same file.
+- **Curated, with a cost warning.** `cursor-prices.json` has an `exclude` list (hidden: Grok 4.5,
+  Gemini 2.5 / 3 / 3.5 / 3.6 / 3.7 Flash, GPT-5.4 Nano, Claude 4.5 Haiku) and an `include` list of
+  exceptions above the $10 cap (GPT-5.6 Terra, Gemini 3.1 Pro). Any model whose output costs $10 or
+  more per 1M tokens is marked ⚠ in the dropdown, the Output tile and the guide.
+- **Effort now has a High level** (Low · Medium · High) for Cursor models, wherever the catalog's
+  effort parameter lists it.
 - A ticket with several branches now shows the one with the **newest commit** as its branch, and
   the PR banners (card badge, approvals, drawer badge) follow that branch's own PR instead of
   whichever PR was updated last. Other PRs stay listed and count toward `+N PR`. Commit times come
@@ -78,7 +87,7 @@ code does now, so a reader can check them against the tree.
   names; both default to empty. `jira-intern/config.json` (dead) was deleted; the only config is
   `config/jira-board.config.json` plus the sparse `~/.ai/config.json` override.
 - Won't fix / cancelled / rejected statuses map to Done on both sides of the column contract.
-- Cursor cloud models are a curated allow-list (`_CURSOR_KEEP`); Claude lists Haiku, Gemini lists
+- Cursor cloud models are filtered by price (`cursor-prices.json`); Claude lists Haiku, Gemini lists
   Flash/Lite.
 
 ### Tests and CI
