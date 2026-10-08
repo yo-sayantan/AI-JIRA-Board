@@ -35,8 +35,9 @@ AI agent to make a correct change without re-deriving the architecture.
 | `jira-intern/` | The data pipeline. `daily_fetch.py` (active tickets + raised list + single-ticket refresh), `completed_archive.py` (historical archive), `raised.py` (raised-by-me fetch, shared), `_jira.py` (HTTP + field formatting), `devinfo.py` (branches/PRs via Jira dev-status), `pr_report.py` (deterministic PR reports), `datafile.py` (atomic writes, data.js sync), `progress.py` (progress file for button fills). |
 | `jira-intern/local-runner/` | Shell entrypoints the server invokes: `run-intern.sh`, `update-completed.sh`, `refresh-ticket.sh`, `refresh-raised.sh`, `pr-report.sh`; `runner-env.sh` (env, locks, timeouts), `config.mjs` (config merge → shellenv/prompts), `sync-datajs.mjs`. |
 | `server/` (entry: `server/serve.mjs`) | Zero-dependency Node server: static allowlist + the `/api/*` routes (jobs, reports, settings, AI proxy, status). |
-| `docker/` | `Dockerfile` (build context is the repo root — `docker-compose.yml` sets `dockerfile: docker/Dockerfile`) and `docker-entrypoint.sh`. `docker-compose.yml` and `start-jira-board.sh` stay at the root on purpose. |
-| `scripts/` | `open-guide.sh` / `open-guide.bat` (open `docs/index.html`, no server) and `Open Board.html`. |
+| `docker/` | `Dockerfile` (build context is the repo root — `docker-compose.yml` sets `dockerfile: docker/Dockerfile`) and `docker-entrypoint.sh`. `docker-compose.yml` stays at the root on purpose. |
+| `scripts/` | `start-jira-board.sh` (host build + Docker deploy), `open-guide.sh` / `open-guide.bat` (open `docs/index.html`, no server) and `Open Board.html`. |
+| `tooling/` | `vite.config.ts`, `vitest.config.ts` — selected by `--config` in the npm scripts. `src/tsconfig.json` is the TypeScript config; `.claude/CLAUDE.md` is the agent entry point. |
 | `ai-intern/` | The AI worker container: `worker.py` (job queue + HTTP; Ollama local or Claude/Cursor/Gemini cloud), `models.json` (local model catalog). |
 | `config/` | `jira-board.config.json` — tracked, **generic** project defaults (+ JSON schema). Personal values live OUTSIDE the repo in `~/.ai/config.json`. |
 | `setup/` | Templates ONLY (secrets, personal config, MCP, Desktop launcher) — the guide for them is `docs/SETUP.md`. Shipped into the Docker image. |
@@ -68,7 +69,7 @@ AI agent to make a correct change without re-deriving the architecture.
    by name (never `git add -A`), and keep `config/jira-board.config.json` generic.
 6. **`npm run build` must pass before any commit** (`tsc --noEmit && vite build`), and
    `npm test` runs the Python unittests.
-7. **Deploy packages the host-built dist.** `start-jira-board.sh` builds `dist/` on the host and
+7. **Deploy packages the host-built dist.** `scripts/start-jira-board.sh` builds `dist/` on the host and
    passes `--build-arg DIST_SOURCE=prebuilt`; in-image `npm ci` over the Docker VM's slow network
    silently drops optional native binaries (TypeScript 7's platform packages) and the build dies.
    Never add `--pull` to compose build. See `docs/DEPLOYMENT.md`.
@@ -118,7 +119,7 @@ npm run dev          # Vite dev server with fixture data (src/fixtures.ts)
 npm run build        # tsc --noEmit && vite build → dist/index.html (single file)
 npm test             # python unittest under tests/
 npm run serve        # zero-dependency local server on :4321
-bash start-jira-board.sh   # Docker deploy (host-builds dist, DIST_SOURCE=prebuilt)
+bash scripts/start-jira-board.sh   # Docker deploy (host-builds dist, DIST_SOURCE=prebuilt)
 ```
 
 Docker compose runs three containers: **JIRA-Board** (server + fetch), **AI-Intern** (worker),
@@ -129,6 +130,12 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
 
 - `search_jira` retries `statusCategory = Done` as explicit statuses on 400 (old Jira);
   `fetch_raised` retries without `subTaskIssueTypes()` the same way.
+- A sub-task shares its parent's PR/branch in Jira's dev-status whenever its commits sit on the
+  parent's branch. That code is the PARENT's: `devinfo.scope_to_subtask` strips it from the
+  sub-task (unless the PR title / branch name has the sub-task's key) in every path that fills
+  `prs`/`branches` — and the Done gate (`transition.py::evaluate(is_subtask=…)`, mirrored in
+  `src/demo/gates.ts`) lets a sub-ticket close with no PR but not with an unmerged one of its own.
+- A PR's `sourceBranch` comes from Bitbucket's PR record when it was fetched, not from dev-status.
 - Jira comment lists in search payloads are TRUNCATED when long — `comments_for` falls back to
   pagination; don't read `fields.comment.comments` directly.
 - `devinfo` returning **no entry** for a key means the LOOKUP failed; `{}`-with-empty-lists means

@@ -16,6 +16,9 @@ data.json, so a PR merged five minutes ago counts:
                 Lands on a READY-for-QA status, never a QA-in-progress one: that shelf belongs
                 to the QA team (the board shows it as the "QA In Progress" sub-division).
   • Done      → BLOCK unless every PR is merged and every QA ticket is done.
+                A SUB-TICKET is lighter: no PR and no QA ticket are fine (its work usually rides on
+                the parent's PR), but a PR of its own that is not merged yet, or an open QA ticket,
+                still blocks. Only the sub-ticket's OWN PRs count — the parent's PR is not its PR.
 
 Nothing here writes data.json; the board follows up with a normal single-ticket refresh.
 """
@@ -45,11 +48,11 @@ def is_qa(issue):
     return "qa" in text.split() or "qa" in text or "test" in text or "verif" in text
 
 
-def evaluate(target, prs, qa_issues):
+def evaluate(target, prs, qa_issues, is_subtask=False):
     """Gate verdict for a move: (blocker or None, [warnings]). Pure, so it is unit-tested."""
     live = [p for p in prs if p.get("state") != "declined"]
     warnings = []
-    if target == "rev" and not live:
+    if target == "rev" and not live and not is_subtask:
         warnings.append("No pull request found for this ticket — raise one for review.")
     if target == "qa" and not qa_issues:
         warnings.append("No QA ticket found for this ticket — QA needs one.")
@@ -58,14 +61,16 @@ def evaluate(target, prs, qa_issues):
 
     problems = []
     if not live:
-        problems.append("it has no merged pull request")
+        if not is_subtask:
+            problems.append("it has no merged pull request")
     else:
         unmerged = [p for p in live if not p.get("merged")]
         if unmerged:
             names = ", ".join(f"#{p['id']}" if p.get("id") else "a PR" for p in unmerged)
             problems.append(f"{names} not merged yet")
     if not qa_issues:
-        problems.append("it has no QA ticket")
+        if not is_subtask:
+            problems.append("it has no QA ticket")
     else:
         open_qa = [q for q in qa_issues if status_column(q.get("status")) != "done"]
         if open_qa:
@@ -96,13 +101,19 @@ def qa_issues_of(fields):
     return [i for i in found.values() if is_qa(i)]
 
 
-def live_prs(issue_id):
+def live_prs(issue_id, key=None, parent=None):
+    """The ticket's pull requests from live Jira. For a sub-ticket (`parent` = the parent's
+    {id, key}) only its own: a PR it shares with the parent belongs to the parent."""
     # Imported here: devinfo pulls in the Bitbucket client, which the gate-only tests don't need.
     import devinfo
 
     info = devinfo.fetch_one(issue_id, enrich_open=False)
     if info is None:
         raise RuntimeError("could not read pull requests from Jira")
+    if parent and parent.get("id"):
+        # If the parent cannot be read nothing can be told apart; scope_to_subtask then leaves the
+        # list whole, which can only block more, never wrongly allow.
+        info = devinfo.scope_to_subtask(key, info, devinfo.fetch_one(parent["id"], enrich_open=False))
     return info["prs"]
 
 
@@ -119,13 +130,15 @@ def pick_transition(transitions, target):
 
 
 def move(key, target):
-    issue = jira_get(f"/rest/api/2/issue/{key}?fields=status,subtasks,issuelinks,issuetype,summary", timeout=30, retries=1)
+    issue = jira_get(f"/rest/api/2/issue/{key}?fields=status,subtasks,issuelinks,issuetype,summary,parent", timeout=30, retries=1)
     fields = issue["fields"]
     current = fields["status"]["name"]
     if status_column(current) == target:
         return {"ok": True, "moved": False, "status": current, "warnings": []}
 
-    blocker, warnings = evaluate(target, live_prs(issue["id"]), qa_issues_of(fields))
+    parent = fields.get("parent") or None
+    is_subtask = bool(parent) or bool((fields.get("issuetype") or {}).get("subtask"))
+    blocker, warnings = evaluate(target, live_prs(issue["id"], key, parent), qa_issues_of(fields), is_subtask)
     if blocker:
         return {"ok": False, "blocked": True, "reason": blocker}
 

@@ -105,5 +105,34 @@ class StatusColumns(unittest.TestCase):
             self.assertEqual(status_column(s), "qa", s)
 
 
+class SubticketGates(unittest.TestCase):
+    """A sub-ticket's work usually rides on its parent's PR: it may be closed with no PR of its own,
+    but not while a PR of its own is still open."""
+
+    def test_done_without_any_pr_or_qa_ticket_is_allowed(self):
+        self.assertEqual(evaluate("done", [], [], is_subtask=True), (None, []))
+
+    def test_done_still_blocked_by_its_own_unmerged_pr(self):
+        blocker, _ = evaluate("done", [OPEN_PR], [], is_subtask=True)
+        self.assertIn("#7 not merged yet", blocker)
+        self.assertNotIn("no QA ticket", blocker)
+
+    def test_done_allowed_once_its_own_pr_is_merged(self):
+        self.assertEqual(evaluate("done", [MERGED_PR], [], is_subtask=True), (None, []))
+
+    def test_an_open_qa_ticket_still_blocks_a_subticket(self):
+        self.assertIn("QA not done", evaluate("done", [], [QA_OPEN], is_subtask=True)[0])
+
+    def test_a_declined_pr_is_ignored(self):
+        self.assertEqual(evaluate("done", [DECLINED_PR], [], is_subtask=True), (None, []))
+
+    def test_review_does_not_nag_a_subticket_about_a_missing_pr(self):
+        self.assertEqual(evaluate("rev", [], [], is_subtask=True), (None, []))
+
+    def test_a_normal_ticket_is_unchanged(self):
+        self.assertIn("no merged pull request", evaluate("done", [], [QA_DONE])[0])
+        self.assertIn("no QA ticket", evaluate("done", [MERGED_PR], [])[0])
+
+
 if __name__ == "__main__":
     unittest.main()
