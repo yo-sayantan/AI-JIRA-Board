@@ -22,6 +22,7 @@ How the pieces talk to each other and to the outside world. Companion to `DATA-F
 | Query | Job |
 |---|---|
 | `assignee = currentUser() AND statusCategory != Done OR (… Done AND resolved >= -10d)` | daily fetch |
+| `reporter = currentUser() AND (not Done OR resolved >= -10d)` → QA tickets only, then `key in (<QA keys>)` | daily fetch: QA tickets I raised or that link to my tickets (not assigned to me, so the assignee search misses them) |
 | `parent in (<active keys>)` | all sub-tasks, one batched search |
 | `(assignee WAS currentUser() OR assignee = currentUser()) [+ scope]` | archive rebuild |
 | `key in (<parent keys>)` | archive context parents |

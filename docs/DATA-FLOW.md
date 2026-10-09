@@ -42,6 +42,9 @@ document is the complete inventory: who writes what, when, and the invariants th
 
 ```
 search: assignee = currentUser() AND (not Done OR resolved >= -10d)   [expand=changelog]
+  → + QA tickets NOT assigned to me (qa_rules.is_qa_ticket): ones I reported (`reporter = currentUser()`)
+    and ones linked to my tickets — fetched by key, then built like any ticket. A failed lookup carries
+    the earlier QA tickets forward instead of dropping them.
   → ONE batched `parent in (…)` search for all sub-tasks
   → ONE parallel dev-status batch (devinfo.fetch_many) for parents + subtasks
   → build tickets in a ThreadPoolExecutor (REFRESH_WORKERS)
@@ -82,7 +85,7 @@ fetch_raised(): JQL reporter = currentUser() AND issuetype not in subTaskIssueTy
 Re-fetches ONE issue (+ its sub-tasks) with `force_refresh`, Bitbucket skipped
 (`enrich_open=False` — dev-status only), replaces EVERY copy of the key (own card, nested under
 parent, archive row) via `_merge_ticket`, updates the raised row if present — and if the ticket
-is raised-only and not assigned to me, it does NOT get appended to `tickets[]`.
+is raised-only and not assigned to me, it does NOT get appended to `tickets[]` — unless it is a QA ticket, which belongs on the board.
 
 ### 5. AI brief merge — `worker.py::write_briefs`
 

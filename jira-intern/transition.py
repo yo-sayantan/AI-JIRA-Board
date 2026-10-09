@@ -33,6 +33,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from _jira import jira_get, jira_post, load_env, status_column  # noqa: E402
+from qa_rules import QA_LABEL, is_qa_ticket  # noqa: E402,F401  (re-exported: the board's QA test, one copy)
 
 # The drag-and-drop targets. ONE list, shared with the server (server/jobs.mjs) and the board
 # (src/lib/columns.ts), so a new target cannot be accepted by one side and refused by another.
@@ -65,27 +66,6 @@ def is_qa_in_progress(status):
     if not s or s in _QA_READY:
         return False
     return not any(w in _QA_WAITING_WORDS for w in re.split(r"[^a-z0-9]+", s))
-
-
-_QA_TYPE = re.compile(r"(^|[^a-z0-9])qa([^a-z0-9]|$)", re.I)
-# A label that marks the ticket ITSELF as QA — not one about a dev ticket's QA ("qa-failed", "needs-qa").
-QA_LABEL = re.compile(r"^(qa|qa[-_ ]?(ticket|task|test|testing)|test(ing)?([-_ ]?(ticket|task))?)$", re.I)
-_QA_TITLE_LEAD = re.compile(r"^\s*\[?\s*qa\b", re.I)
-_QA_TITLE_PREFIX = re.compile(r"\bqa\s*[:\-–—]", re.I)
-
-
-def is_qa_ticket(type_name, title, labels=()):
-    """A QA ticket: its TYPE says QA / Test, a label marks it (QA_LABEL), or its TITLE leads with a QA prefix
-    ("QA: …", "[QA] …"). Stricter than is_qa (a dev ticket that merely says "verify" is not one) because it
-    locks the ticket into the QA lane. Mirror of isQaTicket in src/lib/moveRules.ts."""
-    type_name, title = type_name or "", title or ""
-    return bool(
-        _QA_TYPE.search(type_name)
-        or re.search("test", type_name, re.I)
-        or any(QA_LABEL.match((l or "").strip()) for l in labels or ())
-        or _QA_TITLE_LEAD.search(title)
-        or _QA_TITLE_PREFIX.search(title)
-    )
 
 
 def lane_blocker(current_column, target, qa_ticket):

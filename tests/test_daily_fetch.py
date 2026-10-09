@@ -264,5 +264,54 @@ class ForeignPrsDropped(unittest.TestCase):
         self.assertEqual(info["branches"], ["feature/ABC-9"])
 
 
+def _qa_issue(key, type_name="Task", title="Build it", labels=(), links=()):
+    return {"key": key, "id": key[-1], "fields": {"issuetype": {"name": type_name}, "summary": title, "labels": list(labels), "issuelinks": list(links)}}
+
+
+class QaTicketsOnTheBoard(unittest.TestCase):
+    """QA tickets are not assigned to me, so the assignee search never finds them: ones I raised and ones
+    linked to my tickets are pulled in separately."""
+
+    def run_extras(self, mine, reported, by_key, fail=False):
+        calls = []
+
+        def fake_search(jql, fields=None, expand=None):
+            calls.append(jql)
+            if fail:
+                raise RuntimeError("boom")
+            if jql.startswith("reporter"):
+                return reported
+            wanted = jql.split("(", 1)[1].split(")", 1)[0].split(",")
+            return [by_key[k] for k in wanted if k in by_key]
+
+        with mock.patch.object(daily_fetch, "search_jira", side_effect=fake_search):
+            issues, ok = daily_fetch.fetch_qa_extras({i["key"]: i for i in mine})
+        return [i["key"] for i in issues], ok, calls
+
+    def test_a_qa_ticket_i_raised_comes_in_and_a_raised_dev_ticket_does_not(self):
+        qa, dev = _qa_issue("Q-1", "QA Task", "QA: check export"), _qa_issue("D-9", "Story", "Verify the fix")
+        keys, ok, _ = self.run_extras([_qa_issue("M-1")], [qa, dev], {"Q-1": qa})
+        self.assertEqual((keys, ok), (["Q-1"], True))
+
+    def test_a_qa_ticket_linked_to_one_of_mine_comes_in(self):
+        link = {"outwardIssue": {"key": "Q-2", "fields": {"issuetype": {"name": "Task"}, "summary": "QA: smoke test"}}}
+        linked_dev = {"outwardIssue": {"key": "D-2", "fields": {"issuetype": {"name": "Story"}, "summary": "Verify"}}}
+        qa = _qa_issue("Q-2", "Task", "QA: smoke test")
+        keys, ok, _ = self.run_extras([_qa_issue("M-1", links=[link, linked_dev])], [], {"Q-2": qa})
+        self.assertEqual((keys, ok), (["Q-2"], True))
+
+    def test_my_own_tickets_are_not_pulled_in_twice(self):
+        mine = _qa_issue("Q-3", "QA Task", "QA: mine")
+        keys, _, _ = self.run_extras([mine], [mine], {})
+        self.assertEqual(keys, [])
+
+    def test_a_failed_lookup_is_not_reported_as_none(self):
+        self.assertEqual(self.run_extras([_qa_issue("M-1")], [], {}, fail=True)[:2], ([], False))
+
+    def test_a_label_marks_a_qa_ticket(self):
+        qa = _qa_issue("Q-4", "Task", "Smoke test", labels=["qa"])
+        self.assertEqual(self.run_extras([], [qa], {"Q-4": qa})[0], ["Q-4"])
+
+
 if __name__ == "__main__":
     unittest.main()

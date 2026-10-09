@@ -43,6 +43,7 @@ from _jira import bb_get as _bb_get  # noqa: E402
 from _sprint import apply_sprint  # noqa: E402
 from datafile import atomic_dump, data_lock, prepend_status, read_json, write_outputs  # noqa: E402
 from progress import clear_progress, set_progress  # noqa: E402
+from qa_rules import is_qa_ticket  # noqa: E402
 from raised import build_raised_row, fetch_raised  # noqa: E402
 
 INTERN = os.path.dirname(os.path.abspath(__file__))
@@ -270,6 +271,45 @@ def is_mine(assignee):
             return True
     display = str(assignee.get("displayName") or "").upper()
     return bool(display) and re.search(rf"(?<![A-Z0-9]){re.escape(MY_ACCOUNT)}(?![A-Z0-9])", display) is not None
+
+
+QA_WINDOW = "(statusCategory != Done OR resolved >= -10d)"
+
+
+def _issue_is_qa(issue):
+    f = issue.get("fields") or {}
+    return is_qa_ticket((f.get("issuetype") or {}).get("name"), f.get("summary"), f.get("labels"))
+
+
+def fetch_qa_extras(issue_map):
+    """QA tickets that are NOT assigned to me but belong on my board: ones I raised (reporter = me) and ones
+    linked to a ticket of mine. QA work is someone else's to do, so the assignee search never finds it.
+    Returns ([issues with full fields + changelog], ok); a failed lookup is ok=False, never "none exist"."""
+    try:
+        found = {}
+        reported = search_jira(f"reporter = currentUser() AND {QA_WINDOW} ORDER BY updated DESC")
+        for i in reported:
+            if i.get("key") not in issue_map and _issue_is_qa(i):
+                found[i["key"]] = i
+        # Linked to one of mine. The link carries only type + title, which is all the test needs
+        # (labels are checked on the fully fetched issue below).
+        linked = {}
+        for issue in issue_map.values():
+            for link in (issue.get("fields") or {}).get("issuelinks") or []:
+                other = link.get("outwardIssue") or link.get("inwardIssue") or {}
+                of = other.get("fields") or {}
+                key = other.get("key")
+                if key and key not in issue_map and key not in found and is_qa_ticket((of.get("issuetype") or {}).get("name"), of.get("summary")):
+                    linked[key] = other
+        wanted = list(found) + list(linked)
+        out = []
+        for n in range(0, len(wanted), 50):
+            chunk = wanted[n : n + 50]
+            out.extend(search_jira("key in (" + ",".join(chunk) + f") AND {QA_WINDOW} ORDER BY key ASC", expand="changelog"))
+        return [i for i in out if not is_excluded(i.get("key"))], True
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"WARN QA-ticket lookup failed, carrying earlier ones forward: {e}\n")
+        return [], False
 
 
 def extract_links(*texts, prior_conf=None, prior_ext=None):
@@ -561,6 +601,7 @@ def _main(existing_path, state_path):
         state = {}
 
     prior_map = {t["key"]: t for t in existing.get("tickets", [])}
+    carried_qa = []
 
     # Probe Bitbucket once; the key-scan supplement is skipped for the run when it is down.
     BB_OK = True
@@ -585,6 +626,17 @@ def _main(existing_path, state_path):
         if i["key"] not in issue_map:
             issue_map[i["key"]] = i
             active_keys.append(i["key"])
+    # QA tickets raised by me / linked to my tickets ride the same pipeline (sub-tasks, PRs, build).
+    qa_issues, qa_ok = fetch_qa_extras(issue_map)
+    for i in qa_issues:
+        if i["key"] not in issue_map:
+            issue_map[i["key"]] = i
+            active_keys.append(i["key"])
+    if not qa_ok:
+        # "Couldn't look" is not "there are none": keep the QA tickets the board already had.
+        for k, t in prior_map.items():
+            if k not in issue_map and is_qa_ticket(t.get("type"), t.get("title"), t.get("labels")):
+                carried_qa.append(t)
 
     total = len(active_keys)
     set_progress("daily", done=0, total=total, phase="subtasks")
@@ -711,6 +763,10 @@ def _main(existing_path, state_path):
         for s in ticket.get("subtasks") or []:
             if isinstance(s, dict) and s.get("key"):
                 new_state[s["key"]] = ticket_to_state(s)
+
+    for t in carried_qa:
+        tickets.append(copy.deepcopy(t))
+        new_state[t["key"]] = ticket_to_state(t)
 
     # Raised-by-me rides along with every daily run — one extra search, no per-ticket calls.
     set_progress("daily", done=total, total=total, phase="raised")
@@ -912,7 +968,8 @@ def refresh_one(key):
         if in_raised:
             row = build_raised_row(issue)
             data["raised"] = [row if r.get("key") == key else r for r in raised_rows]
-        if prior is None and in_raised and not is_mine((issue.get("fields") or {}).get("assignee")):
+        # A QA ticket belongs on the board even when it is raised by me / assigned to someone else.
+        if prior is None and in_raised and not is_mine((issue.get("fields") or {}).get("assignee")) and not _issue_is_qa(issue):
             where = "raised"
         else:
             where = _merge_ticket(data, ticket)
