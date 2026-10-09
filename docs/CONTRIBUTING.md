@@ -18,7 +18,7 @@ npm test                 # Python suite (tests/) + vitest suite
 npm run test:py          # python3 -m unittest discover -s tests -p 'test_*.py'
 npm run test:js          # vitest run
 npm run config:validate  # schema-check config/jira-board.config.json (+ your ~/.ai/config.json)
-bash -n jira-intern/local-runner/*.sh docker/docker-entrypoint.sh start-jira-board.sh scripts/open-guide.sh   # shell syntax
+bash -n jira-intern/local-runner/*.sh docker/docker-entrypoint.sh scripts/start-jira-board.sh scripts/open-guide.sh   # shell syntax
 python3 -m py_compile jira-intern/*.py ai-intern/worker.py                       # Python syntax
 ```
 

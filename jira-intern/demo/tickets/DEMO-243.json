@@ -1,8 +1,8 @@
 {
   "key": "DEMO-243",
   "title": "Tenant-scoped report permissions",
-  "status": "In QA",
-  "column": "qa",
+  "status": "In Review",
+  "column": "rev",
   "type": "Story",
   "priority": "High",
   "storyPoints": 8,

@@ -8,7 +8,8 @@ A tour of what's on screen and how to drive it.
   days left · progress bar), live **search**, light/dark toggle, and **Refresh/Reload**.
 - **Stat chips** — one per column plus scope toggles. Click to filter; click again to clear.
 - **Board** — the kanban columns: To Do · Blocked · In Progress · In Review · QA · Done. Any empty column folds to a slim rail so the columns with cards get the width (it opens to a compact *Drop here* zone while you drag); QA has a separate **QA In Progress** space under it, in the same column, for tickets the QA team has picked up (like On Hold under Blocked, but you cannot drop on it).
-- **On Hold** — its own small space under Blocked, in the same column: drop a card on it to put the ticket On Hold in Jira; held tickets are listed there.
+- **QA lane** — QA and QA In Progress are for QA tickets (raised by you or linked to your work). A ticket of yours can't be dropped there, and a QA ticket can only move among QA · QA In Progress · To Do · Done; zones that won't accept the card you're dragging dim and say *Not for this ticket*.
+- **On Hold** — its own small space under Blocked, in the same column: drop a card on it to put the ticket On Hold in Jira; held tickets are listed there. Blocked, On Hold and QA In Progress can each be switched off in Settings → Board sections — a switched-off section and its tickets are not shown at all.
 - **Demo mode** (Settings → Features) — swaps in a sample board to try drag-and-drop and the
   gates on. Nothing reaches Jira while it is on, and your real board returns when you turn it off.
 - **Next Sprint** — a bar for tickets queued in a sprint that hasn't started (see below).

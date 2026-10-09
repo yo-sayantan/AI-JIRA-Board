@@ -1,8 +1,8 @@
 {
   "key": "DEMO-242",
   "title": "Per-report export history",
-  "status": "QA",
-  "column": "qa",
+  "status": "In Review",
+  "column": "rev",
   "type": "Story",
   "priority": "Medium",
   "storyPoints": 3,

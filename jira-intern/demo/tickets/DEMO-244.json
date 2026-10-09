@@ -1,8 +1,8 @@
 {
   "key": "DEMO-244",
   "title": "Dedupe rows in the match export",
-  "status": "In Testing",
-  "column": "qa",
+  "status": "In Review",
+  "column": "rev",
   "type": "Bug",
   "priority": "Medium",
   "storyPoints": 2,

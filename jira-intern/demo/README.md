@@ -44,6 +44,9 @@ the whole set.
 - **The Done gate** — `DEMO-242` passes every gate (drag it to Done and it goes through).
   `DEMO-240` (QA not started), `DEMO-241` (no QA ticket), `DEMO-244` (fix PR unmerged) and
   `DEMO-201` (no PR at all) are each refused for a different reason.
+- **The QA lane** — `DEMO-246` (Ready for QA) and `DEMO-245` (Under QA) are QA tickets; `DEMO-247` is a
+  QA ticket in To Do. Drag them: they move only among QA · QA In Progress · To Do · Done, and a dev
+  ticket dragged toward QA is refused.
 - **Hierarchy** — my tickets with my sub-tasks, sub-tasks owned by QA, a sub-task with its own
   child, a team-mate's ticket carrying my sub-task, an unassigned ticket, and an epic.
 - **Card edges** — no story points, 21 points, no branch, several branches, no description, a very

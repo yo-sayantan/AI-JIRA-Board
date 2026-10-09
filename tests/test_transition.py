@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jira-intern"))
 from _jira import status_column  # noqa: E402
-from transition import COLUMNS, evaluate, is_qa, pick_transition  # noqa: E402
+from transition import COLUMNS, evaluate, is_qa, is_qa_in_progress, is_qa_ticket, lane_blocker, pick_transition  # noqa: E402
 
 OPEN_PR = {"id": 7, "state": "comments", "merged": False}
 MERGED_PR = {"id": 7, "state": "merged", "merged": True}
@@ -26,11 +26,6 @@ class Gates(unittest.TestCase):
 
     def test_review_with_pr_is_silent(self):
         self.assertEqual(evaluate("rev", [OPEN_PR], []), (None, []))
-
-    def test_qa_without_qa_ticket_warns(self):
-        blocker, warnings = evaluate("qa", [OPEN_PR], [])
-        self.assertIsNone(blocker)
-        self.assertTrue(any("QA ticket" in w for w in warnings))
 
     def test_done_blocked_without_pr(self):
         blocker, _ = evaluate("done", [], [QA_DONE])
@@ -134,8 +129,6 @@ class SubticketGates(unittest.TestCase):
         self.assertIn("no QA ticket", evaluate("done", [MERGED_PR], [])[0])
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class OnHoldTarget(unittest.TestCase):
@@ -182,3 +175,75 @@ class OnHoldTarget(unittest.TestCase):
                 mock.patch.object(transition, "load_env"), redirect_stdout(out):
             self.assertEqual(transition.main(["transition.py", "abc-1", "hold"]), 0)
         self.assertIn('"On Hold"', out.getvalue())
+
+class QaLane(unittest.TestCase):
+    """QA and QA In Progress hold QA tickets. A QA ticket moves only among QA · QA In Progress · To Do ·
+    Done; only a QA ticket may be moved into the lane."""
+
+    def test_a_dev_ticket_cannot_be_moved_into_qa_or_qa_in_progress(self):
+        for column in ("todo", "blocked", "hold", "prog", "rev"):
+            for target in ("qa", "qaip"):
+                self.assertIn("Only QA tickets", lane_blocker(column, target, qa_ticket=False), (column, target))
+
+    def test_a_qa_ticket_can_be_moved_in_from_anywhere_including_to_do(self):
+        for column in ("todo", "prog", "rev"):
+            self.assertIsNone(lane_blocker(column, "qa", qa_ticket=True))
+            self.assertIsNone(lane_blocker(column, "qaip", qa_ticket=True))
+
+    def test_a_qa_ticket_in_to_do_is_locked_into_the_lane(self):
+        for target in ("qa", "qaip", "todo", "done"):
+            self.assertIsNone(lane_blocker("todo", target, qa_ticket=True), target)
+        for target in ("blocked", "hold", "prog", "rev"):
+            self.assertIn("only be moved between", lane_blocker("todo", target, qa_ticket=True), target)
+
+    def test_is_qa_ticket_is_strict(self):
+        self.assertTrue(is_qa_ticket("QA Task", "x"))
+        self.assertTrue(is_qa_ticket("Test", "x"))
+        self.assertTrue(is_qa_ticket("Task", "QA: smoke test"))
+        self.assertTrue(is_qa_ticket("Task", "[QA] export"))
+        self.assertFalse(is_qa_ticket("Story", "Verify the fix"))
+        self.assertFalse(is_qa_ticket("Story", "Add unit tests for export"))
+        self.assertFalse(is_qa_ticket("Story", "Squash a bug"))
+
+    def test_a_ticket_in_the_lane_can_only_go_to_qa_qaip_todo_or_done(self):
+        for target in ("qa", "qaip", "todo", "done"):
+            self.assertIsNone(lane_blocker("qa", target, qa_ticket=True), target)
+        for target in ("blocked", "hold", "prog", "rev"):
+            self.assertIn("only be moved between", lane_blocker("qa", target, qa_ticket=True), target)
+
+    def test_the_lane_rule_follows_the_ticket_not_its_title(self):
+        # Sitting in QA is enough: it is the lane's ticket even if its title says nothing about QA.
+        self.assertIn("only be moved between", lane_blocker("qa", "prog", qa_ticket=False))
+
+    def test_ordinary_moves_are_untouched(self):
+        self.assertIsNone(lane_blocker("prog", "rev", qa_ticket=False))
+        self.assertIsNone(lane_blocker("todo", "hold", qa_ticket=False))
+
+    def test_qa_versus_qa_in_progress_statuses(self):
+        for ready in ("QA", "Ready for QA", "Ready4QA", "Awaiting QA", "Ready for Testing"):
+            self.assertFalse(is_qa_in_progress(ready), ready)
+        for busy in ("QA In Progress", "In QA", "Under QA", "In Testing"):
+            self.assertTrue(is_qa_in_progress(busy), busy)
+
+    def test_each_target_picks_its_own_status(self):
+        transitions = [
+            {"id": "1", "to": {"name": "Ready for QA"}},
+            {"id": "2", "to": {"name": "QA In Progress"}},
+            {"id": "3", "to": {"name": "Done"}},
+        ]
+        self.assertEqual(pick_transition(transitions, "qa")["id"], "1")
+        self.assertEqual(pick_transition(transitions, "qaip")["id"], "2")
+        self.assertIsNone(pick_transition([{"id": "1", "to": {"name": "Ready for QA"}}], "qaip"))
+
+    def test_qa_falls_back_to_an_in_progress_status_only_when_nothing_else_fits(self):
+        self.assertEqual(pick_transition([{"id": "2", "to": {"name": "QA In Progress"}}], "qa")["id"], "2")
+
+    def test_a_qa_ticket_may_close_without_a_pr_of_its_own(self):
+        self.assertEqual(evaluate("done", [], [], is_subtask=True), (None, []))
+
+    def test_dev_tickets_are_no_longer_warned_about_qa(self):
+        self.assertEqual(evaluate("qa", [OPEN_PR], []), (None, []))
+
+
+if __name__ == "__main__":
+    unittest.main()

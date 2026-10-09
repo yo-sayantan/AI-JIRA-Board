@@ -51,3 +51,32 @@ describe('moving a card and straight back', () => {
     expect(toast).not.toHaveBeenCalled()
   })
 })
+
+describe('the QA lane in the move hook', () => {
+  const qaTicket: Ticket = { key: 'Q-1', title: 'QA: verify', type: 'QA Task', status: 'Ready for QA', column: 'qa' }
+  const dev: Ticket = { key: 'D-1', title: 'Build it', type: 'Story', status: 'In Progress', column: 'prog' }
+
+  it('QA → QA In Progress changes what is shown although both are the same column', async () => {
+    const { moves } = mountMoves()
+    await act(async () => moves().moveTicket(qaTicket, 'qaip'))
+    const shown = moves().applyOverrides([qaTicket])[0]
+    expect(shown.column).toBe('qa')
+    expect(shown.status).toBe('QA In Progress') // the board reads this as the in-progress space
+    await act(async () => moves().moveTicket(shown, 'qa')) // and straight back
+    expect(moves().applyOverrides([qaTicket])[0].status).toBe('Ready for QA') // back to what the dump shows
+  })
+
+  it('refuses a dev ticket to QA before Jira is asked, and says why', async () => {
+    const { moves, toast } = mountMoves()
+    await act(async () => moves().moveTicket(dev, 'qa'))
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining('Only QA tickets'), 'error')
+    expect(moves().applyOverrides([dev])[0].column).toBe('prog') // nothing pinned
+  })
+
+  it('refuses a QA ticket to leave the lane', async () => {
+    const { moves, toast } = mountMoves()
+    await act(async () => moves().moveTicket(qaTicket, 'prog'))
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining('only be moved between'), 'error')
+  })
+})
+

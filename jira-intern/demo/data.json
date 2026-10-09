@@ -1294,8 +1294,8 @@
     {
       "key": "DEMO-240",
       "title": "Weekly digest email template",
-      "status": "QA",
-      "column": "qa",
+      "status": "In Review",
+      "column": "rev",
       "type": "Story",
       "priority": "Medium",
       "storyPoints": 3,
@@ -1381,8 +1381,8 @@
     {
       "key": "DEMO-241",
       "title": "Export audit trail",
-      "status": "Ready for QA",
-      "column": "qa",
+      "status": "In Review",
+      "column": "rev",
       "type": "Task",
       "priority": "Low",
       "storyPoints": 2,
@@ -1436,8 +1436,8 @@
     {
       "key": "DEMO-242",
       "title": "Per-report export history",
-      "status": "QA",
-      "column": "qa",
+      "status": "In Review",
+      "column": "rev",
       "type": "Story",
       "priority": "Medium",
       "storyPoints": 3,
@@ -1529,8 +1529,8 @@
     {
       "key": "DEMO-243",
       "title": "Tenant-scoped report permissions",
-      "status": "In QA",
-      "column": "qa",
+      "status": "In Review",
+      "column": "rev",
       "type": "Story",
       "priority": "High",
       "storyPoints": 8,
@@ -1634,8 +1634,8 @@
     {
       "key": "DEMO-244",
       "title": "Dedupe rows in the match export",
-      "status": "In Testing",
-      "column": "qa",
+      "status": "In Review",
+      "column": "rev",
       "type": "Bug",
       "priority": "Medium",
       "storyPoints": 2,
@@ -1787,6 +1787,98 @@
         {
           "when": "2026-09-17",
           "text": "Opened"
+        }
+      ]
+    },
+    {
+      "key": "DEMO-246",
+      "title": "QA: verify the signed download links",
+      "status": "Ready for QA",
+      "column": "qa",
+      "type": "QA Task",
+      "priority": "Medium",
+      "storyPoints": 5,
+      "commentCount": 0,
+      "lastUpdate": "2026-10-07T17:00:00Z",
+      "created": "2026-09-17T09:00:00Z",
+      "url": "https://jira.example.com/browse/DEMO-246",
+      "sprint": "Demo Platform Sprint 24 (active · 2026-10-03 → 2026-10-17)",
+      "reporter": "Priya Raman (LEAD1)",
+      "assignee": "Rahul Okafor (QA01)",
+      "labels": [
+        "demo",
+        "qa"
+      ],
+      "components": [
+        "demo-service"
+      ],
+      "mine": false,
+      "description": "<p>Check expiry, cross-user reuse and the 403 page against the build for DEMO-230.</p>",
+      "fixVersions": [
+        "2026.11"
+      ],
+      "updateLog": [
+        {
+          "when": "2026-10-08",
+          "text": "Under QA"
+        },
+        {
+          "when": "2026-09-17",
+          "text": "Opened"
+        }
+      ],
+      "related": [
+        {
+          "key": "DEMO-230",
+          "title": "Signed download links for exported files",
+          "status": "Ready4Review",
+          "relation": "tests"
+        }
+      ]
+    },
+    {
+      "key": "DEMO-247",
+      "title": "QA: smoke test the nightly export job",
+      "status": "To Do",
+      "column": "todo",
+      "type": "QA Task",
+      "priority": "Medium",
+      "storyPoints": 5,
+      "commentCount": 0,
+      "lastUpdate": "2026-10-07T17:00:00Z",
+      "created": "2026-09-17T09:00:00Z",
+      "url": "https://jira.example.com/browse/DEMO-247",
+      "sprint": "Demo Platform Sprint 24 (active · 2026-10-03 → 2026-10-17)",
+      "reporter": "Priya Raman (LEAD1)",
+      "assignee": "Rahul Okafor (QA01)",
+      "labels": [
+        "demo",
+        "qa"
+      ],
+      "components": [
+        "demo-service"
+      ],
+      "mine": true,
+      "description": "<p>Opened by me while the fix for DEMO-210 is in review — run once it is deployed.</p>",
+      "fixVersions": [
+        "2026.11"
+      ],
+      "updateLog": [
+        {
+          "when": "2026-10-08",
+          "text": "Under QA"
+        },
+        {
+          "when": "2026-09-17",
+          "text": "Opened"
+        }
+      ],
+      "related": [
+        {
+          "key": "DEMO-210",
+          "title": "Nightly export job times out on the largest tenant",
+          "status": "Blocked",
+          "relation": "tests"
         }
       ]
     },

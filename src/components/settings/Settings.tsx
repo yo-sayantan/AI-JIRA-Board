@@ -7,7 +7,7 @@ import fallbackCatalog from '../../../ai-intern/models.json'
 import { hexToRgba } from '../../lib/format'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { SectionPicker, type PickerOption } from './SectionPicker'
-import { CalendarIcon, DocIcon, DownloadIcon, FlaskIcon, MegaphoneIcon, MoonIcon, MoveIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from '../common/Icons'
+import { CalendarIcon, ColumnIcon, DocIcon, DownloadIcon, FlaskIcon, MegaphoneIcon, MoonIcon, MoveIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from '../common/Icons'
 
 const AI = '#a855f7'
 
@@ -212,7 +212,7 @@ function internTone(ai: AiInternStatus | null | undefined): string {
  * The optional parts of the board you can show or hide. They live in ONE multi-select (SectionPicker)
  * rather than a switch card each; adding a section is one more key here and one in FEATURES.
  */
-const SECTION_KEYS: FeatureKey[] = ['nextSprint', 'onHold', 'completedArchive', 'raisedTickets']
+const SECTION_KEYS: FeatureKey[] = ['blocked', 'onHold', 'qaInProgress', 'nextSprint', 'completedArchive', 'raisedTickets']
 /** Everything else is behaviour — a real on/off switch, in this order. */
 const FEATURE_ORDER: FeatureKey[] = ['dragMove', 'demoMode', 'prReports', 'aiBriefs', 'shortcuts', 'reloadActive', 'autoRefresh', 'animations']
 /**
@@ -556,7 +556,9 @@ const FEATURE_STYLE: Record<FeatureKey, { color: string; icon: (c: string) => Re
   shortcuts: { color: '#14b8a6', icon: (c) => <SearchIcon size={13} color={c} /> },
   autoRefresh: { color: '#10b981', icon: (c) => <RefreshIcon size={13} color={c} /> },
   aiBriefs: { color: '#a855f7', icon: (c) => <SparkleIcon size={13} color={c} /> },
-  onHold: { color: '#f97316', icon: (c) => <PauseIcon size={13} color={c} /> },
+  onHold: { color: '#ff8a1f', icon: (c) => <PauseIcon size={13} color={c} /> },
+  blocked: { color: '#fb3f5f', icon: (c) => <ColumnIcon col="blocked" color={c} size={13} /> },
+  qaInProgress: { color: '#5f9a93', icon: (c) => <ColumnIcon col="qa" color={c} size={13} /> },
   dragMove: { color: '#8b5cf6', icon: (c) => <MoveIcon size={13} color={c} /> },
   demoMode: { color: '#f59e0b', icon: (c) => <FlaskIcon size={13} color={c} /> },
   reloadActive: { color: '#0ea5e9', icon: (c) => <DownloadIcon size={13} color={c} /> },

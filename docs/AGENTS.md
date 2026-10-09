@@ -168,6 +168,10 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
 - Drag targets live in ONE file, `jira-intern/move_targets.json`, read by `src/lib/columns.ts`,
   `server/jobs.mjs` and `transition.py` (whose `PREFERRED` must have an entry per target — a test
   checks). Adding a target means that file plus a `PREFERRED` row, nothing else.
+- The QA lane is two mirrored rules: `src/lib/columns.ts::moveBlockedReason` (UI: dims zones, refuses drops,
+  demo gates) and `transition.py::lane_blocker` (server). `isQaTicket` / `is_qa_ticket` decide who is a QA
+  ticket (type QA/Test or a title led by "QA:") and must stay identical; the looser `looksLikeQa` / `is_qa`
+  only feed the Done gate's linked-ticket check. Change one side → change the other, tests on both.
 - localStorage keys in use: `jb-settings`, `jb-archived`, `jb-completed-show-context`,
   `jb-guide-os` (+ legacy `jb-theme`, `jb-hidden` migrations). No cookies anywhere.
 - The board can run from `file://` — every feature must degrade: served-only controls hide or

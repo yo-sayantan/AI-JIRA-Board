@@ -21,7 +21,7 @@ git clone https://github.com/yo-sayantan/AI-JIRA-Board.git && cd AI-JIRA-Board
 mkdir -p ~/.cursor ~/.ai
 cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env   # add your Jira token
 cp setup/config.example.json      ~/.ai/config.json           # add your name + URLs
-bash start-jira-board.sh                                      # build, deploy, open :4321
+bash scripts/start-jira-board.sh                                      # build, deploy, open :4321
 ```
 
 ## ✨ Why you'll like it
@@ -30,7 +30,7 @@ bash start-jira-board.sh                                      # build, deploy, o
 |---|---|
 | ⚡ **Instant** | A single-file React app reads a local snapshot. Refreshing data never rebuilds the app. |
 | 🖱️ **Drag to update Jira** | Drop a card on To Do / In Progress / In Review / QA / Done — the ticket moves in Jira, in the background, while you keep working. |
-| 🛡️ **Guard-rails built in** | In Review warns when there's no PR, QA warns when there's no QA ticket, and **Done is refused until every PR is merged and QA is done** — the card slides back with the reason. Checked against live Jira, not stale data. |
+| 🛡️ **Guard-rails built in** | In Review warns when there's no PR, the **QA lane** only takes QA tickets (and keeps them among QA · QA In Progress · To Do · Done), and **Done is refused until every PR is merged and QA is done** — the card slides back with the reason. Checked against live Jira, not stale data. |
 | 🤖 **AI that explains the work** | Per-ticket briefs and **PR Readiness Reports** with a ship / no-ship verdict, evidence, risks and file-by-file notes. |
 | 🔒 **Private by default** | Local AI (Ollama) means no tokens and no data leaving the box. Loopback-only, non-root containers, verified TLS. |
 | 🧩 **Works with what you have** | Jira + Bitbucket (on-prem or cloud). Cursor, Gemini or Claude for cloud AI. No lock-in. |

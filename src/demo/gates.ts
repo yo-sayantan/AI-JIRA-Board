@@ -1,50 +1,47 @@
 // Demo mode runs the drag-and-drop gates locally, so the warnings and the Done refusal behave
 // exactly as they do against real Jira — without a server, a token or a transition.
 //
-// MIRROR OF `jira-intern/transition.py::evaluate` (and `is_qa`). If the rules change there,
+// MIRROR OF `jira-intern/transition.py::evaluate` / `lane_blocker` (and `is_qa`). If the rules change there,
 // change them here; `gates.test.ts` pins the behaviour both sides agree on.
-import { COLUMN_META, mapStatusToColumn } from '../lib/columns'
+import { isQaTicket, looksLikeQa, mapStatusToColumn, moveBlockedReason, targetLabel, type MoveTarget } from '../lib/columns'
 import { prListOf } from '../lib/format'
 import type { MoveVerdict } from '../lib/runner'
-import type { ColumnKey, LinkRef, Ticket } from '../types'
+import type { LinkRef, Ticket } from '../types'
 
 interface QaIssue {
   key: string
   status?: string | null
 }
 
-/** A QA ticket is a sub-task or linked issue whose type or title mentions QA / test / verify. */
-function isQaIssue(type: string | null | undefined, title: string | null | undefined): boolean {
-  const text = `${type ?? ''} ${title ?? ''}`.toLowerCase()
-  return text.includes('qa') || text.includes('test') || text.includes('verif')
-}
-
 /** The ticket's QA tickets: QA-ish sub-tasks plus QA-ish linked issues. */
 export function qaIssuesOf(t: Ticket): QaIssue[] {
   const found = new Map<string, QaIssue>()
   for (const s of t.subtasks ?? []) {
-    if (s.key && isQaIssue(s.type, s.title)) found.set(s.key, { key: s.key, status: s.status })
+    if (s.key && looksLikeQa(s.type, s.title)) found.set(s.key, { key: s.key, status: s.status })
   }
   for (const r of (t.related ?? []) as LinkRef[]) {
-    if (r.key && !found.has(r.key) && isQaIssue(null, r.title ?? r.summary)) found.set(r.key, { key: r.key, status: r.status })
+    if (r.key && !found.has(r.key) && looksLikeQa(null, r.title ?? r.summary)) found.set(r.key, { key: r.key, status: r.status })
   }
   return [...found.values()]
 }
 
 /** Gate verdict for a move: a blocking reason (or null) plus soft warnings. */
-export function evaluateMove(target: ColumnKey, t: Ticket): { blocker: string | null; warnings: string[] } {
+export function evaluateMove(target: MoveTarget, t: Ticket): { blocker: string | null; warnings: string[] } {
+  // The QA lane first: it decides before any PR or QA-ticket gate is looked at.
+  const lane = moveBlockedReason(t, target)
+  if (lane) return { blocker: lane, warnings: [] }
   const live = prListOf(t).filter((p) => p.state !== 'declined')
   const qa = qaIssuesOf(t)
-  // A sub-ticket's work usually rides on its parent's PR: no PR (or QA ticket) of its own is fine,
-  // but a PR of its own that is not merged yet still blocks Done.
-  const isSub = !!t.parentKey
+  // A sub-ticket's work usually rides on its parent's PR, and a QA ticket is someone else's test of
+  // it: no PR (or QA ticket) of their own is fine, but a PR of their own that is not merged yet still
+  // blocks Done.
+  const isSub = !!t.parentKey || t.column === 'qa' || isQaTicket(t)
   const warnings: string[] = []
   if (target === 'rev' && live.length === 0 && !isSub) warnings.push('No pull request found for this ticket — raise one for review.')
   if (target === 'hold') {
     const open = live.filter((p) => !p.merged)
     if (open.length) warnings.push(`${open.map((p) => (p.id ? `#${p.id}` : 'a PR')).join(', ')} is still open — it will wait unreviewed while the ticket is on hold.`)
   }
-  if (target === 'qa' && qa.length === 0) warnings.push('No QA ticket found for this ticket — QA needs one.')
   if (target !== 'done') return { blocker: null, warnings }
 
   const problems: string[] = []
@@ -64,8 +61,8 @@ export function evaluateMove(target: ColumnKey, t: Ticket): { blocker: string | 
 }
 
 /** The same verdict shape the server returns, so demo and live moves are handled identically. */
-export function demoMoveVerdict(t: Ticket, to: ColumnKey): MoveVerdict {
+export function demoMoveVerdict(t: Ticket, to: MoveTarget): MoveVerdict {
   const { blocker, warnings } = evaluateMove(to, t)
   if (blocker) return { ok: false, blocked: true, reason: blocker }
-  return { ok: true, moved: true, status: COLUMN_META[to]?.label ?? to, warnings }
+  return { ok: true, moved: true, status: targetLabel(to), warnings }
 }
