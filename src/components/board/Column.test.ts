@@ -92,7 +92,7 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'blocked')
   })
 
-  it('QA gets a second, separate space for tickets the QA team picked up — shown, never a drop target', () => {
+  it('QA gets a second, separate space for tickets being tested — its own drop target', () => {
     const waiting = { key: 'Q-1', title: 'Waiting', status: 'Ready for QA', column: 'qa' as const }
     const testing = { key: 'Q-2', title: 'Testing', status: 'QA In Progress', column: 'qa' as const }
     const onMove = vi.fn()
@@ -101,8 +101,9 @@ describe('Column — empty columns and the On Hold space', () => {
     const groups = [...s.querySelectorAll('[role=group]')]
     expect(groups).toHaveLength(1)
     expect(groups[0].getAttribute('aria-label')).toBe('QA In Progress · 1')
-    expect(s.querySelector('[data-drop]')).toBeNull() // locked: no drop target of its own
-    drop(s) // anywhere in the column means QA
+    drop(s.querySelector('[data-drop="qaip"]')!)
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'qaip')
+    drop(s, 'ABC-1', 0) // inside QA's own box
     expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'qa')
   })
 
@@ -145,5 +146,26 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold')
     act(() => root!.unmount())
     expect(render({ meta: COLUMN_META.blocked, held: [], hideOwn: true }).getAttribute('aria-label')).toBe('On Hold — empty')
+  })
+
+  it('a ticket that may not go to a zone cannot be dropped there: no drop is armed and nothing moves', () => {
+    const onMove = vi.fn()
+    const dev = { key: 'D-1', title: 'Build it', type: 'Story', status: 'In Progress', column: 'prog' as const }
+    const waiting = { key: 'Q-1', title: 'Waiting', status: 'Ready for QA', column: 'qa' as const }
+    const s = render({ meta: COLUMN_META.qa, tickets: [waiting], onMove, dragActive: true, dragged: dev })
+    const over = new Event('dragover', { bubbles: true, cancelable: true })
+    Object.defineProperty(over, 'dataTransfer', { value: { types: [DRAG_MIME], dropEffect: '' } })
+    act(() => { s.dispatchEvent(over) })
+    expect(over.defaultPrevented).toBe(false) // the browser shows "no drop"
+    drop(s, 'D-1')
+    expect(onMove).not.toHaveBeenCalled()
+  })
+
+  it('an empty column the dragged ticket cannot use stays folded instead of opening a drop zone', () => {
+    const dev = { key: 'D-1', title: 'Build it', type: 'Story', status: 'In Progress', column: 'prog' as const }
+    expect(render({ meta: COLUMN_META.qa, onMove: () => {}, dragActive: true, dragged: dev }).className).toContain('jb-col-rail')
+    act(() => root!.unmount())
+    const qaTicket = { key: 'Q-2', title: 'QA: check', type: 'QA Task', status: 'To Do', column: 'todo' as const }
+    expect(render({ meta: COLUMN_META.qa, onMove: () => {}, dragActive: true, dragged: qaTicket }).className).toContain('jb-col-drop')
   })
 })

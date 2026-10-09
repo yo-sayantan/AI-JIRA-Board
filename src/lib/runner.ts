@@ -1,6 +1,7 @@
 // Talks to the optional local server (serve.mjs). On file:// none of this is reachable,
 // so callers fall back to a plain reload.
-import type { ColumnKey, JiraData } from '../types'
+import type { JiraData } from '../types'
+import type { MoveTarget } from './columns'
 import { summarizeReport, type PrReport, type PrReportSummary } from './reportTypes'
 import type { ServerSettings } from './settings'
 
@@ -529,8 +530,8 @@ export async function stopReportRun(): Promise<void> {
   await fetchWithTimeout('/api/reports/stop', { method: 'POST' }).catch(() => {})
 }
 
-/** Any board column, On Hold included; the server validates against jira-intern/move_targets.json. */
-export type MoveTarget = ColumnKey
+/** Any board column, On Hold and QA In Progress included; the server validates against jira-intern/move_targets.json. */
+export type { MoveTarget } from './columns'
 
 export interface MoveVerdict {
   ok: boolean

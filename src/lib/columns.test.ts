@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BOARD_COLUMNS, MOVE_TARGETS, PIPELINE_COLUMNS, columnMode, isQaInProgress, mapStatusToColumn, qaStage } from './columns'
+import { BOARD_COLUMNS, MOVE_TARGETS, PIPELINE_COLUMNS, columnMode, isQaInProgress, isQaTicket, looksLikeQa, mapStatusToColumn, moveBlockedReason, moveTargetOf, qaStage } from './columns'
 import sharedTargets from '../../jira-intern/move_targets.json'
 
 describe('board columns', () => {
@@ -64,8 +64,8 @@ describe('move targets', () => {
     expect([...MOVE_TARGETS]).toEqual(sharedTargets)
     expect(MOVE_TARGETS.has('hold')).toBe(true)
   })
-  it('cover every board column and On Hold, nothing else', () => {
-    expect(new Set(MOVE_TARGETS)).toEqual(new Set([...BOARD_COLUMNS.map((c) => c.key), 'hold']))
+  it('cover every board column, On Hold and QA In Progress, nothing else', () => {
+    expect(new Set(MOVE_TARGETS)).toEqual(new Set([...BOARD_COLUMNS.map((c) => c.key), 'hold', 'qaip']))
   })
 })
 
@@ -86,3 +86,48 @@ describe('quiet columns', () => {
     expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(30)
   })
 })
+
+describe('the QA lane', () => {
+  const dev = { column: 'prog' as const, status: 'In Progress', type: 'Story', title: 'Build the export' }
+  const qa = { column: 'qa' as const, status: 'Ready for QA', type: 'QA Task', title: 'QA: verify the export' }
+  const qaTodo = { column: 'todo' as const, status: 'To Do', type: 'QA Task', title: 'QA: smoke test' }
+
+  it('only a QA ticket may be moved into QA or QA In Progress', () => {
+    for (const to of ['qa', 'qaip'] as const) {
+      expect(moveBlockedReason(dev, to)).toMatch(/Only QA tickets/)
+      expect(moveBlockedReason(qaTodo, to)).toBeNull() // "To Do may contain QA tickets raised by me"
+    }
+  })
+  it('a ticket in the lane moves only among QA, QA In Progress, To Do and Done', () => {
+    for (const to of ['qa', 'qaip', 'todo', 'done'] as const) expect(moveBlockedReason(qa, to)).toBeNull()
+    for (const to of ['blocked', 'hold', 'prog', 'rev'] as const) expect(moveBlockedReason(qa, to)).toMatch(/only be moved between/)
+  })
+  it('a QA ticket sitting in To Do is locked into the lane too', () => {
+    for (const to of ['qa', 'qaip', 'todo', 'done'] as const) expect(moveBlockedReason(qaTodo, to)).toBeNull()
+    for (const to of ['blocked', 'hold', 'prog', 'rev'] as const) expect(moveBlockedReason(qaTodo, to)).toMatch(/only be moved between/)
+  })
+  it('isQaTicket is strict: QA/Test type or a QA-led title, never just a word like "verify"', () => {
+    expect(isQaTicket({ type: 'QA Task', title: 'x' })).toBe(true)
+    expect(isQaTicket({ type: 'Test', title: 'x' })).toBe(true)
+    expect(isQaTicket({ type: 'Task', title: 'QA: smoke test' })).toBe(true)
+    expect(isQaTicket({ type: 'Task', title: '[QA] export' })).toBe(true)
+    expect(isQaTicket({ type: 'Story', title: 'Verify the fix' })).toBe(false)
+    expect(isQaTicket({ type: 'Story', title: 'Add unit tests for export' })).toBe(false)
+    expect(isQaTicket({ type: 'Story', title: 'Squash a bug' })).toBe(false)
+  })
+  it('ordinary moves are untouched', () => {
+    expect(moveBlockedReason(dev, 'rev')).toBeNull()
+    expect(moveBlockedReason(dev, 'hold')).toBeNull()
+  })
+  it('knows a QA ticket by its type or title (the same words the server uses)', () => {
+    expect(looksLikeQa('QA Task', null)).toBe(true)
+    expect(looksLikeQa('Story', 'Verify the fix')).toBe(true)
+    expect(looksLikeQa('Story', 'Build the export')).toBe(false)
+  })
+  it('QA and QA In Progress are two targets in one column', () => {
+    expect(moveTargetOf({ column: 'qa', status: 'Ready for QA' })).toBe('qa')
+    expect(moveTargetOf({ column: 'qa', status: 'QA In Progress' })).toBe('qaip')
+    expect(moveTargetOf({ column: 'prog', status: 'In Progress' })).toBe('prog')
+  })
+})
+

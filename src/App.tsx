@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ColumnKey } from './types'
+import type { MoveTarget } from './lib/columns'
 import { RUN_COMMAND, aiModelLabel, enrichJobsRunning, isServed, setDemoMode } from './lib/runner'
 import { countMyCompleted, countRaised, countTicketsWithPr, dashboardPrTickets, hasActiveWork, indexByKey, splitBoard, type BoardSections } from './lib/boardView'
 import { parseQuery } from './lib/search'
@@ -98,7 +99,7 @@ export default function App() {
   // move, and dropping a card where it already shows is a no-op instead of a Jira transition.
   const shownByKey = useMemo(() => new Map([...view.board, ...view.hold].map((t) => [t.key, t] as const)), [view])
   const moveTicket = useCallback(
-    (key: string, to: ColumnKey) => {
+    (key: string, to: MoveTarget) => {
       const t = shownByKey.get(key) ?? byKey.get(key)
       if (t) void moves.moveTicket(t, to)
     },

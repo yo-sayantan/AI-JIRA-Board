@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ColumnKey, Ticket } from '../types'
-import { COLUMN_META, MOVE_TARGETS } from '../lib/columns'
+import { MOVE_TARGETS, moveBlockedReason, moveTargetOf, targetLabel, type MoveTarget } from '../lib/columns'
 import { demoMoveVerdict } from '../demo'
-import { moveTicketInJira, type MoveTarget } from '../lib/runner'
+import { moveTicketInJira } from '../lib/runner'
 import type { ToastFn } from './useToasts'
 
 
 interface Pin {
+  /** What was dropped on — QA and QA In Progress are one column, so the column alone cannot say. */
+  target: MoveTarget
   column: ColumnKey
   /** Drop order — later drops sit lower in the column. */
   seq: number
@@ -40,11 +42,14 @@ export function useTicketMoves({
   const inFlight = useRef(new Set<string>())
   const seq = useRef(0)
 
-  const setPin = useCallback((key: string, column: ColumnKey | null) => {
+  const setPin = useCallback((key: string, target: MoveTarget | null) => {
     setPins((prev) => {
       const next = new Map(prev)
-      if (column) next.set(key, { column, seq: ++seq.current, status: COLUMN_META[column]?.label ?? column })
-      else next.delete(key)
+      if (target) {
+        // QA In Progress is a space inside the QA column: column 'qa', and a status the board reads as in progress.
+        const column: ColumnKey = target === 'qaip' ? 'qa' : target
+        next.set(key, { target, column, seq: ++seq.current, status: targetLabel(target) })
+      } else next.delete(key)
       return next
     })
   }, [])
@@ -58,16 +63,19 @@ export function useTicketMoves({
   }, [])
 
   const moveTicket = useCallback(
-    async (ticket: Ticket, to: ColumnKey) => {
-      const from = ticket.column
+    async (ticket: Ticket, to: MoveTarget) => {
+      const from = moveTargetOf(ticket)
       if (to === from || !MOVE_TARGETS.has(to)) return
+      // The QA lane (lib/columns.ts): refused here, before Jira is asked, exactly as the server would.
+      const lane = moveBlockedReason(ticket, to)
+      if (lane) return void toast(`${ticket.key} stays where it is. ${lane}`, 'error')
       if (!served && !demo) return void toast('Moving tickets needs the local server — run `npm run serve`.', 'info')
       if (inFlight.current.has(ticket.key)) return void toast(`${ticket.key} is already being moved.`, 'info')
       inFlight.current.add(ticket.key)
       markMoving(ticket.key, true)
       const previous = pins.get(ticket.key) ?? null
       setPin(ticket.key, to)
-      const label = COLUMN_META[to].label
+      const label = targetLabel(to)
 
       // Demo mode runs the same PR / QA gates in the browser, so a refused Done still bounces back.
       const verdict = demo ? demoMoveVerdict(ticket, to) : await moveTicketInJira(ticket.key, to as MoveTarget)
@@ -82,7 +90,7 @@ export function useTicketMoves({
           else next.delete(ticket.key)
           return next
         })
-        if (verdict.blocked) toast(`${ticket.key} stays in ${COLUMN_META[from].label}. ${verdict.reason ?? ''}`.trim(), 'error')
+        if (verdict.blocked) toast(`${ticket.key} stays in ${targetLabel(from)}. ${verdict.reason ?? ''}`.trim(), 'error')
         else toast(`Couldn't move ${ticket.key} to ${label}: ${verdict.error ?? 'unknown error'}.`, 'error')
         return
       }
@@ -101,7 +109,7 @@ export function useTicketMoves({
       if (pins.size === 0) return tickets
       return tickets.map((t) => {
         const pin = pins.get(t.key)
-        if (!pin || t.column === pin.column) return t
+        if (!pin || moveTargetOf(t) === pin.target) return t
         return { ...t, column: pin.column, status: pin.status, done: pin.column === 'done', onHold: pin.column === 'hold' }
       })
     },

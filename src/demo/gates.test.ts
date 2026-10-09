@@ -14,10 +14,10 @@ describe('demo move gates', () => {
     expect(warnings.join(' ')).toContain('No pull request')
   })
 
-  it('warns when QA has no QA ticket, but allows the move', () => {
-    const { blocker, warnings } = evaluateMove('qa', withPr(false))
-    expect(blocker).toBeNull()
-    expect(warnings.join(' ')).toContain('No QA ticket')
+  it('refuses a dev ticket moved to QA or QA In Progress — those lanes hold QA tickets', () => {
+    for (const to of ['qa', 'qaip'] as const) {
+      expect(evaluateMove(to, withPr(false)).blocker).toContain('Only QA tickets')
+    }
   })
 
   it('is silent for To Do, Blocked and In Progress', () => {
@@ -89,6 +89,7 @@ describe('demo dump', () => {
     expect(evaluateMove('done', byKey('DEMO-242')).blocker).toBeNull() // merged + QA done
     expect(evaluateMove('done', byKey('DEMO-240')).blocker).toContain('QA not done') // QA not started
     expect(evaluateMove('done', byKey('DEMO-241')).blocker).toContain('no QA ticket')
+    expect(byKey('DEMO-241').column).toBe('rev') // dev work waiting to close, not a ticket in the QA lane
     expect(evaluateMove('done', byKey('DEMO-244')).blocker).toContain('not merged yet') // QA failed, fix open
     expect(evaluateMove('done', byKey('DEMO-201')).blocker).toContain('no merged pull request')
   })
@@ -167,3 +168,22 @@ describe('demo move gates — On Hold', () => {
     expect(v.status).toBe('On Hold')
   })
 })
+
+describe('demo move gates — the QA lane', () => {
+  const qaTicket: Ticket = { key: 'Q-1', title: 'QA: verify the export', type: 'QA Task', status: 'Ready for QA', column: 'qa' }
+  it('lets a QA ticket go between QA and QA In Progress, and to To Do or Done (no PR needed)', () => {
+    for (const to of ['qa', 'qaip', 'todo', 'done'] as const) expect(evaluateMove(to, qaTicket).blocker).toBeNull()
+  })
+  it('keeps a QA ticket out of every other column', () => {
+    for (const to of ['blocked', 'hold', 'prog', 'rev'] as const) expect(evaluateMove(to, qaTicket).blocker).toContain('only be moved between')
+  })
+  it('lets a QA ticket waiting in To Do be moved in', () => {
+    const todo: Ticket = { ...qaTicket, column: 'todo', status: 'To Do' }
+    expect(evaluateMove('qa', todo).blocker).toBeNull()
+    expect(evaluateMove('qaip', todo).blocker).toBeNull()
+  })
+  it('names QA In Progress in the verdict', () => {
+    expect(demoMoveVerdict(qaTicket, 'qaip')).toMatchObject({ ok: true, status: 'QA In Progress' })
+  })
+})
+

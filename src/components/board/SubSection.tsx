@@ -6,9 +6,8 @@ import { LandingSlot, SpaceHeader, dropBoxStyle } from './boardParts'
 /**
  * A second, separate space under a column's own box, in the same column: On Hold under Blocked,
  * QA In Progress under QA. Its own header and its own box, never nested inside the column's; slim
- * when empty. `droppable` ones (On Hold) are drop targets — the Column's one set of drag listeners
- * tells them apart (`data-drop`); locked ones (QA In Progress, which only the QA team fills in Jira)
- * are shown but never accept a card.
+ * when empty. Both (On Hold, QA In Progress) are drop targets — the Column's one set of drag listeners
+ * tells them apart (`data-drop`) — and each dims, saying so, when the ticket being dragged may not go there.
  */
 export const SubSection = memo(function SubSection({
   id,
@@ -20,6 +19,7 @@ export const SubSection = memo(function SubSection({
   over,
   dragging,
   droppable,
+  denied = false,
   texts,
   hint,
   bare = false,
@@ -37,6 +37,8 @@ export const SubSection = memo(function SubSection({
   /** A card is being dragged somewhere on the board. */
   dragging: boolean
   droppable: boolean
+  /** The ticket being dragged may not be dropped here (QA lane rules): dim it and say so. */
+  denied?: boolean
   texts: { idle: string; dragging: string; slot: string }
   /** Tooltip while empty. */
   hint?: string
@@ -55,15 +57,15 @@ export const SubSection = memo(function SubSection({
       <div
         className={`flex flex-col gap-2 ${bare ? 'flex-1' : ''} rounded-2xl border border-dashed p-2 transition-[background,border-color,box-shadow,opacity] duration-150`}
         title={empty ? hint : undefined}
-        style={{ ...dropBoxStyle(accent, droppable && over), opacity: !droppable && dragging ? 0.55 : 1 }}
+        style={{ ...dropBoxStyle(accent, droppable && over && !denied), opacity: denied ? 0.4 : 1 }}
       >
         <AnimatePresence mode="popLayout" initial={false}>
           {tickets.map(card)}
         </AnimatePresence>
         {droppable && <LandingSlot accent={accent} show={over} label={texts.slot} />}
         {empty && !(droppable && over) && (
-          <div className="flex items-center justify-center py-2.5 text-center text-[11px] italic" style={{ color: droppable && dragging ? accent : 'var(--muted)' }}>
-            {dragging ? texts.dragging : texts.idle}
+          <div className="flex items-center justify-center py-2.5 text-center text-[11px] italic" style={{ color: droppable && dragging && !denied ? accent : 'var(--muted)' }}>
+            {denied ? 'Not for this ticket' : dragging ? texts.dragging : texts.idle}
           </div>
         )}
       </div>

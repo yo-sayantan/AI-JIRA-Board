@@ -179,6 +179,7 @@ export const TicketCard = memo(function TicketCard({
       draggable={draggable || undefined}
       role="button"
       tabIndex={0}
+      data-ticket-key={ticket.key}
       aria-label={`Open ${ticket.key}: ${ticket.title}`}
       title={overflowTitle ?? (draggable ? 'Drag to another column to change its status in Jira' : undefined)}
       onClick={() => onOpen(ticket.key)}
