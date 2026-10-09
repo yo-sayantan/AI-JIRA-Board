@@ -41,12 +41,14 @@ the whole set.
   declined, none; one approval short of the requirement; approved while comments are still open;
   every attempt declined; several PRs across repositories; merged while the ticket is still
   blocked; closed in Jira with the code never merged.
-- **The Done gate** — `DEMO-242` passes every gate (drag it to Done and it goes through).
-  `DEMO-240` (QA not started), `DEMO-241` (no QA ticket), `DEMO-244` (fix PR unmerged) and
-  `DEMO-201` (no PR at all) are each refused for a different reason.
+- **The Done gate** — `DEMO-242` and `DEMO-240` pass (PR merged, QA ticket raised — finished or not).
+  `DEMO-241` (no QA ticket), `DEMO-244` (fix PR #433 still open) and `DEMO-201` (no PR at all) are
+  each refused for a different reason.
+- **The In Review gate** — `DEMO-222` (no PR) is refused; sub-task `DEMO-220-2` rides on its parent's
+  open PR #430. Hold ⌥ while dropping to force any gate, then try Undo.
 - **The QA lane** — `DEMO-246` (Ready for QA) and `DEMO-245` (Under QA) are QA tickets; `DEMO-247` is a
-  QA ticket in To Do. Drag them: they move only among QA · QA In Progress · To Do · Done, and a dev
-  ticket dragged toward QA is refused.
+  QA ticket in To Do. Drag them: they move only to QA · QA In Progress · Blocked · On Hold · Done, and a
+  dev ticket dragged toward QA is refused. `DEMO-244` carries a `qa-failed` label and is still a dev bug.
 - **Hierarchy** — my tickets with my sub-tasks, sub-tasks owned by QA, a sub-task with its own
   child, a team-mate's ticket carrying my sub-task, an unassigned ticket, and an epic.
 - **Card edges** — no story points, 21 points, no branch, several branches, no description, a very

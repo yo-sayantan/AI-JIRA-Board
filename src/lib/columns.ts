@@ -190,34 +190,11 @@ export function columnMode(o: { count: number; held?: number; focused?: boolean;
   return o.dragging ? 'drop' : 'rail'
 }
 
-// ── QA lane ──────────────────────────────────────────────────────────────────
-// QA and QA In Progress hold QA tickets — not the user's own work: tickets someone else tests, that
-// relate to the user's tickets, or that the user opened. They live in their own lane: a ticket inside
-// it — and any QA ticket, wherever it sits (To Do included) — can only move among QA · QA In Progress ·
-// To Do · Done, and only a QA ticket may be moved into it. Mirrored server-side in jira-intern/transition.py::lane_blocker.
+// ── Move targets ─────────────────────────────────────────────────────────────
+// The rules that decide which moves are allowed (QA lane, In Review / Done gates) live in lib/moveRules.ts.
 
 /** Everything the board can move a ticket to: a column, On Hold, or the QA In Progress space. */
 export type MoveTarget = ColumnKey | 'qaip'
-
-const QA_LANE: ReadonlySet<MoveTarget> = new Set<MoveTarget>(['qa', 'qaip', 'todo', 'done'])
-
-/** The broad guess the Done gate uses for LINKED tickets: type or title mentions QA / test / verify anywhere. */
-export function looksLikeQa(type: string | null | undefined, title: string | null | undefined): boolean {
-  const text = `${type ?? ''} ${title ?? ''}`.toLowerCase()
-  return text.includes('qa') || text.includes('test') || text.includes('verif')
-}
-
-/**
- * Is this ticket a QA ticket — one that belongs in the QA lane? Stricter than `looksLikeQa`, because it
- * LOCKS the ticket into the lane's four places: its TYPE says QA / Test, or its TITLE leads with a QA
- * prefix ("QA: …", "[QA] …", "QA - …"). A dev ticket that merely says "verify" or "tests" is not one.
- * Mirrored in jira-intern/transition.py::is_qa_ticket.
- */
-export function isQaTicket(t: { type?: string | null; title?: string | null }): boolean {
-  const type = t.type ?? ''
-  const title = t.title ?? ''
-  return /(^|[^a-z0-9])qa([^a-z0-9]|$)/i.test(type) || /test/i.test(type) || /^\s*\[?\s*qa\b/i.test(title) || /\bqa\s*[:\-–—]/i.test(title)
-}
 
 /** Where a displayed ticket sits as a move target — QA splits in two, though both are column 'qa'. */
 export function moveTargetOf(t: { column: ColumnKey; status?: string | null }): MoveTarget {
@@ -225,19 +202,3 @@ export function moveTargetOf(t: { column: ColumnKey; status?: string | null }): 
 }
 
 export const targetLabel = (to: MoveTarget): string => (to === 'qaip' ? QA_IN_PROGRESS.label : COLUMN_META[to].label)
-
-/** Why `t` may not be moved to `to` — null when the move is allowed. */
-export function moveBlockedReason(
-  t: { column: ColumnKey; status?: string | null; type?: string | null; title?: string | null },
-  to: MoveTarget,
-): string | null {
-  // A ticket sitting in QA / QA In Progress is the lane's, whatever its title says.
-  const qaTicket = t.column === 'qa' || isQaTicket(t)
-  if ((to === 'qa' || to === 'qaip') && !qaTicket) {
-    return `Only QA tickets can be moved to ${targetLabel(to)} — this ticket is not one.`
-  }
-  if (qaTicket && !QA_LANE.has(to)) {
-    return `A QA ticket can only be moved between QA, QA In Progress, To Do and Done — not to ${targetLabel(to)}.`
-  }
-  return null
-}

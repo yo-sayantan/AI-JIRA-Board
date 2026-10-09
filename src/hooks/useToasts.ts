@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ToastItem } from '../components/common/Toast'
+import type { ToastAction, ToastItem } from '../components/common/Toast'
 
-export type ToastFn = (msg: string, kind?: ToastItem['kind']) => number
+export interface ToastOptions {
+  action?: ToastAction
+  /** Seconds on screen, instead of the Settings value. */
+  seconds?: number
+}
+export type ToastFn = (msg: string, kind?: ToastItem['kind'], opts?: ToastOptions) => number
 export type DismissFn = (id: number) => void
 
 /**
@@ -39,7 +44,7 @@ export function useToasts(seconds: number, max: number) {
         setTimeout(() => {
           remove(next.id)
           pump()
-        }, prefs.current.seconds * 1000),
+        }, (next.seconds ?? prefs.current.seconds) * 1000),
       )
     }
     render()
@@ -55,9 +60,9 @@ export function useToasts(seconds: number, max: number) {
   )
 
   const toast = useCallback<ToastFn>(
-    (msg, kind = 'info') => {
+    (msg, kind = 'info', opts) => {
       const id = ++nextId.current
-      queue.current.push({ id, msg, kind })
+      queue.current.push({ id, msg, kind, ...opts })
       pump()
       return id
     },

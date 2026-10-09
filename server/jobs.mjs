@@ -35,15 +35,16 @@ export const MOVE_TARGETS = new Set(JSON.parse(readFileSync(PATHS.moveTargets, '
 const moving = new Set()
 
 /**
- * Drag-and-drop write-through: transition.py checks the PR / QA gates on live Jira and moves the
- * ticket. It never touches data.json, so it may run while a fetch is busy; on success the usual
+ * Drag-and-drop write-through: transition.py checks the QA lane and the PR / QA gates on live Jira
+ * and moves the ticket (`mode`: normal | force — gates skipped, lane kept | undo — no checks). It never touches data.json, so it may run while a fetch is busy; on success the usual
  * single-ticket refresh is queued so the board's own copy catches up.
  */
-export async function moveTicket(key, target) {
+export async function moveTicket(key, target, mode = 'normal') {
   if (moving.has(key)) return { ok: false, error: `${key} is already being moved` }
   moving.add(key)
   try {
-    const { out, code } = await runCapture('python3', [PATHS.transitionPy, key, target])
+    const args = [PATHS.transitionPy, key, target, ...(mode === 'normal' ? [] : [`--${mode}`])]
+    const { out, code } = await runCapture('python3', args)
     let verdict
     try {
       verdict = JSON.parse(out.split('\n').pop() || '')

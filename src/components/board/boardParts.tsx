@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { hexToRgba } from '../../lib/format'
+import { shortReason, type MoveCheck } from '../../lib/moveRules'
 
 // Pieces every space on the board shares — a column, the On Hold space under Blocked, an empty
 // column's rail or drop zone — so they cannot drift apart in size or colour.
@@ -89,5 +90,34 @@ export function LandingSlot({ accent, show, label }: { accent: string; show: boo
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+/**
+ * How far a refusing zone fades while a card is dragged: the QA lane (never possible) almost out of the
+ * way; a PR / QA gate (⌥ forces it) less, and not at all while ⌥ has armed it under the pointer.
+ */
+export function deniedOpacity(denied: MoveCheck | null | undefined, active = false): number {
+  if (!denied) return 1
+  if (denied.kind === 'lane') return 0.4
+  return active ? 1 : 0.72
+}
+
+const LANE_RED = '#e11d48'
+const GATE_AMBER = '#d97706'
+
+/** Says why a zone will not take the dragged card — and, for a gate, that ⌥ forces it. */
+export function DeniedNote({ check, alt, active, inline = false }: { check: MoveCheck; alt: boolean; active: boolean; inline?: boolean }) {
+  const gate = check.kind === 'gate'
+  const color = gate ? GATE_AMBER : LANE_RED
+  return (
+    <div
+      role="note"
+      className={`${inline ? '' : 'mb-1'} flex flex-col items-center gap-0.5 rounded-lg border px-2 py-1 text-center leading-tight`}
+      style={{ borderColor: hexToRgba(color, 0.4), background: hexToRgba(color, 0.08), color }}
+    >
+      <span className="text-[10.5px] font-bold">{gate && active && alt ? 'Release to force' : shortReason(check)}</span>
+      {gate && !(active && alt) && <span className="text-[9.5px] font-semibold opacity-80">⌥ + drop to force</span>}
+    </div>
   )
 }

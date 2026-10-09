@@ -3,6 +3,7 @@ import { BOARD_COLUMNS } from '../../lib/columns'
 import { ALL_SECTIONS, type BoardSections } from '../../lib/boardView'
 import type { ColumnKey, Ticket } from '../../types'
 import type { MoveTarget } from '../../lib/columns'
+import type { TicketLookup } from '../../lib/moveRules'
 import { priorityMeta } from '../../lib/format'
 import { Column } from './Column'
 
@@ -27,6 +28,8 @@ export const Board = memo(function Board({
   bottomOrder,
   held,
   sections = ALL_SECTIONS,
+  lookup,
+  readiness = false,
 }: {
   tickets: Ticket[]
   now: number
@@ -35,8 +38,8 @@ export const Board = memo(function Board({
   onArchive?: (key: string) => void
   onRefreshTicket?: (key: string) => void
   refreshingKeys?: ReadonlySet<string>
-  /** Drag-and-drop status change, written through to Jira. */
-  onMove?: (key: string, to: MoveTarget) => void
+  /** Drag-and-drop status change, written through to Jira. `force`: ⌥ was held — past a PR / QA gate. */
+  onMove?: (key: string, to: MoveTarget, force?: boolean) => void
   movingKeys?: ReadonlySet<string>
   /** Cards dropped by hand sit at the bottom of their column, in drop order, below the sorted rest. */
   bottomOrder?: ReadonlyMap<string, number>
@@ -44,6 +47,10 @@ export const Board = memo(function Board({
   held?: Ticket[]
   /** Which optional sections are on (Settings → Board sections). */
   sections?: BoardSections
+  /** Every ticket the board knows — the move rules read a sub-ticket's parent from it. */
+  lookup?: TicketLookup
+  /** Show the In Review / Done readiness dots on cards. */
+  readiness?: boolean
 }) {
   const byColumn = useMemo(() => {
     const groups = new Map<ColumnKey, Ticket[]>(BOARD_COLUMNS.map((c) => [c.key, []]))
@@ -68,7 +75,10 @@ export const Board = memo(function Board({
   // The ticket being carried, so each zone can tell whether it may land there (QA lane rules).
   const [dragKey, setDragKey] = useState<string | null>(null)
   const dragActive = dragKey !== null
-  const dragged = useMemo(() => (dragKey ? [...tickets, ...(held ?? [])].find((t) => t.key === dragKey) : undefined), [dragKey, tickets, held])
+  const dragged = useMemo(
+    () => (dragKey ? ([...tickets, ...(held ?? [])].find((t) => t.key === dragKey) ?? lookup?.get(dragKey)) : undefined),
+    [dragKey, tickets, held, lookup],
+  )
   return (
     <div
       // Columns overlap their neighbours' gap by 6px a side (Column.tsx), so drop areas touch; the
@@ -100,6 +110,8 @@ export const Board = memo(function Board({
           held={meta.key === 'blocked' ? heldSorted : undefined}
           hideOwn={meta.key === 'blocked' && !sections.blocked}
           showQaInProgress={sections.qaInProgress}
+          lookup={lookup}
+          readiness={readiness}
         />
       ))}
     </div>

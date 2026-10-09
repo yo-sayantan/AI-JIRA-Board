@@ -153,7 +153,15 @@ export const FEATURES = [
     label: 'Drag to change status',
     hint: 'Drop a card in another column to move it in Jira',
     detail:
-      'Drag a card to To Do, In Progress, In Review, QA or Done and the ticket is transitioned in Jira in the background. In Review warns when there is no pull request and QA when there is no QA ticket; Done is refused — the card slides back — until every PR is merged and the QA ticket is done. Needs the local server.',
+      'Drag a card to another column and the ticket is transitioned in Jira in the background. QA and QA In Progress take only QA tickets, and a QA ticket moves only among QA, QA In Progress, Blocked, On Hold and Done. In Review needs a pull request (a sub-ticket may use its parent\'s open one); Done needs every PR merged or declined and a QA ticket raised. A refused zone says why while you drag; hold ⌥ while dropping to force past a PR / QA rule. Every move can be undone from its notification for a few seconds. Needs the local server.',
+  },
+  {
+    key: 'moveReadiness',
+    default: true,
+    label: 'Move readiness on cards',
+    hint: 'Rev / Done dots: green = the move would go through',
+    detail:
+      'Two small dots on every card that is not Done: Rev — could it move to In Review (it has a pull request, or its parent has an open one)? Done — could it close (no PR still open, a QA ticket raised)? Green is ready, amber means something is missing; hover a dot for what. Judged from the board\'s data, so it can be a refresh behind Jira. Shown only while Drag to change status is on.',
   },
   {
     key: 'demoMode',

@@ -99,9 +99,9 @@ export default function App() {
   // move, and dropping a card where it already shows is a no-op instead of a Jira transition.
   const shownByKey = useMemo(() => new Map([...view.board, ...view.hold].map((t) => [t.key, t] as const)), [view])
   const moveTicket = useCallback(
-    (key: string, to: MoveTarget) => {
+    (key: string, to: MoveTarget, force = false) => {
       const t = shownByKey.get(key) ?? byKey.get(key)
-      if (t) void moves.moveTicket(t, to)
+      if (t) void moves.moveTicket(t, to, { forceAsk: force, lookup: byKey })
     },
     [shownByKey, byKey, moves],
   )
@@ -250,6 +250,8 @@ export default function App() {
           onMove={features.dragMove ? moveTicket : undefined}
           movingKeys={moves.movingKeys}
           bottomOrder={moves.bottomOrder}
+          lookup={byKey}
+          readiness={features.dragMove && features.moveReadiness}
           held={features.onHold ? view.hold : undefined}
           sections={sections}
         />

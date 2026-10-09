@@ -140,7 +140,7 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
   parent's branch. That code is the PARENT's: `devinfo.scope_to_subtask` strips it from the
   sub-task (unless the PR title / branch name has the sub-task's key) in every path that fills
   `prs`/`branches` — and the Done gate (`transition.py::evaluate(is_subtask=…)`, mirrored in
-  `src/demo/gates.ts`) lets a sub-ticket close with no PR but not with an unmerged one of its own.
+  `src/lib/moveRules.ts`) lets a sub-ticket close with no PR but not with an open one of its own.
 - Jira's dev-status links a PR to every ticket named in ANY of its commits (release PRs, merges from
   dev). `devinfo.scope_to_ticket` keeps only PRs whose title/branch name this ticket (or no ticket);
   on real data that removed about half the PRs attached to tickets. Run it in every path that fills `prs`.
@@ -168,10 +168,14 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
 - Drag targets live in ONE file, `jira-intern/move_targets.json`, read by `src/lib/columns.ts`,
   `server/jobs.mjs` and `transition.py` (whose `PREFERRED` must have an entry per target — a test
   checks). Adding a target means that file plus a `PREFERRED` row, nothing else.
-- The QA lane is two mirrored rules: `src/lib/columns.ts::moveBlockedReason` (UI: dims zones, refuses drops,
-  demo gates) and `transition.py::lane_blocker` (server). `isQaTicket` / `is_qa_ticket` decide who is a QA
-  ticket (type QA/Test or a title led by "QA:") and must stay identical; the looser `looksLikeQa` / `is_qa`
-  only feed the Done gate's linked-ticket check. Change one side → change the other, tests on both.
+- Every move rule exists twice: `src/lib/moveRules.ts` (the board, on the cached dump: zone reasons, readiness
+  dots, demo mode, the move hook's pre-check) and `jira-intern/transition.py` (the server, on live Jira:
+  `is_qa_ticket`, `lane_blocker`, `evaluate`). `isQaTicket` / `is_qa_ticket` (type QA/Test, a `QA_LABEL`
+  label, a "QA:" title) must stay identical; the looser `looksLikeQa` / `is_qa` only find LINKED QA tickets.
+  The lane is never forcible; `--force` skips gates only; `--undo` skips everything. Change one side →
+  change the other, tests on both (`moveRules.test.ts`, `tests/test_transition.py`).
+- Native drag with ⌥ held asks the browser for a COPY: cards set `effectAllowed = 'copyMove'` and zones set
+  `dropEffect = 'move'`, or an Option-drop is refused before the board sees it.
 - localStorage keys in use: `jb-settings`, `jb-archived`, `jb-completed-show-context`,
   `jb-guide-os` (+ legacy `jb-theme`, `jb-hidden` migrations). No cookies anywhere.
 - The board can run from `file://` — every feature must degrade: served-only controls hide or

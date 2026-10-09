@@ -2,10 +2,18 @@ import { memo } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 
 export type ToastKind = 'info' | 'success' | 'error' | 'loading'
+export interface ToastAction {
+  label: string
+  run: () => void
+}
 export interface ToastItem {
   id: number
   msg: string
   kind?: ToastKind
+  /** One button beside the message (Undo, Move anyway…); pressing it also closes the toast. */
+  action?: ToastAction
+  /** Overrides Settings → toast duration for this one (an Undo window, say). */
+  seconds?: number
 }
 
 const ICON: Record<ToastKind, string> = { info: 'ⓘ', success: '✓', error: '⚠️', loading: '◌' }
@@ -31,6 +39,19 @@ export const Toasts = memo(function Toasts({ toasts, onDismiss }: { toasts: Toas
                 {ICON[kind]}
               </span>
               <span className="min-w-0">{t.msg}</span>
+              {t.action && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDismiss(t.id)
+                    t.action!.run()
+                  }}
+                  className="shrink-0 rounded-md border px-2 py-0.5 text-[11.5px] font-bold transition-colors"
+                  style={{ color: COLOR[kind], borderColor: `${COLOR[kind]}73`, background: `${COLOR[kind]}12` }}
+                >
+                  {t.action.label}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onDismiss(t.id)}

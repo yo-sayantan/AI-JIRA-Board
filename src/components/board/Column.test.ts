@@ -25,8 +25,9 @@ function render(props: Partial<Parameters<typeof Column>[0]> & { meta: (typeof B
 }
 
 /** jsdom has no DragEvent; a plain event carrying a dataTransfer (and a pointer y) is what React reads. */
-function drop(el: Element, key = 'ABC-1', clientY?: number) {
+function drop(el: Element, key = 'ABC-1', clientY?: number, altKey = false) {
   const ev = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(ev, 'altKey', { value: altKey })
   Object.defineProperty(ev, 'dataTransfer', { value: { types: [DRAG_MIME], getData: () => key, dropEffect: '' } })
   if (clientY !== undefined) Object.defineProperty(ev, 'clientY', { value: clientY })
   act(() => { el.dispatchEvent(ev) })
@@ -51,16 +52,16 @@ describe('Column — empty columns and the On Hold space', () => {
     const onMove = vi.fn()
     const s = render({ meta: COLUMN_META.blocked, held: [], onMove, dragActive: true })
     drop(s.querySelector('[data-drop="hold"]')!)
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold', false)
     drop(s)
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'blocked')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'blocked', false)
   })
 
   it('the folded rail is droppable too — its Hold segment parks the card', () => {
     const onMove = vi.fn()
     const s = render({ meta: COLUMN_META.blocked, held: [], onMove })
     drop(s.querySelector('[data-drop="hold"]')!)
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold', false)
   })
 
   it('without an On Hold space (Settings → On Hold off) there is no hold target at all', () => {
@@ -69,7 +70,7 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(s.querySelector('[data-drop="hold"]')).toBeNull()
     expect(s.getAttribute('aria-label')).toBe('Blocked — empty, drop a card here')
     drop(s)
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'blocked')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'blocked', false)
   })
 
   it('other columns never offer On Hold', () => {
@@ -77,7 +78,7 @@ describe('Column — empty columns and the On Hold space', () => {
     const s = render({ meta: COLUMN_META.prog, onMove, dragActive: true })
     expect(s.querySelector('[data-drop="hold"]')).toBeNull()
     drop(s)
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'prog')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'prog', false)
   })
 
   it('a drop in the blank part of the column BELOW Blocked lands On Hold, not Blocked', () => {
@@ -87,9 +88,9 @@ describe('Column — empty columns and the On Hold space', () => {
     const ownBox = s.querySelector('[data-drop="hold"]')!.previousElementSibling as HTMLElement
     ownBox.getBoundingClientRect = () => ({ top: 60, bottom: 200, height: 140, left: 0, right: 112, width: 112, x: 0, y: 60, toJSON: () => ({}) })
     drop(s, 'ABC-1', 640) // the empty space far below both boxes
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold', false)
     drop(s, 'ABC-1', 120) // inside Blocked's box
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'blocked')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'blocked', false)
   })
 
   it('QA gets a second, separate space for tickets being tested — its own drop target', () => {
@@ -102,9 +103,9 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(groups).toHaveLength(1)
     expect(groups[0].getAttribute('aria-label')).toBe('QA In Progress · 1')
     drop(s.querySelector('[data-drop="qaip"]')!)
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'qaip')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'qaip', false)
     drop(s, 'ABC-1', 0) // inside QA's own box
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'qa')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'qa', false)
   })
 
   it('an empty QA folds to a rail that names both spaces; with only picked-up cards it stays open', () => {
@@ -143,7 +144,7 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(s.getAttribute('aria-label')).toBe('On Hold · 1')
     expect(s.textContent).not.toMatch(/Blocked/i)
     drop(s, 'ABC-1', 5) // anywhere in the column means On Hold
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold', false)
     act(() => root!.unmount())
     expect(render({ meta: COLUMN_META.blocked, held: [], hideOwn: true }).getAttribute('aria-label')).toBe('On Hold — empty')
   })
@@ -167,5 +168,28 @@ describe('Column — empty columns and the On Hold space', () => {
     act(() => root!.unmount())
     const qaTicket = { key: 'Q-2', title: 'QA: check', type: 'QA Task', status: 'To Do', column: 'todo' as const }
     expect(render({ meta: COLUMN_META.qa, onMove: () => {}, dragActive: true, dragged: qaTicket }).className).toContain('jb-col-drop')
+  })
+
+  it('a gated zone says what is missing, refuses a plain drop, and takes a ⌥-drop as a force', () => {
+    const onMove = vi.fn()
+    const dev = { key: 'D-1', title: 'Build it', type: 'Story', status: 'In Progress', column: 'prog' as const }
+    const s = render({ meta: COLUMN_META.rev, onMove, dragActive: true, dragged: dev })
+    expect(s.className).toContain('jb-col-drop') // a gate still opens the zone, to say why
+    expect(s.textContent).toContain('No pull request raised yet')
+    expect(s.textContent).toContain('⌥ + drop to force')
+    drop(s, 'D-1')
+    expect(onMove).not.toHaveBeenCalled()
+    drop(s, 'D-1', undefined, true)
+    expect(onMove).toHaveBeenLastCalledWith('D-1', 'rev', true)
+  })
+
+  it('a lane refusal is named and never forced, ⌥ or not', () => {
+    const onMove = vi.fn()
+    const qaTicket = { key: 'Q-2', title: 'QA: check', type: 'QA Task', status: 'Ready for QA', column: 'qa' as const }
+    const busy = { key: 'B-1', title: 'Busy', status: 'In Progress', column: 'prog' as const }
+    const s = render({ meta: COLUMN_META.prog, tickets: [busy], onMove, dragActive: true, dragged: qaTicket })
+    expect(s.textContent).toContain('QA tickets stay in the QA lane')
+    drop(s, 'Q-2', undefined, true)
+    expect(onMove).not.toHaveBeenCalled()
   })
 })
