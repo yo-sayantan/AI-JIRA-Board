@@ -487,7 +487,9 @@ select.jb-field:disabled {
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -497,8 +499,17 @@ select.jb-field:disabled {
 .jb-no-anim *::before,
 .jb-no-anim *::after {
   animation-duration: 0.001ms !important;
+  animation-delay: 0s !important;
+  /* A 0.001ms loop that repeats forever is a strobe, not a stop: spinners and pulses must run once. */
+  animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
 }
+/* The same parked frames the OS reduce-motion rule gives the gold trophy. */
+.jb-no-anim .gold-sheen { animation: none; background-position: 35% 50%; }
+.jb-no-anim .gold-sheen::before { display: none; }
+.jb-no-anim .trophy-glint { animation: none; opacity: 0; }
 
 /* ── PR Readiness Report → PDF slide deck ─────────────────────────────────────
    Styles PrReportPrint.tsx. Each .jb-slide is one 13.33 × 7.5 in page — the PowerPoint widescreen

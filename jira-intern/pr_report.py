@@ -699,6 +699,10 @@ def status_remove(key):
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
+EXIT_NOT_IN_DATA = 3
+EXIT_NO_PR = 4
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__)
@@ -762,12 +766,14 @@ def main(argv):
                           "endpoints": {"jira": jb, "confluence": cb, "bitbucket": bb}, "reportPath": report_path(key), "ticket": t}, indent=2, ensure_ascii=False))
         return 0
     if cmd == "base":
+        # Distinct exit codes so the board can say WHY there is no report (src/lib/reportFailure.ts):
+        #   3 = the ticket is not in data.json, 4 = it has no pull request, 1 = internal error.
         if not t:
             print(f"{key}: not in data.json", file=sys.stderr)
-            return 2
+            return EXIT_NOT_IN_DATA
         if not prs_of(t):
             print(f"{key}: no pull request", file=sys.stderr)
-            return 2
+            return EXIT_NO_PR
         rep = build_base(t, src, cfg)
         errs = validate_report(rep, t)
         if errs:

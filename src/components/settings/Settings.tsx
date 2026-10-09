@@ -6,6 +6,7 @@ import { groupByProvider, isPricey, usd } from '../../lib/cloudModels'
 import fallbackCatalog from '../../../ai-intern/models.json'
 import { hexToRgba } from '../../lib/format'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
+import { SectionPicker, type PickerOption } from './SectionPicker'
 import { CalendarIcon, DocIcon, DownloadIcon, FlaskIcon, MegaphoneIcon, MoonIcon, MoveIcon, PauseIcon, QuestionIcon, RefreshIcon, SearchIcon, SparkleIcon, SunIcon, TrophyIcon } from '../common/Icons'
 
 const AI = '#a855f7'
@@ -207,8 +208,13 @@ function internTone(ai: AiInternStatus | null | undefined): string {
   return '#16a34a'
 }
 
-/** Board sections first, then content, then behaviour — so the 3-column grid reads by row. */
-const FEATURE_ORDER: FeatureKey[] = ['nextSprint', 'onHold', 'dragMove', 'demoMode', 'completedArchive', 'raisedTickets', 'prReports', 'aiBriefs', 'shortcuts', 'reloadActive', 'autoRefresh', 'animations']
+/**
+ * The optional parts of the board you can show or hide. They live in ONE multi-select (SectionPicker)
+ * rather than a switch card each; adding a section is one more key here and one in FEATURES.
+ */
+const SECTION_KEYS: FeatureKey[] = ['nextSprint', 'onHold', 'completedArchive', 'raisedTickets']
+/** Everything else is behaviour — a real on/off switch, in this order. */
+const FEATURE_ORDER: FeatureKey[] = ['dragMove', 'demoMode', 'prReports', 'aiBriefs', 'shortcuts', 'reloadActive', 'autoRefresh', 'animations']
 /**
  * The AI-Ollama container is a Feature like the others, but it is a SERVER setting
  * (`ollamaEnabled`) rather than a `features` flag, because the server starts and stops the
@@ -223,7 +229,7 @@ const OLLAMA_FEATURE = {
 } as const
 const OLLAMA_STYLE = { color: '#0ea5e9', icon: (c: string) => <SparkleIcon size={13} color={c} /> }
 
-const ORDERED_FEATURES = [...FEATURES].sort((a, b) => {
+const ORDERED_FEATURES = FEATURES.filter((f) => !SECTION_KEYS.includes(f.key)).sort((a, b) => {
   const rank = (k: FeatureKey) => (FEATURE_ORDER.includes(k) ? FEATURE_ORDER.indexOf(k) : FEATURE_ORDER.length)
   return rank(a.key) - rank(b.key)
 })
@@ -490,11 +496,30 @@ export function SettingsPanel({
               </div>
 
               <Section
+                title="Board sections"
+                className="md:col-span-2"
+                aside={
+                  <span className="text-[var(--muted)]">
+                    {SECTION_KEYS.filter((k) => settings.features[k]).length} of {SECTION_KEYS.length} shown
+                  </span>
+                }
+              >
+                <SectionPicker
+                  label="Board sections"
+                  options={SECTION_OPTIONS}
+                  selected={new Set(SECTION_KEYS.filter((k) => settings.features[k]))}
+                  onToggle={(key, on) => setFeature(key as FeatureKey, on)}
+                  onSetAll={(on) => onChange({ ...settings, features: { ...settings.features, ...Object.fromEntries(SECTION_KEYS.map((k) => [k, on])) } })}
+                  emptyText="No optional sections — the board shows only the active columns."
+                />
+              </Section>
+
+              <Section
                 title="Features"
                 className="md:col-span-2"
                 aside={
                   <span className="text-[var(--muted)]">
-                    {FEATURES.filter((f) => settings.features[f.key]).length + (settings.ollamaEnabled ? 1 : 0)} of {FEATURES.length + 1} on
+                    {ORDERED_FEATURES.filter((f) => settings.features[f.key]).length + (settings.ollamaEnabled ? 1 : 0)} of {ORDERED_FEATURES.length + 1} on
                   </span>
                 }
               >
@@ -536,6 +561,12 @@ const FEATURE_STYLE: Record<FeatureKey, { color: string; icon: (c: string) => Re
   demoMode: { color: '#f59e0b', icon: (c) => <FlaskIcon size={13} color={c} /> },
   reloadActive: { color: '#0ea5e9', icon: (c) => <DownloadIcon size={13} color={c} /> },
 }
+
+/** The picker's rows, built from the registry so the label/hint/detail never drift from FEATURES. */
+const SECTION_OPTIONS: PickerOption[] = SECTION_KEYS.map((key) => {
+  const f = FEATURES.find((x) => x.key === key)!
+  return { key, label: f.label, hint: f.hint, detail: f.detail, color: FEATURE_STYLE[key].color, icon: FEATURE_STYLE[key].icon }
+})
 
 function FeatureCard({
   feature,

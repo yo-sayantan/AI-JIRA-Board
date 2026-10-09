@@ -154,6 +154,11 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
 - A sub-task of yours is stored TWICE (own card + nested under parent); `_merge_ticket` must
   replace every copy. `indexByKey` prefers standalone rows.
 - PR numbers are per-repository — identity is `(project, repo, id)` (`_pr_identity`), never id alone.
+- The "Motion & animations" switch has TWO halves: the `jb-no-anim` class on `<html>` (tames CSS
+  animations/transitions) and `MotionGlobalConfig.skipAnimations` (`src/lib/motionPolicy.ts`, set from
+  `applySettings`) for framer-motion, whose JS animations ignore CSS and otherwise follow only the OS
+  reduce-motion setting. New motion code needs no extra wiring — but a CSS "off" rule must also set
+  `animation-iteration-count: 1`, or a 0.001 ms infinite loop becomes a strobe.
 - localStorage keys in use: `jb-settings`, `jb-archived`, `jb-completed-show-context`,
   `jb-guide-os` (+ legacy `jb-theme`, `jb-hidden` migrations). No cookies anywhere.
 - The board can run from `file://` — every feature must degrade: served-only controls hide or

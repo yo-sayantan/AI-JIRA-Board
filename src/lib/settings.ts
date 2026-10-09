@@ -8,6 +8,7 @@
  */
 import modelCatalog from '../../ai-intern/models.json'
 import { APP_CONFIG } from './appConfig'
+import { setMotionEnabled } from './motionPolicy'
 
 export type ThemeMode = 'auto' | 'fixed' | 'schedule'
 export type AiLevel = 'none' | 'low' | 'moderate' | 'full'
@@ -121,7 +122,7 @@ export const FEATURES = [
     label: 'Motion & animations',
     hint: 'Transitions, spinners and hover effects',
     detail:
-      'Card entrance transitions, drawer slides, spinners and hover lifts. Turning this off applies the same treatment as the system reduce-motion setting, which also helps on a slow or remote display.',
+      'Card entrance transitions, drawer slides, spinners and hover lifts. Turning this off stops all of them at once — CSS and JavaScript animations alike, regardless of the system reduce-motion setting — which also helps on a slow or remote display.',
   },
   {
     key: 'shortcuts',
@@ -411,4 +412,5 @@ export function applySettings(s: Settings, at: Date = new Date()): void {
   const el = document.documentElement
   el.classList.toggle('dark', resolveDark(s, at))
   el.classList.toggle('jb-no-anim', !s.features.animations)
+  setMotionEnabled(s.features.animations)
 }

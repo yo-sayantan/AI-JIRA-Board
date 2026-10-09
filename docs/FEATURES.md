@@ -148,10 +148,15 @@ raised rows queue after active tickets. Render path heals JSON-wrapped model out
 
 Overlay with three areas (`src/components/settings/Settings.tsx`):
 - **Appearance** — theme auto/fixed/scheduled (+ day window).
-- **Features** — one switch per board feature, generated from the registry in
-  `src/lib/settings.ts::FEATURES` (add an entry there + a colour/icon in `FEATURE_STYLE`;
-  TypeScript enforces both). Current keys: prReports, nextSprint, completedArchive,
-  raisedTickets, animations, shortcuts, autoRefresh, aiBriefs, onHold, reloadActive.
+- **Board sections** — one compact multi-select (`SectionPicker.tsx`) for the optional parts of the
+  board: Next Sprint, On Hold, Completed archive, Raised by me. The chosen ones show as coloured chips;
+  the dropdown is a checklist with Select all / Clear, fully keyboard operable (↑↓ Home End, Space/Enter
+  toggle; Esc closes only the list, not Settings). Which keys count as sections is `SECTION_KEYS` in
+  `Settings.tsx`; adding a section is one entry in `FEATURES` + its colour/icon in `FEATURE_STYLE` + one
+  key there — never another switch card.
+- **Features** — a switch per *behaviour* (drag to change status, demo mode, PR reports, AI briefs,
+  shortcuts, refresh on open, auto-refresh, motion & animations, the AI-Ollama container), generated from
+  `src/lib/settings.ts::FEATURES` (entry + colour/icon in `FEATURE_STYLE`; TypeScript enforces both).
 - **AI usage** — level None/Low/Moderate/Max, backend local (Ollama tag dropdown, host-Ollama
   checkbox, model pulls with live progress) or cloud (provider/model/effort), parallelism knobs,
   server cadences. Server-relevant keys mirror to `jira-intern/.settings.json`.
