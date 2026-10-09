@@ -50,12 +50,23 @@ Lifecycle:
 1. A `summarize-active` job runs (scheduled, or enqueued via `POST /api/ai-jobs`).
 2. The worker waits out any data-writer lock, reads `data.json`, and walks **`tickets[]` first,
    then `raised[]`** (a key in both is briefed once, from the richer board copy).
-3. A ticket needs a brief when `aiSummaryAt < lastUpdate`, the brief is missing — or the stored
-   brief still *looks like a wrapped JSON object* (self-healing for an old model quirk).
-4. Context = `local_disk_pack` (the ticket's own dump data + cache) + `live_mcp_pack`
-   (live Jira reads), prompt demands RAW light-HTML (`p b ul li code a`), **no invention**.
-5. Output is scrubbed by `_clean_brief`: strips code fences, unwraps `{"html": "…"}`-style
-   wrappers (valid JSON or not), falls back to escaped `<p>` for plain text.
+3. A ticket needs a brief (`brief.needs_brief`) when it has none, it still *looks like a wrapped
+   JSON object*, `aiSummaryAt < lastUpdate`, or it was written by an older generation: current briefs
+   are wrapped in `<div data-brief="N">` (the sanitiser drops the attribute at render time), and
+   anything without the current N is regenerated once — the first-generation prompt asked for "a
+   short brief" and carried no code state.
+4. Context, all read-only: **FACTS** (`brief.build_facts` — stage, sprint, parent *as a parent*, the
+   real Epic Link only, sub-task roll-up, branches and PRs with approvals/comments, "no PR" stated as
+   a fact), `local_disk_pack`, and `live_mcp_pack` — live Jira (description, recent comments,
+   sub-tasks, linked issues, fix versions, the epic's title) and, per PR, Bitbucket's own record
+   (title, state, reviewers, newest commits, last review comments) plus changed files.
+   The system prompt is **stage-aware** (`brief.STAGE`): To Do → the ask, acceptance, dependencies;
+   In Progress → built so far, remaining, blockers; In Review → PR state, approvals vs required, where
+   to look; QA → what to verify, merge state; Blocked/On hold → why and what unblocks. A new ticket
+   with little data stays 60–110 words; a WIP / review / QA ticket with code runs 150–300.
+5. Output is cleaned by `_clean_brief` (fences, `{"html": …}` wrappers, plain text → `<p>`) and then
+   checked by `brief.scrub`: a ticket key in none of the packs is removed with its link, and "epic" is
+   dropped in front of any key that is not the ticket's Epic Link — a parent ticket is never an epic.
 6. **Cap: 8 briefs per pass** — a full board fills in over a few scheduled passes.
 7. `write_briefs` merges into the CURRENT data.json (not the stale start-of-job copy), only where
    `lastUpdate` still matches, stamping both the `tickets[]` and `raised[]` copies of a key.

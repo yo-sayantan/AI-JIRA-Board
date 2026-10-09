@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     INTERN_DIR=/app/jira-intern \
     PORT=4322
-COPY worker.py cursor_prices.py models.json cursor-prices.json /app/
+COPY worker.py brief.py cursor_prices.py models.json cursor-prices.json /app/
 COPY prompts /app/prompts
 EXPOSE 4322
 # /health answers 503 once a queue worker thread has died, so `docker ps` shows it.
