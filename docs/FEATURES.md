@@ -116,6 +116,17 @@ provenance (derived/ai). Bulk generation from the header menu; staleness by PR f
 `src/components/reports/PrReport.tsx`, `header/ReportsMenu.tsx`, `hooks/useReports.ts`,
 `server/reports.mjs`. Details in `docs/AI-PIPELINE.md`.
 
+**PDF export (Print → Save as PDF).** A 16:9 slide deck (13.33 × 7.5 in) built for casting: a
+cover, the executive summary, then one coloured section per topic (gates, open items, code review,
+evidence, proof, technical assessment, risk, appendix). No running footer or page numbers. Laid out
+in three passes before the print dialog opens (`reports/PrReportPrint.tsx`): every block is
+**measured** offscreen at true slide width; `reports/printPlan.ts` **paginates** by measured height
+— tables split between rows only with the header repeated, list numbering continues, a two-column
+composite too tall for one slide falls back to its parts, a nearly empty last slide is rebalanced
+with the one before, and short sections share a slide; then `reports/printFit.ts` **fits** each
+slide, enlarging sparse content (up to 1.3×) and shrinking dense content (down to 0.62×). Slides
+are exactly one page and clip, so nothing ever spills onto the next page.
+
 ## AI briefs
 
 Per-ticket summary at the top of the drawer (and in Raised row peeks). Written by the AI
