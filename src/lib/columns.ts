@@ -16,6 +16,12 @@ export interface ColumnMeta {
    * thinner and the spare width goes to the columns in between, where cards have more to say.
    */
   slim?: boolean
+  /**
+   * Work that is not the user's to push right now (To Do: not started; QA: handed to someone else). Its
+   * colour is a muted grey / grey-teal and its cards carry only a whisper of tint, so the columns that
+   * need attention are the ones that stand out.
+   */
+  quiet?: boolean
 }
 
 // The six board columns, left → right. Blocked sits between To Do and In Progress: work that is
@@ -25,15 +31,16 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
   {
     key: 'todo',
     label: 'To Do',
-    accent: '#64748b',
+    accent: '#8b94a8',
     emoji: '📋',
     slim: true,
+    quiet: true,
     statuses: ['to do', 'todo', 'open', 'backlog', 'reopened', 'selected for development', 'new'],
   },
   {
     key: 'blocked',
     label: 'Blocked',
-    accent: '#ef4444',
+    accent: '#fb3f5f',
     emoji: '⛔',
     statuses: ['blocked', 'impeded', 'blocker', 'stuck'],
     aside: true,
@@ -41,23 +48,24 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
   {
     key: 'prog',
     label: 'In Progress',
-    accent: '#3b82f6',
+    accent: '#2f86ff',
     emoji: '⚙️',
     statuses: ['in progress', 'dev in progress', 'work in progress', 'in development', 'development', 'implementing'],
   },
   {
     key: 'rev',
     label: 'In Review',
-    accent: '#8b5cf6',
+    accent: '#b05cff',
     emoji: '👀',
     statuses: ['in review', 'code review', 'ready4review', 'ready for review', 'review', 'peer review', 'pr review'],
   },
   {
     key: 'qa',
     label: 'QA',
-    accent: '#14b8a6',
+    accent: '#6aa9a1',
     emoji: '🧪',
     slim: true,
+    quiet: true,
     statuses: [
       'qa',
       'in qa',
@@ -76,7 +84,7 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
   {
     key: 'done',
     label: 'Done',
-    accent: '#22c55e',
+    accent: '#2fcf6f',
     emoji: '✅',
     slim: true,
     // Mirrors jira-intern/_jira.py `_STATUS_COLUMNS`: a ticket closed as won't-fix or cancelled is
@@ -91,7 +99,7 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
 export const HOLD_COLUMN: ColumnMeta = {
   key: 'hold',
   label: 'On Hold',
-  accent: '#f97316',
+  accent: '#ff8a1f',
   emoji: '⏸️',
   statuses: ['on hold', 'hold', 'waiting', 'parked', 'paused', 'stalled'],
 }
@@ -104,7 +112,7 @@ export const PIPELINE_COLUMNS: ColumnMeta[] = BOARD_COLUMNS.filter((c) => !c.asi
  * and never a drop target: developers drop a card on QA (transition.py picks a ready-for-QA status),
  * and only QA moves it further in Jira. Any QA-column status that is not a waiting word counts.
  */
-export const QA_IN_PROGRESS = { label: 'QA In Progress', accent: '#0d9488' } as const
+export const QA_IN_PROGRESS = { label: 'QA In Progress', accent: '#5f9a93' } as const
 const QA_READY = ['qa', 'ready for qa', 'ready4qa', 'awaiting qa', 'qa ready', 'ready for testing', 'ready for test', 'to test', 'to be tested']
 const QA_WAITING_WORDS = new Set(['ready', 'awaiting', 'pending', 'queued', 'moved', 'handed', 'for'])
 

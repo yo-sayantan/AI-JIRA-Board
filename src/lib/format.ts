@@ -113,15 +113,15 @@ export function prCommentStats(pr?: PullRequest | null): { total: number; resolv
 export function prMeta(state?: PrState | null): { label: string; color: string; glyph: string } {
   switch (state) {
     case 'merged':
-      return { label: 'PR merged', color: '#8b5cf6', glyph: '⬡' }
+      return { label: 'PR merged', color: '#9a63ff', glyph: '⬡' }
     case 'approved':
-      return { label: 'PR approved', color: '#22c55e', glyph: '✓' }
+      return { label: 'PR approved', color: '#17c47a', glyph: '✓' }
     case 'comments':
-      return { label: 'PR open', color: '#f59e0b', glyph: '💬' }
+      return { label: 'PR open', color: '#ff9f1c', glyph: '💬' }
     case 'changes':
-      return { label: 'Changes requested', color: '#ef4444', glyph: '✗' }
+      return { label: 'Changes requested', color: '#ff4466', glyph: '✗' }
     case 'declined':
-      return { label: 'PR declined', color: '#dc2626', glyph: '⦸' }
+      return { label: 'PR declined', color: '#e11d48', glyph: '⦸' }
     default:
       return { label: 'No PR', color: '#94a3b8', glyph: '○' }
   }

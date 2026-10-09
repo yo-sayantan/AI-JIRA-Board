@@ -21,6 +21,35 @@ function archivesInDays(t: Ticket, now: number): number | null {
 const celebratedDone = new Set<string>()
 
 /** dataTransfer type carrying the dragged ticket key; columns accept only this. */
+/** How see-through the card is while it is carried: enough to read the drop zone through it. */
+export const DRAG_GHOST_OPACITY = 0.55
+
+/**
+ * The browser's drag image is an opaque snapshot of the card, which hides exactly what the user is
+ * aiming at. Hand it a translucent, slightly tilted clone instead (built offscreen, removed next tick —
+ * the browser copies the pixels at once), grabbed at the same point the user picked the card up.
+ */
+function setTranslucentDragImage(e: DragEvent, card: HTMLElement) {
+  if (!e.dataTransfer?.setDragImage) return
+  const box = card.getBoundingClientRect()
+  const ghost = card.cloneNode(true) as HTMLElement
+  ghost.classList.remove('ticket-card-dragging')
+  Object.assign(ghost.style, {
+    position: 'fixed',
+    top: '-2000px',
+    left: '-2000px',
+    width: `${box.width}px`,
+    margin: '0',
+    opacity: String(DRAG_GHOST_OPACITY),
+    transform: 'rotate(-1.5deg) scale(0.97)',
+    pointerEvents: 'none',
+    boxShadow: '0 18px 36px -14px rgba(2,6,23,0.45)',
+  })
+  document.body.appendChild(ghost)
+  e.dataTransfer.setDragImage(ghost, Math.max(0, e.clientX - box.left), Math.max(0, e.clientY - box.top))
+  setTimeout(() => ghost.remove(), 0)
+}
+
 export const DRAG_MIME = 'application/x-jira-board-ticket'
 
 /** Full branch name, wrapping only after / or _ so a key like PROJ-267 stays intact. */
@@ -105,6 +134,7 @@ export const TicketCard = memo(function TicketCard({
       e.dataTransfer.setData(DRAG_MIME, ticket.key)
       e.dataTransfer.setData('text/plain', ticket.key)
       e.dataTransfer.effectAllowed = 'move'
+      setTranslucentDragImage(e, el)
       // The browser snapshots the card for the drag image first; then the card itself leaves
       // its column, so the drag reads as picking the whole card up. Removing it from the DOM
       // would cancel the drag, so it only turns invisible.
@@ -134,8 +164,8 @@ export const TicketCard = memo(function TicketCard({
   const ringSuffix = ring ? `, ${ring}` : ''
   // Resting card sits on the board. Hover lifts it: a tight contact shadow plus a
   // wider ambient shadow tinted with the column color, so the lift reads as depth.
-  const baseShadow = `inset 3px 0 0 ${accent}, 0 1px 2px rgba(2,6,23,0.08), 0 8px 16px -12px rgba(2,6,23,0.32)${ringSuffix}`
-  const hoverShadow = `inset 3px 0 0 ${accent}, inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(2,6,23,0.06), 0 14px 24px -12px rgba(2,6,23,0.42), 0 28px 44px -18px ${hexToRgba(accent, 0.48)}${ringSuffix}`
+  const baseShadow = `inset 4px 0 0 ${accent}, 0 1px 2px rgba(2,6,23,0.07), 0 10px 20px -14px ${hexToRgba(accent, meta?.quiet ? 0.28 : 0.55)}${ringSuffix}`
+  const hoverShadow = `inset 4px 0 0 ${accent}, inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(2,6,23,0.06), 0 14px 24px -12px rgba(2,6,23,0.42), 0 28px 44px -18px ${hexToRgba(accent, 0.48)}${ringSuffix}`
   const overflowTitle = overflow
     ? `Carried across ${ticket.sprintCount && ticket.sprintCount > 1 ? ticket.sprintCount : 'multiple'} sprints`
     : undefined
@@ -182,7 +212,9 @@ export const TicketCard = memo(function TicketCard({
         aria-hidden
         className="ticket-card-wash pointer-events-none absolute inset-0"
         style={{
-          background: `linear-gradient(165deg, ${hexToRgba(accent, 0.22)} 0%, ${hexToRgba(accent, 0.08)} 38%, transparent 72%)`,
+          background: meta?.quiet
+            ? `linear-gradient(160deg, ${hexToRgba(accent, 0.08)} 0%, transparent 60%)`
+            : `linear-gradient(160deg, ${hexToRgba(accent, 0.2)} 0%, ${hexToRgba(accent, 0.07)} 42%, transparent 78%)`,
         }}
       />
       <span
