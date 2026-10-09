@@ -568,7 +568,7 @@ const FEATURE_STYLE: Record<FeatureKey, { color: string; icon: (c: string) => Re
 /** The picker's rows, built from the registry so the label/hint/detail never drift from FEATURES. */
 const SECTION_OPTIONS: PickerOption[] = SECTION_KEYS.map((key) => {
   const f = FEATURES.find((x) => x.key === key)!
-  return { key, label: f.label, hint: f.hint, detail: f.detail, color: FEATURE_STYLE[key].color, icon: FEATURE_STYLE[key].icon }
+  return { key, label: f.label, chipLabel: f.label.replace(/ section$/i, ''), hint: f.hint, detail: f.detail, color: FEATURE_STYLE[key].color, icon: FEATURE_STYLE[key].icon }
 })
 
 function FeatureCard({

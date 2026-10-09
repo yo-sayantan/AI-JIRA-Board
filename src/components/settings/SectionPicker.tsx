@@ -12,6 +12,8 @@ import { hexToRgba } from '../../lib/format'
 export interface PickerOption {
   key: string
   label: string
+  /** The shorter name for the chip in the field once chosen; the list keeps the full label. */
+  chipLabel?: string
   hint: string
   detail?: string
   color: string
@@ -108,7 +110,7 @@ export function SectionPicker({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${id}-list`}
-        aria-label={`${label}: ${chosen.length ? chosen.map((c) => c.label).join(', ') : 'none'}. ${open ? 'List open.' : 'Press to choose.'}`}
+        aria-label={`${label}: ${chosen.length ? chosen.map((c) => c.chipLabel ?? c.label).join(', ') : 'none'}. ${open ? 'List open.' : 'Press to choose.'}`}
         onClick={() => (open ? closeList(false) : openList())}
         onKeyDown={(e) => {
           if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
@@ -129,7 +131,7 @@ export function SectionPicker({
                 style={{ borderColor: hexToRgba(o.color, 0.45), background: hexToRgba(o.color, 0.1), color: o.color }}
               >
                 {o.icon(o.color)}
-                {o.label}
+                {o.chipLabel ?? o.label}
               </span>
             ))
           )}
