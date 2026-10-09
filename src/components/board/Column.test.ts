@@ -24,15 +24,16 @@ function render(props: Partial<Parameters<typeof Column>[0]> & { meta: (typeof B
   return host.querySelector('section')!
 }
 
-/** jsdom has no DragEvent; a plain event carrying a dataTransfer is what React reads. */
-function drop(el: Element, key = 'ABC-1') {
+/** jsdom has no DragEvent; a plain event carrying a dataTransfer (and a pointer y) is what React reads. */
+function drop(el: Element, key = 'ABC-1', clientY?: number) {
   const ev = new Event('drop', { bubbles: true, cancelable: true })
   Object.defineProperty(ev, 'dataTransfer', { value: { types: [DRAG_MIME], getData: () => key, dropEffect: '' } })
+  if (clientY !== undefined) Object.defineProperty(ev, 'clientY', { value: clientY })
   act(() => { el.dispatchEvent(ev) })
 }
 
-describe('Column — empty columns and the On Hold shelf', () => {
-  it('folds an empty column to a rail; with a shelf the rail names both targets', () => {
+describe('Column — empty columns and the On Hold space', () => {
+  it('folds an empty column to a rail; with On Hold the rail names both targets', () => {
     expect(render({ meta: COLUMN_META.qa }).getAttribute('aria-label')).toBe('QA — empty')
     act(() => root!.unmount())
     const blocked = render({ meta: COLUMN_META.blocked, held: [], onMove: () => {} })
@@ -62,7 +63,7 @@ describe('Column — empty columns and the On Hold shelf', () => {
     expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold')
   })
 
-  it('without a shelf (Settings → On Hold off) there is no hold target at all', () => {
+  it('without an On Hold space (Settings → On Hold off) there is no hold target at all', () => {
     const onMove = vi.fn()
     const s = render({ meta: COLUMN_META.blocked, onMove, dragActive: true })
     expect(s.querySelector('[data-drop="hold"]')).toBeNull()
@@ -77,5 +78,17 @@ describe('Column — empty columns and the On Hold shelf', () => {
     expect(s.querySelector('[data-drop="hold"]')).toBeNull()
     drop(s)
     expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'prog')
+  })
+
+  it('a drop in the blank part of the column BELOW Blocked lands On Hold, not Blocked', () => {
+    const onMove = vi.fn()
+    const s = render({ meta: COLUMN_META.blocked, held: [], onMove, dragActive: true })
+    // Blocked's box ends at y=200 (jsdom has no layout, so give it one).
+    const ownBox = s.querySelector('[data-drop="hold"]')!.previousElementSibling as HTMLElement
+    ownBox.getBoundingClientRect = () => ({ top: 60, bottom: 200, height: 140, left: 0, right: 112, width: 112, x: 0, y: 60, toJSON: () => ({}) })
+    drop(s, 'ABC-1', 640) // the empty space far below both boxes
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold')
+    drop(s, 'ABC-1', 120) // inside Blocked's box
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'blocked')
   })
 })

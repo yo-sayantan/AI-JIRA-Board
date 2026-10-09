@@ -27,7 +27,7 @@ export function splitBoard(tickets: Ticket[], terms: Term[], now: number, onHold
 
 /**
  * Ignores next sprint's queue, or finishing a sprint would never earn the empty-board celebration.
- * Held tickets DO count: they sit on the board (the On Hold shelf in the Blocked column, or To Do
+ * Held tickets DO count: they sit on the board (their own space under Blocked, or To Do
  * when that shelf is off), so a board holding only parked work is not an empty board.
  */
 export function hasActiveWork(tickets: Ticket[], now: number): boolean {

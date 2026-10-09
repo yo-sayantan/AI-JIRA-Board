@@ -77,13 +77,6 @@ export default function App() {
   const byKey = useMemo(() => indexByKey(data), [data])
   // Dropped cards show in their new column at once; Jira confirms (or refuses) in the background.
   const boardTickets = useMemo(() => moves.applyOverrides(data.tickets), [moves, data.tickets])
-  const moveTicket = useCallback(
-    (key: string, to: ColumnKey) => {
-      const t = byKey.get(key)
-      if (t) void moves.moveTicket(t, to)
-    },
-    [byKey, moves],
-  )
   const drawers = useDrawerStack(byKey)
   useScrollLock(drawers.open || completedOpen || raisedOpen || settingsOpen || !!reports.openReport)
   useShortcuts(features.shortcuts && !drawers.open && !completedOpen && !raisedOpen && !settingsOpen && !reports.openReport, jobs.refreshBoard)
@@ -94,6 +87,17 @@ export default function App() {
 
   const terms = useMemo(() => parseQuery(query), [query])
   const view = useMemo(() => splitBoard(boardTickets, terms, now, features.onHold), [boardTickets, terms, now, features.onHold])
+  // A drop judges "from" by the card AS DISPLAYED — moved by an earlier drop (its pin) or folded into
+  // To Do (Settings → On Hold off) — not by the dump: dragging a card straight back is then a real
+  // move, and dropping a card where it already shows is a no-op instead of a Jira transition.
+  const shownByKey = useMemo(() => new Map([...view.board, ...view.hold].map((t) => [t.key, t] as const)), [view])
+  const moveTicket = useCallback(
+    (key: string, to: ColumnKey) => {
+      const t = shownByKey.get(key) ?? byKey.get(key)
+      if (t) void moves.moveTicket(t, to)
+    },
+    [shownByKey, byKey, moves],
+  )
   const hasAnyActive = useMemo(() => hasActiveWork(data.tickets, now), [data.tickets, now])
   const myCompletedCount = useMemo(() => countMyCompleted(data), [data])
   const raisedCount = useMemo(() => countRaised(data), [data])
@@ -224,7 +228,7 @@ export default function App() {
           onUndo={restoreArchived}
         />
       ) : view.matched.length === 0 ? (
-        // A search that only hits On Hold (the shelf in Blocked) or Next Sprint (below) still shows them.
+        // A search that only hits On Hold (its space under Blocked) or Next Sprint (below) still shows them.
         <NoMatches query={query} onClear={clearSearch} />
       ) : (
         <Board

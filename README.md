@@ -38,7 +38,7 @@ bash start-jira-board.sh                                      # build, deploy, o
 ## 📋 Everything it does
 
 **Board & workflow**
-- Five-column kanban — **To Do · In Progress · In Review · QA · Done** — plus **On Hold** and **Next Sprint** sections, sprint-carry-over markers, priority and story-point glyphs, PR badges with approval counts.
+- Six-column kanban — **To Do · Blocked · In Progress · In Review · QA · Done** — with an **On Hold** drop space under Blocked and a **Next Sprint** section; empty columns fold to slim rails so the busy ones get the width; sprint-carry-over markers, priority and story-point glyphs, PR badges with approval counts.
 - **Drag-and-drop status changes** written through to Jira, with live PR / QA gates and automatic bounce-back.
 - Smart search (`FIDM-6115`, bare numbers, people, branches, PR ids) and one-click stat chips.
 - **Completed archive** — your whole delivery history by year and month, with lead-time vs dev-time.

@@ -44,8 +44,8 @@ STATUS → COLUMN MAPPING (case-insensitive). Set `column` on every ticket:
   "On Hold" / Hold / Waiting / Parked / Paused                          -> "hold"  (also set onHold:true)
 The board shows columns: To Do · Blocked · In Progress · In Review · QA · Done. Inside QA, statuses such as
 "In QA" / "Under QA" / "In Testing" / "QA In Progress" render on a "QA In Progress" shelf (still column "qa").
-On Hold renders as its own section
-ONLY when occupied. Completed renders the full historical archive (collapsed by default).
+On Hold renders as its own space under Blocked
+(in the Blocked column, a drop target even when empty). Completed renders the full historical archive (collapsed by default).
 
 ═══════════════════════════════════════════════════════════════════════════════
 TICKET TYPE (`type`) — record the raw Jira issue type VERBATIM (do not normalize)

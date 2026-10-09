@@ -52,7 +52,7 @@ describe('column width modes', () => {
   it('never folds the one column a stat chip focused', () => {
     expect(columnMode({ count: 0, focused: true })).toBe('full')
   })
-  it("counts Blocked's On Hold shelf as content", () => {
+  it("counts Blocked's On Hold space as content", () => {
     expect(columnMode({ count: 0, held: 2 })).toBe('full')
     expect(columnMode({ count: 0, held: 0 })).toBe('rail')
     expect(columnMode({ count: 0, held: 0, dragging: true })).toBe('drop')

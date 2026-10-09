@@ -37,7 +37,7 @@ export const Board = memo(function Board({
   movingKeys?: ReadonlySet<string>
   /** Cards dropped by hand sit at the bottom of their column, in drop order, below the sorted rest. */
   bottomOrder?: ReadonlyMap<string, number>
-  /** On Hold tickets, shown as a shelf inside Blocked. Undefined = Settings → On Hold is off. */
+  /** On Hold tickets, shown as their own space under Blocked. Undefined = Settings → On Hold is off. */
   held?: Ticket[]
 }) {
   const byColumn = useMemo(() => {

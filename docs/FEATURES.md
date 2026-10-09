@@ -102,7 +102,7 @@ refusal) — but stays a slim box when empty, and Blocked's box shrinks to its c
 right below it. When both are empty the column folds to a rail of two separate boxes (Blocked above
 ⏸ On Hold); during a drag it opens to two separate drop boxes at the top. Settings → *On Hold section* off folds held tickets back
 into To Do and removes the target. The column's one set of drag listeners tells the two targets
-apart by `closest('[data-drop="hold"]')`. `board/OnHold.tsx` (`OnHoldShelf`), `board/Column.tsx`,
+apart by `closest('[data-drop="hold"]')`. `board/OnHold.tsx` (`OnHoldSection`), `board/Column.tsx`,
 `splitBoard` in `lib/boardView.ts`.
 
 Drag targets are ONE list, `jira-intern/move_targets.json`, read by the board
