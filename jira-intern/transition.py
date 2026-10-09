@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Move one Jira ticket to another board column — the write side of drag-and-drop.
 
-    python3 transition.py <KEY> <todo|blocked|prog|rev|qa|done>
+    python3 transition.py <KEY> <todo|blocked|hold|prog|rev|qa|done>
 
 Prints ONE JSON line and exits 0 whenever it reached a verdict:
     {"ok": true,  "moved": true, "status": "In Review", "warnings": ["No pull request…"]}
@@ -11,6 +11,7 @@ Prints ONE JSON line and exits 0 whenever it reached a verdict:
 The gates read LIVE Jira (issue links, sub-tasks, dev-status PRs), not the board's cached
 data.json, so a PR merged five minutes ago counts:
   • Blocked   → no gate; any card may be marked blocked.
+  • On Hold   → no gate; WARN when a PR of the ticket is still open (it sits unreviewed while parked).
   • In Review → warn when there is no open or merged PR.        (the move still happens)
   • QA        → warn when the ticket has no QA ticket.           (the move still happens)
                 Lands on a READY-for-QA status, never a QA-in-progress one: that shelf belongs
@@ -30,11 +31,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from _jira import jira_get, jira_post, load_env, status_column  # noqa: E402
 
-COLUMNS = ("todo", "blocked", "prog", "rev", "qa", "done")
+# The drag-and-drop targets. ONE list, shared with the server (server/jobs.mjs) and the board
+# (src/lib/columns.ts), so a new target cannot be accepted by one side and refused by another.
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "move_targets.json"), encoding="utf-8") as _f:
+    COLUMNS = tuple(json.load(_f))
 # Jira workflows rarely name statuses exactly like the board; prefer these, then any in the column.
 PREFERRED = {
     "todo": ("to do", "open", "reopened", "backlog"),
     "blocked": ("blocked", "impeded"),
+    "hold": ("on hold", "hold", "parked", "waiting", "paused"),
     "prog": ("in progress", "dev in progress", "in development"),
     "rev": ("in review", "code review", "ready for review", "ready4review"),
     "qa": ("ready for qa", "ready4qa", "qa", "awaiting qa", "ready for testing", "in qa", "testing", "in testing"),
@@ -54,6 +59,11 @@ def evaluate(target, prs, qa_issues, is_subtask=False):
     warnings = []
     if target == "rev" and not live and not is_subtask:
         warnings.append("No pull request found for this ticket — raise one for review.")
+    if target == "hold":
+        open_prs = [p for p in live if not p.get("merged")]
+        if open_prs:
+            names = ", ".join(f"#{p['id']}" if p.get("id") else "a PR" for p in open_prs)
+            warnings.append(f"{names} is still open — it will wait unreviewed while the ticket is on hold.")
     if target == "qa" and not qa_issues:
         warnings.append("No QA ticket found for this ticket — QA needs one.")
     if target != "done":
@@ -154,7 +164,7 @@ def move(key, target):
 
 def main(argv):
     if len(argv) != 3 or argv[2] not in COLUMNS:
-        print(json.dumps({"ok": False, "error": "usage: transition.py <KEY> <todo|blocked|prog|rev|qa|done>"}))
+        print(json.dumps({"ok": False, "error": f"usage: transition.py <KEY> <{'|'.join(COLUMNS)}>"}))
         return 2
     key, target = argv[1].upper(), argv[2]
     try:

@@ -1,11 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ColumnKey, Ticket } from '../types'
-import { COLUMN_META } from '../lib/columns'
+import { COLUMN_META, MOVE_TARGETS } from '../lib/columns'
 import { demoMoveVerdict } from '../demo'
 import { moveTicketInJira, type MoveTarget } from '../lib/runner'
 import type { ToastFn } from './useToasts'
 
-export const MOVE_TARGETS: ReadonlySet<ColumnKey> = new Set<ColumnKey>(['todo', 'blocked', 'prog', 'rev', 'qa', 'done'])
 
 interface Pin {
   column: ColumnKey
@@ -103,7 +102,7 @@ export function useTicketMoves({
       return tickets.map((t) => {
         const pin = pins.get(t.key)
         if (!pin || t.column === pin.column) return t
-        return { ...t, column: pin.column, status: pin.status, done: pin.column === 'done', onHold: false }
+        return { ...t, column: pin.column, status: pin.status, done: pin.column === 'done', onHold: pin.column === 'hold' }
       })
     },
     [pins],

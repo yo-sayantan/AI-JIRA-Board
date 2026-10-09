@@ -23,6 +23,7 @@ export const Board = memo(function Board({
   onMove,
   movingKeys,
   bottomOrder,
+  held,
 }: {
   tickets: Ticket[]
   now: number
@@ -36,6 +37,8 @@ export const Board = memo(function Board({
   movingKeys?: ReadonlySet<string>
   /** Cards dropped by hand sit at the bottom of their column, in drop order, below the sorted rest. */
   bottomOrder?: ReadonlyMap<string, number>
+  /** On Hold tickets, shown as a shelf inside Blocked. Undefined = Settings → On Hold is off. */
+  held?: Ticket[]
 }) {
   const byColumn = useMemo(() => {
     const groups = new Map<ColumnKey, Ticket[]>(BOARD_COLUMNS.map((c) => [c.key, []]))
@@ -47,9 +50,14 @@ export const Board = memo(function Board({
     }
     return groups
   }, [tickets, bottomOrder])
+  const heldSorted = useMemo(() => {
+    if (!held) return undefined
+    const pin = (t: Ticket) => bottomOrder?.get(t.key) ?? 0
+    return [...held].sort((a, b) => pin(a) - pin(b) || byUrgency(a, b))
+  }, [held, bottomOrder])
   const cols = focus ? BOARD_COLUMNS.filter((c) => c.key === focus) : BOARD_COLUMNS
   // Card drags start inside this element and bubble up, so one pair of listeners tells every
-  // column that a drag is in flight — the collapsed Blocked rail opens up to accept it.
+  // column that a drag is in flight — empty columns open from a rail to a compact drop zone.
   const [dragActive, setDragActive] = useState(false)
   return (
     <div
@@ -74,6 +82,7 @@ export const Board = memo(function Board({
           refreshingKeys={refreshingKeys}
           onMove={onMove}
           movingKeys={movingKeys}
+          held={meta.key === 'blocked' ? heldSorted : undefined}
         />
       ))}
     </div>

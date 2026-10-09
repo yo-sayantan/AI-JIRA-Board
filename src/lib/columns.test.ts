@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BOARD_COLUMNS, PIPELINE_COLUMNS, isQaInProgress, mapStatusToColumn, qaStage } from './columns'
+import { BOARD_COLUMNS, MOVE_TARGETS, PIPELINE_COLUMNS, columnMode, isQaInProgress, mapStatusToColumn, qaStage } from './columns'
+import sharedTargets from '../../jira-intern/move_targets.json'
 
 describe('board columns', () => {
   it('runs To Do · Blocked · In Progress · In Review · QA · Done', () => {
@@ -36,5 +37,34 @@ describe('QA shelves', () => {
     expect(qaStage({ column: 'prog', status: 'In Testing' })).toBeNull()
     expect(qaStage({ column: 'qa', status: 'In Testing' })).toBe('inprogress')
     expect(qaStage({ column: 'qa', status: 'QA' })).toBe('ready')
+  })
+})
+
+describe('column width modes', () => {
+  it('folds an empty column to a rail and opens it only to a drop zone while dragging', () => {
+    expect(columnMode({ count: 0 })).toBe('rail')
+    expect(columnMode({ count: 0, dragging: true })).toBe('drop')
+  })
+  it('keeps a column with cards full, dragging or not', () => {
+    expect(columnMode({ count: 3 })).toBe('full')
+    expect(columnMode({ count: 1, dragging: true })).toBe('full')
+  })
+  it('never folds the one column a stat chip focused', () => {
+    expect(columnMode({ count: 0, focused: true })).toBe('full')
+  })
+  it("counts Blocked's On Hold shelf as content", () => {
+    expect(columnMode({ count: 0, held: 2 })).toBe('full')
+    expect(columnMode({ count: 0, held: 0 })).toBe('rail')
+    expect(columnMode({ count: 0, held: 0, dragging: true })).toBe('drop')
+  })
+})
+
+describe('move targets', () => {
+  it('are the shared list the server and transition.py read, On Hold included', () => {
+    expect([...MOVE_TARGETS]).toEqual(sharedTargets)
+    expect(MOVE_TARGETS.has('hold')).toBe(true)
+  })
+  it('cover every board column and On Hold, nothing else', () => {
+    expect(new Set(MOVE_TARGETS)).toEqual(new Set([...BOARD_COLUMNS.map((c) => c.key), 'hold']))
   })
 })

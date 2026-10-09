@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { PATHS } from './config.mjs'
 import { readJson } from './http.mjs'
@@ -29,7 +30,8 @@ export const ticketRefresh = new KeyQueue({
   isBlocked: dataWriterBusy,
 })
 
-export const MOVE_TARGETS = new Set(['todo', 'blocked', 'prog', 'rev', 'qa', 'done'])
+// Shared with transition.py and the board (src/lib/columns.ts) — one list, so the three cannot drift.
+export const MOVE_TARGETS = new Set(JSON.parse(readFileSync(PATHS.moveTargets, 'utf8')))
 const moving = new Set()
 
 /**

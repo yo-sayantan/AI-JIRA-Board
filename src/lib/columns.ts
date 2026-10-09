@@ -1,4 +1,5 @@
 import type { ColumnKey } from '../types'
+import moveTargets from '../../jira-intern/move_targets.json'
 
 export interface ColumnMeta {
   key: ColumnKey
@@ -10,8 +11,6 @@ export interface ColumnMeta {
   emoji: string
   /** A side state (Blocked, On Hold) rather than a lifecycle stage — left out of a ticket's progress pipeline. */
   aside?: boolean
-  /** Folds to a slim rail while empty and nothing is being dragged, so the working columns get the width. */
-  collapsible?: boolean
 }
 
 // The six board columns, left → right. Blocked sits between To Do and In Progress: work that is
@@ -32,7 +31,6 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
     emoji: '⛔',
     statuses: ['blocked', 'impeded', 'blocker', 'stuck'],
     aside: true,
-    collapsible: true,
   },
   {
     key: 'prog',
@@ -79,7 +77,9 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
   },
 ]
 
-// Not part of the kanban row — rendered as its own section, only when occupied.
+// Not a column of its own: its own space in the Blocked column, under Blocked and separate from it
+// (Column.tsx / OnHold.tsx) — a place to see parked work and a drop target to park a card.
+// Settings → "On Hold" off folds held tickets into To Do.
 export const HOLD_COLUMN: ColumnMeta = {
   key: 'hold',
   label: 'On Hold',
@@ -154,3 +154,22 @@ export function mapStatusToColumn(status: string | null | undefined): ColumnKey 
 }
 
 const WORD_FALLBACK_ORDER: ColumnKey[] = ['blocked', 'qa', 'rev', 'prog', 'todo', 'done']
+
+/**
+ * Drag-and-drop targets — the SAME list the server (server/jobs.mjs) and transition.py read, from
+ * jira-intern/move_targets.json, so a target cannot be offered here and refused there.
+ */
+export const MOVE_TARGETS: ReadonlySet<ColumnKey> = new Set(moveTargets as ColumnKey[])
+
+/**
+ * How wide a board column is drawn. A column with nothing in it has nothing to show, so it folds to a
+ * slim labelled rail and its width goes to the columns that have cards; while a card is being
+ * dragged it opens only to a compact drop zone (not full width — the board barely moves under the
+ * cursor). A column shown alone (a stat chip focused the board on it) always stays full.
+ */
+export type ColumnMode = 'rail' | 'drop' | 'full'
+
+export function columnMode(o: { count: number; held?: number; focused?: boolean; dragging?: boolean }): ColumnMode {
+  if (o.focused || o.count + (o.held ?? 0) > 0) return 'full'
+  return o.dragging ? 'drop' : 'rail'
+}

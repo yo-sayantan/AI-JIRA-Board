@@ -1,6 +1,6 @@
 // Talks to the optional local server (serve.mjs). On file:// none of this is reachable,
 // so callers fall back to a plain reload.
-import type { JiraData } from '../types'
+import type { ColumnKey, JiraData } from '../types'
 import { summarizeReport, type PrReport, type PrReportSummary } from './reportTypes'
 import type { ServerSettings } from './settings'
 
@@ -169,7 +169,7 @@ export function aiModelLabel(ai: AiInternStatus | null): string | null {
 
 // ── PR Readiness Reports ──────────────────────────────────────────────────────
 // Served mode talks to /api/reports*. file:// mode reads window.__JIRA_PR_REPORTS__, written by
-// local-runner/sync-reports.mjs and injected by the build next to data.js (see vite.config.ts).
+// local-runner/sync-reports.mjs and injected by the build next to data.js (see tooling/vite.config.ts).
 
 export interface PrReportsIndex {
   reports: Record<string, PrReportSummary>
@@ -529,7 +529,8 @@ export async function stopReportRun(): Promise<void> {
   await fetchWithTimeout('/api/reports/stop', { method: 'POST' }).catch(() => {})
 }
 
-export type MoveTarget = 'todo' | 'blocked' | 'prog' | 'rev' | 'qa' | 'done'
+/** Any board column, On Hold included; the server validates against jira-intern/move_targets.json. */
+export type MoveTarget = ColumnKey
 
 export interface MoveVerdict {
   ok: boolean

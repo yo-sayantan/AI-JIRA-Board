@@ -40,6 +40,10 @@ export function evaluateMove(target: ColumnKey, t: Ticket): { blocker: string | 
   const isSub = !!t.parentKey
   const warnings: string[] = []
   if (target === 'rev' && live.length === 0 && !isSub) warnings.push('No pull request found for this ticket — raise one for review.')
+  if (target === 'hold') {
+    const open = live.filter((p) => !p.merged)
+    if (open.length) warnings.push(`${open.map((p) => (p.id ? `#${p.id}` : 'a PR')).join(', ')} is still open — it will wait unreviewed while the ticket is on hold.`)
+  }
   if (target === 'qa' && qa.length === 0) warnings.push('No QA ticket found for this ticket — QA needs one.')
   if (target !== 'done') return { blocker: null, warnings }
 

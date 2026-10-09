@@ -19,7 +19,6 @@ import type { ReportsMenuProps } from './components/header/ReportsMenu'
 import { Stats, type StatSelection } from './components/board/Stats'
 import { Board } from './components/board/Board'
 import { ArchivedUndo, DemoBanner, NoMatches } from './components/board/BoardNotices'
-import { OnHold } from './components/board/OnHold'
 import { NextSprint } from './components/board/NextSprint'
 import { EmptyState } from './components/board/EmptyState'
 import { FunEmptyBoard } from './components/board/FunEmptyBoard'
@@ -95,7 +94,7 @@ export default function App() {
 
   const terms = useMemo(() => parseQuery(query), [query])
   const view = useMemo(() => splitBoard(boardTickets, terms, now, features.onHold), [boardTickets, terms, now, features.onHold])
-  const hasAnyActive = useMemo(() => hasActiveWork(data.tickets, now, features.onHold), [data.tickets, now, features.onHold])
+  const hasAnyActive = useMemo(() => hasActiveWork(data.tickets, now), [data.tickets, now])
   const myCompletedCount = useMemo(() => countMyCompleted(data), [data])
   const raisedCount = useMemo(() => countRaised(data), [data])
   const ticketsWithPr = useMemo(() => countTicketsWithPr(data), [data])
@@ -225,7 +224,7 @@ export default function App() {
           onUndo={restoreArchived}
         />
       ) : view.matched.length === 0 ? (
-        // A search that only hits On Hold or Next Sprint still matched something shown below.
+        // A search that only hits On Hold (the shelf in Blocked) or Next Sprint (below) still shows them.
         <NoMatches query={query} onClear={clearSearch} />
       ) : (
         <Board
@@ -239,12 +238,11 @@ export default function App() {
           onMove={features.dragMove ? moveTicket : undefined}
           movingKeys={moves.movingKeys}
           bottomOrder={moves.bottomOrder}
+          held={features.onHold ? view.hold : undefined}
         />
       )}
 
       {hasAnyActive && userArchived.length > 0 && <ArchivedUndo keys={userArchived} onUndo={restoreArchived} />}
-
-      {features.onHold && <OnHold tickets={view.hold} now={now} onOpen={drawers.openTicket} />}
 
       {features.nextSprint && (
         <NextSprint tickets={view.nextSprint} now={now} onOpen={drawers.openTicket} visible={sel === 'next' || sel === 'all'} forceOpen={sel === 'all'} />
