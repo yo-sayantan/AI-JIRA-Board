@@ -20,9 +20,22 @@ export function Pill({
   className?: string
 }) {
   const c = color ?? 'var(--muted)'
+  const hex = c.startsWith('#')
+  // Modern badge: a gradient, not a flat fill. Solid ones run from the colour to a lighter, shifted
+  // tone with a faint inner highlight; tinted ones are a soft gradient wash with a colour border, and
+  // their text is the colour pulled toward --ink so it stays readable on a light OR dark board.
   const style = filled
-    ? { background: c, color: '#fff', borderColor: 'transparent' }
-    : { color: c, borderColor: hexToRgba(c.startsWith('#') ? c : '#94a3b8', 0.4), background: hexToRgba(c.startsWith('#') ? c : '#bac2cd', 0.12) }
+    ? {
+        background: `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 72%, #ffffff))`,
+        color: '#fff',
+        borderColor: 'transparent',
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.28), 0 1px 3px -1px ${hexToRgba(hex ? c : '#64748b', 0.55)}`,
+      }
+    : {
+        color: hex ? `color-mix(in srgb, ${c} 80%, var(--ink))` : c,
+        borderColor: hexToRgba(hex ? c : '#94a3b8', 0.34),
+        background: `linear-gradient(135deg, ${hexToRgba(hex ? c : '#bac2cd', 0.2)}, ${hexToRgba(hex ? c : '#bac2cd', 0.07)})`,
+      }
   return (
     <span
       title={title}
@@ -70,8 +83,7 @@ export function PriorityBadge({ priority }: { priority?: string | null }) {
 }
 
 /** Icon-only urgency signal for board cards — no "Low"/"Medium"/"High" text, just the glyph
- *  (six tiers by shape+colour: chevrons pointing down = calmer, up = more urgent, filled+! =
- *  critical). The label survives as a tooltip/aria-label so the information isn't lost, only
+ *  (a rounded tile with one bold glyph per tier: solid ! · double ⌃ · ⌃ · — · ⌄ · double ⌄). The label survives as a tooltip/aria-label so the information isn't lost, only
  *  the always-on text is. Ticket detail keeps the full labelled `PriorityBadge` — this is
  *  deliberately card-only. */
 export function PriorityGlyph({ priority, size = 16 }: { priority?: string | null; size?: number }) {

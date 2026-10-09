@@ -49,51 +49,35 @@ export function RefreshIcon({ size = 16, className = '', color }: IP) {
 }
 
 /**
- * Minimal colour-coded priority mark — one distinct shape per tier:
- *   6 Critical  solid badge + white "!"   (deep red — unmissable)
- *   5 Highest   double chevron up         (red)
- *   4 High      single chevron up         (orange)
- *   3 Medium    two bars (=)              (amber)
- *   2 Low       single chevron down       (green)
- *   1 Lowest    double chevron down       (sky)
- *   0 None      dot                       (gray)
+ * Priority: a rounded tile with one bold glyph per tier — a different SHAPE for each, so the tiers
+ * read at 16px without a legend. Critical is the one solid tile (white "!"); every other tier is a
+ * tinted tile with a bold chevron in the tier's colour.
+ *   6 Critical  !  on a solid deep-red tile     3 Medium   —  amber
+ *   5 Highest   double chevron up   red         2 Low      ⌄  green
+ *   4 High      single chevron up   orange      1 Lowest   double chevron down  sky
+ *   0 None      a quiet grey dot
  */
 export function PriorityIcon({ rank, color, size = 15 }: { rank: number; color: string; size?: number }) {
-  const s = line(color, 1.9)
-  if (rank >= 6) {
-    // Critical/Blocker: the only FILLED badge in the set, with a white exclamation.
-    return (
-      <svg width={px(size)} height={px(size)} viewBox="0 0 16 16" aria-hidden>
-        <rect x="0.5" y="0.5" width="15" height="15" rx="4.5" fill={color} />
-        <path d="M8 3.6v5.1" stroke="#fff" strokeWidth="2.3" strokeLinecap="round" />
-        <circle cx="8" cy="12" r="1.3" fill="#fff" />
-      </svg>
-    )
-  }
+  const c = (width: number) => ({ fill: 'none', stroke: color, strokeWidth: width, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const })
   return (
-    <svg width={px(size)} height={px(size)} viewBox="0 0 16 16" aria-hidden>
-      <rect x="0.5" y="0.5" width="15" height="15" rx="4.5" fill={color} opacity="0.16" />
-      {rank === 5 && (
+    <svg width={px(size)} height={px(size)} viewBox="0 0 24 24" aria-hidden>
+      {rank >= 6 ? (
         <>
-          <path d="M4 9l4-3 4 3" {...s} />
-          <path d="M4 12l4-3 4 3" {...s} />
+          <rect x="1" y="1" width="22" height="22" rx="7" fill={color} />
+          <path d="M12 6.5v7" fill="none" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" />
+          <circle cx="12" cy="17.4" r="1.6" fill="#fff" />
+        </>
+      ) : (
+        <>
+          <rect x="1" y="1" width="22" height="22" rx="7" fill={color} fillOpacity={rank <= 0 ? 0.12 : 0.2} />
+          {rank === 5 && <path d="M6.5 11.5l5.5-5 5.5 5M6.5 17.5l5.5-5 5.5 5" {...c(2.8)} />}
+          {rank === 4 && <path d="M6.5 14.5l5.5-5.5 5.5 5.5" {...c(2.8)} />}
+          {rank === 3 && <path d="M7 12h10" {...c(3)} />}
+          {rank === 2 && <path d="M6.5 9.5l5.5 5.5 5.5-5.5" {...c(2.8)} />}
+          {rank === 1 && <path d="M6.5 6.5l5.5 5 5.5-5M6.5 12.5l5.5 5 5.5-5" {...c(2.8)} />}
+          {rank <= 0 && <circle cx="12" cy="12" r="2.6" fill={color} />}
         </>
       )}
-      {rank === 4 && <path d="M4 10.5l4-4 4 4" {...s} />}
-      {rank === 3 && (
-        <>
-          <path d="M4.5 6.5h7" {...s} />
-          <path d="M4.5 9.8h7" {...s} />
-        </>
-      )}
-      {rank === 2 && <path d="M4 5.5l4 4 4-4" {...s} />}
-      {rank === 1 && (
-        <>
-          <path d="M4 4.5l4 3 4-3" {...s} />
-          <path d="M4 7.8l4 3 4-3" {...s} />
-        </>
-      )}
-      {rank <= 0 && <circle cx="8" cy="8" r="2" fill={color} />}
     </svg>
   )
 }

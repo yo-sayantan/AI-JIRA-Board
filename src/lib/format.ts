@@ -113,15 +113,15 @@ export function prCommentStats(pr?: PullRequest | null): { total: number; resolv
 export function prMeta(state?: PrState | null): { label: string; color: string; glyph: string } {
   switch (state) {
     case 'merged':
-      return { label: 'PR merged', color: '#8b5cf6', glyph: '⬡' }
+      return { label: 'PR merged', color: '#9a63ff', glyph: '⬡' }
     case 'approved':
-      return { label: 'PR approved', color: '#22c55e', glyph: '✓' }
+      return { label: 'PR approved', color: '#17c47a', glyph: '✓' }
     case 'comments':
-      return { label: 'PR open', color: '#f59e0b', glyph: '💬' }
+      return { label: 'PR open', color: '#ff9f1c', glyph: '💬' }
     case 'changes':
-      return { label: 'Changes requested', color: '#ef4444', glyph: '✗' }
+      return { label: 'Changes requested', color: '#ff4466', glyph: '✗' }
     case 'declined':
-      return { label: 'PR declined', color: '#dc2626', glyph: '⦸' }
+      return { label: 'PR declined', color: '#e11d48', glyph: '⦸' }
     default:
       return { label: 'No PR', color: '#94a3b8', glyph: '○' }
   }
@@ -143,6 +143,26 @@ export function prListOf(t: { prs?: PullRequest[] | null; pr?: PullRequest | nul
 export function primaryPrOf(t: { prs?: PullRequest[] | null; pr?: PullRequest | null }): PullRequest | null {
   if (t.pr != null) return hasPr(t.pr) ? t.pr : null
   return prListOf(t)[0] ?? null
+}
+
+/**
+ * What a PARENT ticket's card says about branches — as little as is useful:
+ *   • a PR was raised  → the branch(es) those PRs come from (the primary PR's first), "+N" for more;
+ *   • no PR, branches  → just the newest one (`branch`; the pipeline ranks by newest commit);
+ *   • no branch        → nothing.
+ * `all` is every branch, for the tooltip.
+ */
+export function cardBranches(t: {
+  branches?: string[] | null
+  branch?: string | null
+  prs?: PullRequest[] | null
+  pr?: PullRequest | null
+}): { shown: string; more: number; all: string[] } | null {
+  const all = branchesOf(t)
+  const fromPrs = [...new Set(prListOf(t).map((p) => p.sourceBranch?.trim() ?? '').filter(Boolean))]
+  if (fromPrs.length) return { shown: fromPrs[0], more: fromPrs.length - 1, all: [...new Set([...fromPrs, ...all])] }
+  const newest = t.branch?.trim() || all[0]
+  return newest ? { shown: newest, more: 0, all } : null
 }
 
 /** All real branches for a ticket, falling back to the single `branch`. */

@@ -104,9 +104,15 @@ assignee, hand-off history) is the most recent full-stack feature — copy its s
 - Controls are **flat chips**: thin outline `hexToRgba(color, 0.45)`, tinted fill
   `hexToRgba(color, 0.07)`, coloured text/icon, Motion spring on hover/tap. **No 3D/skeuomorphic
   buttons** (tried; rejected). The gold `gold-sheen` Completed trophy is the single exception.
-- Colour accents are welcome and each view owns a hue (Completed green/gold · Raised indigo ·
-  Next Sprint pink · On Hold orange · Blocked red · QA In Progress deep teal). Never monochrome; keep gradients, the freshness pill, the
-  sprint block, and animations.
+- Colour accents are welcome and each view owns a hue — columns: To Do cool grey `#8b94a8` (quiet) · Blocked
+  rose `#fb3f5f` · In Progress blue `#2f86ff` · In Review purple `#b05cff` · QA muted grey-teal `#6aa9a1` (quiet; QA In Progress
+  `#5f9a93`) · Done green `#2fcf6f` · On Hold orange `#ff8a1f`; views — Completed green/gold · Raised
+  indigo · Next Sprint pink. States (`prMeta`): merged `#9a63ff` · approved `#17c47a` · open `#ff9f1c` ·
+  changes `#ff4466` · declined `#e11d48`. Cards carry their column's tint at rest — except the `quiet` columns (To Do, QA), which only whisper; badges are gradients (`Pill`).
+  Never monochrome; keep gradients, the freshness pill, the sprint block, and animations.
+- Drag and drop: a zone must arm on `dragenter` as well as `dragover`, columns overlap their gap by 6px so
+  hit areas touch, widths do not animate while a drag is in flight (`jb-dragging`), and the carried card is a
+  translucent clone (`DRAG_GHOST_OPACITY`) so the drop zone shows through it.
 - Fixed-width right-hand "rails" in list rows (one width table shared by header + rows) so
   columns align to the pixel; labels truncate, never overflow.
 - Every icon-only button gets `aria-label`; toggles get `aria-pressed`; overlays are

@@ -61,7 +61,11 @@ export const Board = memo(function Board({
   const [dragActive, setDragActive] = useState(false)
   return (
     <div
-      className="flex items-stretch gap-3 overflow-x-auto pb-3"
+      // Columns overlap their neighbours' gap by 6px a side (Column.tsx), so drop areas touch; the
+      // container's matching padding keeps the first and last from being clipped. While a drag is in
+      // flight widths change instantly (jb-dragging): zones sliding under the pointer were why a hover
+      // sometimes "missed" and the drop felt late.
+      className={`-mx-1.5 flex items-stretch gap-3 overflow-x-auto px-1.5 pb-3 ${dragActive ? 'jb-dragging' : ''}`}
       onDragStart={() => setDragActive(true)}
       onDragEnd={() => setDragActive(false)}
       onDrop={() => setDragActive(false)}

@@ -68,3 +68,21 @@ describe('move targets', () => {
     expect(new Set(MOVE_TARGETS)).toEqual(new Set([...BOARD_COLUMNS.map((c) => c.key), 'hold']))
   })
 })
+
+describe('column weights', () => {
+  it('draws To Do, QA and Done thin; Blocked, In Progress and In Review take the spare width', () => {
+    expect(BOARD_COLUMNS.filter((c) => c.slim).map((c) => c.key)).toEqual(['todo', 'qa', 'done'])
+    expect(BOARD_COLUMNS.filter((c) => !c.slim).map((c) => c.key)).toEqual(['blocked', 'prog', 'rev'])
+  })
+})
+
+describe('quiet columns', () => {
+  it('To Do and QA recede (grey tones, whisper-light card tint); the working columns do not', () => {
+    expect(BOARD_COLUMNS.filter((c) => c.quiet).map((c) => c.key)).toEqual(['todo', 'qa'])
+  })
+  it('To Do is a genuine grey: its channels are within a few points of each other', () => {
+    const hex = BOARD_COLUMNS.find((c) => c.key === 'todo')!.accent
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(30)
+  })
+})

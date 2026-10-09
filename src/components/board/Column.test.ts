@@ -34,7 +34,7 @@ function drop(el: Element, key = 'ABC-1', clientY?: number) {
 
 describe('Column — empty columns and the On Hold space', () => {
   it('folds an empty column to a rail; with On Hold the rail names both targets', () => {
-    expect(render({ meta: COLUMN_META.qa }).getAttribute('aria-label')).toBe('QA — empty')
+    expect(render({ meta: COLUMN_META.rev }).getAttribute('aria-label')).toBe('In Review — empty')
     act(() => root!.unmount())
     const blocked = render({ meta: COLUMN_META.blocked, held: [], onMove: () => {} })
     expect(blocked.getAttribute('aria-label')).toBe('Blocked and On Hold — empty')
@@ -44,7 +44,7 @@ describe('Column — empty columns and the On Hold space', () => {
   it('opens to a compact drop zone during a drag, not full width', () => {
     const s = render({ meta: COLUMN_META.rev, onMove: () => {}, dragActive: true })
     expect(s.className).toContain('jb-col-drop')
-    expect(s.style.flex).toBe('0 0 7rem')
+    expect(s.style.flex).toBe('0 0 7.75rem')
   })
 
   it('a drop on the On Hold zone moves the ticket to On Hold; anywhere else in Blocked marks it Blocked', () => {
@@ -90,5 +90,39 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold')
     drop(s, 'ABC-1', 120) // inside Blocked's box
     expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'blocked')
+  })
+
+  it('QA gets a second, separate space for tickets the QA team picked up — shown, never a drop target', () => {
+    const waiting = { key: 'Q-1', title: 'Waiting', status: 'Ready for QA', column: 'qa' as const }
+    const testing = { key: 'Q-2', title: 'Testing', status: 'QA In Progress', column: 'qa' as const }
+    const onMove = vi.fn()
+    const s = render({ meta: COLUMN_META.qa, tickets: [waiting, testing], onMove })
+    expect(s.getAttribute('aria-label')).toBe('QA · 1 · QA In Progress · 1')
+    const groups = [...s.querySelectorAll('[role=group]')]
+    expect(groups).toHaveLength(1)
+    expect(groups[0].getAttribute('aria-label')).toBe('QA In Progress · 1')
+    expect(s.querySelector('[data-drop]')).toBeNull() // locked: no drop target of its own
+    drop(s) // anywhere in the column means QA
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'qa')
+  })
+
+  it('an empty QA folds to a rail that names both spaces; with only picked-up cards it stays open', () => {
+    expect(render({ meta: COLUMN_META.qa }).getAttribute('aria-label')).toBe('QA and QA In Progress — empty')
+    act(() => root!.unmount())
+    const testing = { key: 'Q-2', title: 'Testing', status: 'QA In Progress', column: 'qa' as const }
+    const s = render({ meta: COLUMN_META.qa, tickets: [testing] })
+    expect(s.className).toContain('jb-col-full')
+  })
+
+  it('a zone arms on dragenter alone — no waiting for the next dragover', () => {
+    const onMove = vi.fn()
+    const s = render({ meta: COLUMN_META.blocked, held: [], onMove, dragActive: true })
+    const enter = new Event('dragenter', { bubbles: true, cancelable: true })
+    Object.defineProperty(enter, 'dataTransfer', { value: { types: [DRAG_MIME], dropEffect: '' } })
+    Object.defineProperty(enter, 'clientY', { value: 0 })
+    const hold = s.querySelector('[data-drop="hold"]')!
+    act(() => { hold.dispatchEvent(enter) })
+    expect(enter.defaultPrevented).toBe(true)
+    expect(hold.textContent).toContain('Release') // lit up on arrival
   })
 })

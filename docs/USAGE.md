@@ -7,7 +7,7 @@ A tour of what's on screen and how to drive it.
 - **Header** — your name, last-fetch freshness, the current-sprint pill (name · dates · working
   days left · progress bar), live **search**, light/dark toggle, and **Refresh/Reload**.
 - **Stat chips** — one per column plus scope toggles. Click to filter; click again to clear.
-- **Board** — the kanban columns: To Do · Blocked · In Progress · In Review · QA · Done. Any empty column folds to a slim rail so the columns with cards get the width (it opens to a compact *Drop here* zone while you drag); QA shows a **QA In Progress** shelf when the QA team has picked something up.
+- **Board** — the kanban columns: To Do · Blocked · In Progress · In Review · QA · Done. Any empty column folds to a slim rail so the columns with cards get the width (it opens to a compact *Drop here* zone while you drag); QA has a separate **QA In Progress** space under it, in the same column, for tickets the QA team has picked up (like On Hold under Blocked, but you cannot drop on it).
 - **On Hold** — its own small space under Blocked, in the same column: drop a card on it to put the ticket On Hold in Jira; held tickets are listed there.
 - **Demo mode** (Settings → Features) — swaps in a sample board to try drag-and-drop and the
   gates on. Nothing reaches Jira while it is on, and your real board returns when you turn it off.
