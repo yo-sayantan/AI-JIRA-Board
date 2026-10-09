@@ -11,6 +11,11 @@ export interface ColumnMeta {
   emoji: string
   /** A side state (Blocked, On Hold) rather than a lifecycle stage — left out of a ticket's progress pipeline. */
   aside?: boolean
+  /**
+   * The edges of the flow (start, hand-off, finish) carry the least on their cards, so they are drawn
+   * thinner and the spare width goes to the columns in between, where cards have more to say.
+   */
+  slim?: boolean
 }
 
 // The six board columns, left → right. Blocked sits between To Do and In Progress: work that is
@@ -22,6 +27,7 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
     label: 'To Do',
     accent: '#64748b',
     emoji: '📋',
+    slim: true,
     statuses: ['to do', 'todo', 'open', 'backlog', 'reopened', 'selected for development', 'new'],
   },
   {
@@ -51,6 +57,7 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
     label: 'QA',
     accent: '#14b8a6',
     emoji: '🧪',
+    slim: true,
     statuses: [
       'qa',
       'in qa',
@@ -71,6 +78,7 @@ export const BOARD_COLUMNS: ColumnMeta[] = [
     label: 'Done',
     accent: '#22c55e',
     emoji: '✅',
+    slim: true,
     // Mirrors jira-intern/_jira.py `_STATUS_COLUMNS`: a ticket closed as won't-fix or cancelled is
     // finished work, not a card stuck in progress.
     statuses: ['done', 'completed', 'closed', 'resolved', 'shipped', 'released', "won't fix", 'wont fix', 'won’t fix', 'cancelled', 'canceled', 'rejected'],

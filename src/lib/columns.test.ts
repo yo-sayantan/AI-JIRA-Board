@@ -68,3 +68,10 @@ describe('move targets', () => {
     expect(new Set(MOVE_TARGETS)).toEqual(new Set([...BOARD_COLUMNS.map((c) => c.key), 'hold']))
   })
 })
+
+describe('column weights', () => {
+  it('draws To Do, QA and Done thin; Blocked, In Progress and In Review take the spare width', () => {
+    expect(BOARD_COLUMNS.filter((c) => c.slim).map((c) => c.key)).toEqual(['todo', 'qa', 'done'])
+    expect(BOARD_COLUMNS.filter((c) => !c.slim).map((c) => c.key)).toEqual(['blocked', 'prog', 'rev'])
+  })
+})

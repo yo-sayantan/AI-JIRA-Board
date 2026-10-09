@@ -3,7 +3,7 @@ import { motion } from 'motion/react'
 import type { Ticket } from '../../types'
 import { COLUMN_META } from '../../lib/columns'
 import { DONE_BOARD_DAYS } from '../../lib/appConfig'
-import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, primaryPrOf, branchesOf, relTime, hexToRgba } from '../../lib/format'
+import { priorityMeta, typeMeta, effectiveType, isClosedPr, prListOf, primaryPrOf, branchesOf, cardBranches, relTime, hexToRgba } from '../../lib/format'
 import { Pill, PriorityGlyph, PrBadge, Approvals, PointsTag } from '../common/ui'
 import { TypeIcon, RefreshIcon, TrophyIcon } from '../common/Icons'
 
@@ -86,7 +86,9 @@ export const TicketCard = memo(function TicketCard({
   const pr = primaryPrOf(ticket)
   const otherPrs = prs.length - (pr ? 1 : 0)
   const prKnownState = pr && pr.state && pr.state !== 'none'
-  const branches = branchesOf(ticket)
+  // Parent cards say only what matters (cardBranches); a sub-task keeps its compact branch line.
+  const subBranches = branchesOf(ticket)
+  const branch = ticket.parentKey ? (subBranches[0] ? { shown: subBranches[0], more: subBranches.length - 1, all: subBranches } : null) : cardBranches(ticket)
   const archiveIn = archivesInDays(ticket, now)
   const overflow = !!ticket.sprintOverflow
   // Sub-tasks carry little of their own (no points, rarely a PR or branch), so they get a compact card.
@@ -168,7 +170,7 @@ export const TicketCard = memo(function TicketCard({
       }}
       whileHover={quiet ? undefined : { y: -6, zIndex: 3, boxShadow: hoverShadow }}
       whileTap={quiet ? undefined : { y: -2, scale: 0.992 }}
-      className={`ticket-card group relative flex w-full flex-col ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} overflow-hidden rounded-xl border bg-[var(--surface-solid)] text-left ${sub ? 'px-2.5 py-2' : 'min-h-[168px] p-2.5'}`}
+      className={`ticket-card @container group relative flex w-full flex-col ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} overflow-hidden rounded-xl border bg-[var(--surface-solid)] text-left ${sub ? 'px-2.5 py-2' : 'min-h-[168px] p-2.5'}`}
       style={{
         boxShadow: baseShadow,
         borderColor: overflow ? '#dc2626' : undefined,
@@ -253,7 +255,8 @@ export const TicketCard = memo(function TicketCard({
             syncing
           </span>
         ) : (
-          rel && <span className="shrink-0 text-[10px] text-[var(--muted)]">{rel}</span>
+          // Thin columns (To Do · QA · Done) leave no room for the age beside key and points — it yields.
+          rel && <span className="hidden shrink-0 text-[10px] text-[var(--muted)] @[13rem]:inline">{rel}</span>
         )}
       </div>
 
@@ -290,10 +293,10 @@ export const TicketCard = memo(function TicketCard({
         )}
       </div>
 
-      {branches[0] && (
-        <div className="relative mt-auto w-full pt-1 text-[var(--muted)]" title={branches.join('\n')}>
-          <BranchName name={branches[0]} />
-          {branches.length > 1 ? <span className="font-mono text-[10px] opacity-80">{` +${branches.length - 1}`}</span> : null}
+      {branch && (
+        <div className="relative mt-auto w-full pt-1 text-[var(--muted)]" title={branch.all.join('\n')}>
+          <BranchName name={branch.shown} />
+          {branch.more > 0 ? <span className="font-mono text-[10px] opacity-80">{` +${branch.more}`}</span> : null}
         </div>
       )}
     </motion.div>

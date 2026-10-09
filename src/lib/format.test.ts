@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dtf, isAssignedToMe, primaryPrOf, releaseEnvOf } from './format'
+import { cardBranches, dtf, isAssignedToMe, primaryPrOf, releaseEnvOf } from './format'
 
 describe('dtf', () => {
   it('does not throw for an invalid zone and still formats', () => {
@@ -51,5 +51,24 @@ describe('primaryPrOf', () => {
 
   it('treats a linked PR whose state is "none" but has an id as a PR', () => {
     expect(primaryPrOf({ pr: { state: 'none', id: 5 } })?.id).toBe(5)
+  })
+})
+
+describe('cardBranches — what a parent card says about branches', () => {
+  const pr = (id: number, sourceBranch: string) => ({ id, state: 'comments' as const, sourceBranch })
+  it('with a PR: the branch the PR comes from, plus how many more', () => {
+    expect(cardBranches({ branches: ['b-old', 'b-pr', 'b-pr2'], branch: 'b-old', prs: [pr(1, 'b-pr'), pr(2, 'b-pr2')] })).toMatchObject({ shown: 'b-pr', more: 1 })
+    expect(cardBranches({ branches: ['b-old', 'b-pr'], prs: [pr(1, 'b-pr')] })).toMatchObject({ shown: 'b-pr', more: 0 })
+  })
+  it('two PRs from one branch is still one branch', () => {
+    expect(cardBranches({ prs: [pr(1, 'b'), pr(2, 'b')] })).toMatchObject({ shown: 'b', more: 0 })
+  })
+  it('no PR, several branches: only the newest (the ticket\'s primary branch)', () => {
+    expect(cardBranches({ branches: ['b-new', 'b-old'], branch: 'b-new' })).toMatchObject({ shown: 'b-new', more: 0, all: ['b-new', 'b-old'] })
+    expect(cardBranches({ branches: ['b-first', 'b-second'] })).toMatchObject({ shown: 'b-first', more: 0 })
+  })
+  it('no branch: nothing at all', () => {
+    expect(cardBranches({})).toBeNull()
+    expect(cardBranches({ branches: [], prs: [] })).toBeNull()
   })
 })

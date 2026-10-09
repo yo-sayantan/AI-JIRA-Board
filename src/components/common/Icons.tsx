@@ -49,51 +49,42 @@ export function RefreshIcon({ size = 16, className = '', color }: IP) {
 }
 
 /**
- * Minimal colour-coded priority mark — one distinct shape per tier:
- *   6 Critical  solid badge + white "!"   (deep red — unmissable)
- *   5 Highest   double chevron up         (red)
- *   4 High      single chevron up         (orange)
- *   3 Medium    two bars (=)              (amber)
- *   2 Low       single chevron down       (green)
- *   1 Lowest    double chevron down       (sky)
- *   0 None      dot                       (gray)
+ * Priority as a level meter: six ascending bars, as many lit as the tier — the same picture as phone
+ * signal strength, so "more bars = more urgent" needs no legend. The old up/down chevrons were
+ * near-identical at 16px (high vs highest, low vs lowest).
+ *   1 Lowest  ▂ lit: 1 of 6      (sky)       4 High      4 of 6   (orange)
+ *   2 Low     2 of 6             (green)     5 Highest   5 of 6   (red)
+ *   3 Medium  3 of 6             (amber)     6 Critical  6 of 6, white on a solid deep-red tile
+ *   0 None    a single dot       (gray)
  */
 export function PriorityIcon({ rank, color, size = 15 }: { rank: number; color: string; size?: number }) {
-  const s = line(color, 1.9)
-  if (rank >= 6) {
-    // Critical/Blocker: the only FILLED badge in the set, with a white exclamation.
+  if (rank <= 0) {
     return (
       <svg width={px(size)} height={px(size)} viewBox="0 0 16 16" aria-hidden>
-        <rect x="0.5" y="0.5" width="15" height="15" rx="4.5" fill={color} />
-        <path d="M8 3.6v5.1" stroke="#fff" strokeWidth="2.3" strokeLinecap="round" />
-        <circle cx="8" cy="12" r="1.3" fill="#fff" />
+        <circle cx="8" cy="8" r="2" fill={color} />
       </svg>
     )
   }
+  const critical = rank >= 6
+  const lit = Math.min(rank, 6)
   return (
     <svg width={px(size)} height={px(size)} viewBox="0 0 16 16" aria-hidden>
-      <rect x="0.5" y="0.5" width="15" height="15" rx="4.5" fill={color} opacity="0.16" />
-      {rank === 5 && (
-        <>
-          <path d="M4 9l4-3 4 3" {...s} />
-          <path d="M4 12l4-3 4 3" {...s} />
-        </>
-      )}
-      {rank === 4 && <path d="M4 10.5l4-4 4 4" {...s} />}
-      {rank === 3 && (
-        <>
-          <path d="M4.5 6.5h7" {...s} />
-          <path d="M4.5 9.8h7" {...s} />
-        </>
-      )}
-      {rank === 2 && <path d="M4 5.5l4 4 4-4" {...s} />}
-      {rank === 1 && (
-        <>
-          <path d="M4 4.5l4 3 4-3" {...s} />
-          <path d="M4 7.8l4 3 4-3" {...s} />
-        </>
-      )}
-      {rank <= 0 && <circle cx="8" cy="8" r="2" fill={color} />}
+      {critical && <rect x="0" y="0" width="16" height="16" rx="4" fill={color} />}
+      {[0, 1, 2, 3, 4, 5].map((i) => {
+        const h = 3.4 + i * 1.95
+        return (
+          <rect
+            key={i}
+            x={1 + i * 2.5}
+            y={14 - h}
+            width="2"
+            height={h}
+            rx="0.6"
+            fill={critical ? '#fff' : color}
+            opacity={i < lit ? 1 : 0.28}
+          />
+        )
+      })}
     </svg>
   )
 }

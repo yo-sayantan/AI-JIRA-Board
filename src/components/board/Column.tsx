@@ -10,11 +10,14 @@ import { LandingSlot, SPRING, SpaceHeader, dropBoxStyle } from './boardParts'
 
 // Widths per mode (lib/columns.ts::columnMode). A full column grows to share the width the empty ones
 // give up; a drop zone is just wide enough to aim at; a rail is a labelled sliver.
+// Full columns come in two weights: the slim edges (To Do · QA · Done) start narrower and grow less,
+// so spare width goes to Blocked · In Progress · In Review, whose cards carry the most.
 const WIDTH: Record<ColumnMode, { flex: string; minWidth: string }> = {
-  full: { flex: '1 1 13.5rem', minWidth: '13.5rem' },
+  full: { flex: '1.45 1 15rem', minWidth: '14.5rem' },
   drop: { flex: '0 0 7rem', minWidth: '7rem' },
   rail: { flex: '0 0 2.75rem', minWidth: '2.75rem' },
 }
+const WIDTH_SLIM = { flex: '0.55 1 11.5rem', minWidth: '11rem' } as const
 
 /** Which of a column's drop targets a card is over: the column itself, or Blocked's On Hold space. */
 type DropTarget = 'col' | 'hold'
@@ -115,7 +118,7 @@ export const Column = memo(function Column({
   return (
     <section
       className={`jb-col jb-col-${mode} flex flex-col`}
-      style={WIDTH[mode]}
+      style={mode === 'full' && meta.slim ? WIDTH_SLIM : WIDTH[mode]}
       aria-label={
         mode === 'full'
           ? `${meta.label} · ${tickets.length}${hasHold ? ` · ${HOLD_COLUMN.label} · ${held.length}` : ''}`

@@ -70,8 +70,7 @@ export function PriorityBadge({ priority }: { priority?: string | null }) {
 }
 
 /** Icon-only urgency signal for board cards — no "Low"/"Medium"/"High" text, just the glyph
- *  (six tiers by shape+colour: chevrons pointing down = calmer, up = more urgent, filled+! =
- *  critical). The label survives as a tooltip/aria-label so the information isn't lost, only
+ *  (a six-bar level meter: more bars lit = more urgent; Critical = all six on a solid red tile). The label survives as a tooltip/aria-label so the information isn't lost, only
  *  the always-on text is. Ticket detail keeps the full labelled `PriorityBadge` — this is
  *  deliberately card-only. */
 export function PriorityGlyph({ priority, size = 16 }: { priority?: string | null; size?: number }) {

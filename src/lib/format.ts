@@ -145,6 +145,26 @@ export function primaryPrOf(t: { prs?: PullRequest[] | null; pr?: PullRequest | 
   return prListOf(t)[0] ?? null
 }
 
+/**
+ * What a PARENT ticket's card says about branches — as little as is useful:
+ *   • a PR was raised  → the branch(es) those PRs come from (the primary PR's first), "+N" for more;
+ *   • no PR, branches  → just the newest one (`branch`; the pipeline ranks by newest commit);
+ *   • no branch        → nothing.
+ * `all` is every branch, for the tooltip.
+ */
+export function cardBranches(t: {
+  branches?: string[] | null
+  branch?: string | null
+  prs?: PullRequest[] | null
+  pr?: PullRequest | null
+}): { shown: string; more: number; all: string[] } | null {
+  const all = branchesOf(t)
+  const fromPrs = [...new Set(prListOf(t).map((p) => p.sourceBranch?.trim() ?? '').filter(Boolean))]
+  if (fromPrs.length) return { shown: fromPrs[0], more: fromPrs.length - 1, all: [...new Set([...fromPrs, ...all])] }
+  const newest = t.branch?.trim() || all[0]
+  return newest ? { shown: newest, more: 0, all } : null
+}
+
 /** All real branches for a ticket, falling back to the single `branch`. */
 export function branchesOf(t: { branches?: string[] | null; branch?: string | null }): string[] {
   if (t.branches && t.branches.length) return t.branches
