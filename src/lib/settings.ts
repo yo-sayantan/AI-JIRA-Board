@@ -164,11 +164,27 @@ export const FEATURES = [
       'Replaces the board with ~20 invented tickets covering every column (including Blocked and the QA In Progress shelf), On Hold, Next Sprint, sub-tasks, pull requests in every state, the Completed archive, Raised by me and two sample PR Readiness Reports. Drag-and-drop runs the same PR and QA gates in the browser, so a refused Done still slides back — but no refresh, transition, report or AI job is ever sent. Your real board is untouched and returns the moment you turn this off.',
   },
   {
+    key: 'blocked',
+    default: true,
+    label: 'Blocked section',
+    hint: 'The column for stuck work',
+    detail:
+      'Shows the Blocked column between To Do and In Progress. Off hides the column and every Blocked ticket with it — they are not on the board, and not in the Blocked count, until you switch it back on.',
+  },
+  {
+    key: 'qaInProgress',
+    default: true,
+    label: 'QA In Progress section',
+    hint: 'Its own space under QA',
+    detail:
+      'Shows tickets the QA team has picked up in their own space under QA. Off hides that space and its tickets — QA then lists only what is waiting for QA.',
+  },
+  {
     key: 'onHold',
     default: true,
     label: 'On Hold section',
     hint: 'Its own space under Blocked to park tickets',
-    detail: 'On Hold gets its own small space in the Blocked column, under Blocked: it shows paused and waiting tickets, and a card dropped on it is put On Hold in Jira (with a notice if its pull request is still open). It stays slim when empty. Off puts held tickets back in To Do and removes the drop target.',
+    detail: 'On Hold gets its own small space in the Blocked column, under Blocked: it shows paused and waiting tickets, and a card dropped on it is put On Hold in Jira (with a notice if its pull request is still open). It stays slim when empty. Off hides the space and every held ticket, and removes the drop target.',
   },
   {
     key: 'reloadActive',

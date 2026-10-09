@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { ColumnKey } from './types'
 import { RUN_COMMAND, aiModelLabel, enrichJobsRunning, isServed, setDemoMode } from './lib/runner'
-import { countMyCompleted, countRaised, countTicketsWithPr, dashboardPrTickets, hasActiveWork, indexByKey, splitBoard } from './lib/boardView'
+import { countMyCompleted, countRaised, countTicketsWithPr, dashboardPrTickets, hasActiveWork, indexByKey, splitBoard, type BoardSections } from './lib/boardView'
 import { parseQuery } from './lib/search'
 import { useBoardData } from './hooks/useBoardData'
 import { useBoardSettings } from './hooks/useBoardSettings'
@@ -68,7 +68,13 @@ export default function App() {
   // One selection drives the chip row: a column filters the board, 'next' reveals the Next Sprint
   // bar, 'all' reveals everything expanded. Picking any chip clears the others.
   const [sel, setSel] = useState<StatSelection>(null)
-  const focus: ColumnKey | null = sel === 'next' || sel === 'all' ? null : sel
+  // Settings → Board sections: which optional parts of the board are shown. A switched-off one is gone —
+  // its tickets are not on the board, not counted, and a chip focused on it falls back to the whole board.
+  const sections = useMemo<BoardSections>(
+    () => ({ blocked: features.blocked, onHold: features.onHold, qaInProgress: features.qaInProgress }),
+    [features.blocked, features.onHold, features.qaInProgress],
+  )
+  const focus: ColumnKey | null = sel === 'next' || sel === 'all' || (sel === 'blocked' && !features.blocked) ? null : sel
 
   const status = useInternStatus(served, features.autoRefresh || settingsOpen || jobs.running != null)
   const ai = status?.ai ?? null
@@ -86,7 +92,7 @@ export default function App() {
   }, [saveFailed, toast])
 
   const terms = useMemo(() => parseQuery(query), [query])
-  const view = useMemo(() => splitBoard(boardTickets, terms, now, features.onHold), [boardTickets, terms, now, features.onHold])
+  const view = useMemo(() => splitBoard(boardTickets, terms, now, sections), [boardTickets, terms, now, sections])
   // A drop judges "from" by the card AS DISPLAYED — moved by an earlier drop (its pin) or folded into
   // To Do (Settings → On Hold off) — not by the dump: dragging a card straight back is then a real
   // move, and dropping a card where it already shows is a no-op instead of a Jira transition.
@@ -209,6 +215,7 @@ export default function App() {
 
       <Stats
         tickets={view.board}
+        hideBlocked={!features.blocked}
         completedCount={features.completedArchive ? myCompletedCount : null}
         raisedCount={features.raisedTickets && raisedCount.total > 0 ? raisedCount : null}
         nextSprintCount={features.nextSprint ? view.nextSprint.length : 0}
@@ -227,7 +234,7 @@ export default function App() {
           archivedKeys={userArchived}
           onUndo={restoreArchived}
         />
-      ) : view.matched.length === 0 ? (
+      ) : view.matched.length === 0 && terms.length > 0 ? (
         // A search that only hits On Hold (its space under Blocked) or Next Sprint (below) still shows them.
         <NoMatches query={query} onClear={clearSearch} />
       ) : (
@@ -243,6 +250,7 @@ export default function App() {
           movingKeys={moves.movingKeys}
           bottomOrder={moves.bottomOrder}
           held={features.onHold ? view.hold : undefined}
+          sections={sections}
         />
       )}
 

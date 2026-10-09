@@ -22,6 +22,7 @@ export const SubSection = memo(function SubSection({
   droppable,
   texts,
   hint,
+  bare = false,
 }: {
   /** Drop-target id, matched by Column's `targetOf` (droppable sections only). */
   id: string
@@ -39,17 +40,20 @@ export const SubSection = memo(function SubSection({
   texts: { idle: string; dragging: string; slot: string }
   /** Tooltip while empty. */
   hint?: string
+  /** The column already wears this space's header (its own box is off): no second header, fill the column. */
+  bare?: boolean
 }) {
   const empty = tickets.length === 0
   return (
     <div
       data-drop={droppable ? id : undefined}
       role="group"
+      className={bare ? 'flex flex-1 flex-col' : undefined}
       aria-label={`${label} · ${tickets.length}${droppable && dragging ? ' — drop here' : ''}`}
     >
-      <SpaceHeader accent={accent} icon={icon} label={label} count={tickets.length} />
+      {!bare && <SpaceHeader accent={accent} icon={icon} label={label} count={tickets.length} />}
       <div
-        className="flex flex-col gap-2 rounded-2xl border border-dashed p-2 transition-[background,border-color,box-shadow,opacity] duration-150"
+        className={`flex flex-col gap-2 ${bare ? 'flex-1' : ''} rounded-2xl border border-dashed p-2 transition-[background,border-color,box-shadow,opacity] duration-150`}
         title={empty ? hint : undefined}
         style={{ ...dropBoxStyle(accent, droppable && over), opacity: !droppable && dragging ? 0.55 : 1 }}
       >

@@ -134,6 +134,8 @@
         "shortcuts": true,
         "autoRefresh": true,
         "aiBriefs": true,
+        "blocked": true,
+        "qaInProgress": true,
         "onHold": true,
         "reloadActive": true
       }

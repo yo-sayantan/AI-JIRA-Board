@@ -125,4 +125,25 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(enter.defaultPrevented).toBe(true)
     expect(hold.textContent).toContain('Release') // lit up on arrival
   })
+
+  it('QA In Progress switched off: no second space, and no QA In Progress in its name', () => {
+    const waiting = { key: 'Q-1', title: 'Waiting', status: 'Ready for QA', column: 'qa' as const }
+    const s = render({ meta: COLUMN_META.qa, tickets: [waiting], showQaInProgress: false })
+    expect(s.querySelector('[role=group]')).toBeNull()
+    expect(s.getAttribute('aria-label')).toBe('QA · 1')
+    act(() => root!.unmount())
+    expect(render({ meta: COLUMN_META.qa, showQaInProgress: false }).getAttribute('aria-label')).toBe('QA — empty')
+  })
+
+  it('Blocked off but On Hold on: the column is just On Hold — its name, its target, no Blocked box', () => {
+    const onMove = vi.fn()
+    const parked = { key: 'H-1', title: 'Parked', status: 'On Hold', column: 'hold' as const }
+    const s = render({ meta: COLUMN_META.blocked, held: [parked], hideOwn: true, onMove })
+    expect(s.getAttribute('aria-label')).toBe('On Hold · 1')
+    expect(s.textContent).not.toMatch(/Blocked/i)
+    drop(s, 'ABC-1', 5) // anywhere in the column means On Hold
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'hold')
+    act(() => root!.unmount())
+    expect(render({ meta: COLUMN_META.blocked, held: [], hideOwn: true }).getAttribute('aria-label')).toBe('On Hold — empty')
+  })
 })

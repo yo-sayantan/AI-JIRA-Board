@@ -100,8 +100,7 @@ its own box, never nested inside Blocked's. It is always there to drop on — a 
 put On Hold in Jira (`transition.py` picks an On Hold status; an open PR earns a notice, never a
 refusal) — but stays a slim box when empty, and Blocked's box shrinks to its cards so On Hold sits
 right below it. When both are empty the column folds to a rail of two separate boxes (Blocked above
-⏸ On Hold); during a drag it opens to two separate drop boxes at the top. Settings → *On Hold section* off folds held tickets back
-into To Do and removes the target. The column's one set of drag listeners tells the two targets
+⏸ On Hold); during a drag it opens to two separate drop boxes at the top. Settings → *On Hold section* off hides the space and its tickets and removes the target. The column's one set of drag listeners tells the two targets
 apart by `closest('[data-drop="hold"]')`. `board/OnHold.tsx` (`OnHoldSection`), `board/Column.tsx`,
 `splitBoard` in `lib/boardView.ts`.
 
@@ -159,7 +158,11 @@ raised rows queue after active tickets. Render path heals JSON-wrapped model out
 Overlay with three areas (`src/components/settings/Settings.tsx`):
 - **Appearance** — theme auto/fixed/scheduled (+ day window).
 - **Board sections** — one compact multi-select (`SectionPicker.tsx`) for the optional parts of the
-  board: Next Sprint, On Hold, Completed archive, Raised by me. The chosen ones show as coloured chips;
+  board: Blocked, On Hold, QA In Progress, Next Sprint, Completed archive, Raised by me. **A section
+  switched off is gone**: its tickets are not on the board and not in any count (`inHiddenSection` in
+  `lib/boardView.ts`), and the stat chip disappears. Blocked off with On Hold on leaves the column as
+  On Hold alone; QA In Progress off leaves QA listing only what is waiting for QA. Hidden work still
+  counts as work, so the empty-board celebration does not fire over it. The chosen ones show as coloured chips;
   the dropdown is a checklist with Select all / Clear, fully keyboard operable (↑↓ Home End, Space/Enter
   toggle; Esc closes only the list, not Settings). Which keys count as sections is `SECTION_KEYS` in
   `Settings.tsx`; adding a section is one entry in `FEATURES` + its colour/icon in `FEATURE_STYLE` + one

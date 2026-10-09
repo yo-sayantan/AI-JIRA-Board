@@ -28,6 +28,7 @@ function AnimatedNumber({ value }: { value: number }) {
 
 export const Stats = memo(function Stats({
   tickets,
+  hideBlocked = false,
   completedCount,
   raisedCount,
   nextSprintCount = 0,
@@ -38,6 +39,8 @@ export const Stats = memo(function Stats({
 }: {
   /** Board + On Hold tickets only — next-sprint work is counted separately. */
   tickets: Ticket[]
+  /** Settings → Blocked section off: no Blocked chip. */
+  hideBlocked?: boolean
   /** null hides the Completed chip entirely (Settings → Completed archive off). */
   completedCount: number | null
   /** Tickets I reported: open/total. null hides the chip (feature off or nothing raised). */
@@ -67,7 +70,7 @@ export const Stats = memo(function Stats({
         <AnimatedNumber value={total} /> active
       </button>
 
-      {BOARD_COLUMNS.map((c) => {
+      {BOARD_COLUMNS.filter((c) => !(hideBlocked && c.key === 'blocked')).map((c) => {
         const n = counts(c.key)
         const isActive = active === c.key
         return (

@@ -51,6 +51,8 @@ export const Column = memo(function Column({
   dragActive = false,
   focused = false,
   held,
+  hideOwn = false,
+  showQaInProgress = true,
 }: {
   meta: ColumnMeta
   tickets: Ticket[]
@@ -68,12 +70,18 @@ export const Column = memo(function Column({
   focused?: boolean
   /** Blocked only: the On Hold space's tickets. Undefined = no On Hold space (Settings → On Hold off). */
   held?: Ticket[]
+  /** Settings → Blocked off while On Hold is on: the column is just the On Hold space, no Blocked box. */
+  hideOwn?: boolean
+  /** Settings → QA In Progress off: no second space under QA. */
+  showQaInProgress?: boolean
 }) {
   // QA's cards split in two spaces: waiting for QA (the column's own box) and picked up by QA.
   const inProgress = meta.key === 'qa' ? tickets.filter((t) => isQaInProgress(t.status)) : []
   const own = meta.key === 'qa' ? tickets.filter((t) => !isQaInProgress(t.status)) : tickets
-  const sub: Sub | null = meta.key === 'qa' ? SUB_QAIP : meta.key === 'blocked' && held !== undefined ? SUB_HOLD : null
+  const sub: Sub | null = meta.key === 'qa' ? (showQaInProgress ? SUB_QAIP : null) : meta.key === 'blocked' && held !== undefined ? SUB_HOLD : null
   const subTickets = sub?.id === 'hold' ? (held ?? []) : inProgress
+  // With its own box off, the column IS its second space: it wears that space's header and fills with it.
+  const ownOff = hideOwn && sub?.id === 'hold'
 
   // The column's own box, whatever the mode draws it as. With a droppable second space, the pointer is
   // on it when inside it or anywhere BELOW the column's own box — so the blank part of the column under
@@ -83,6 +91,7 @@ export const Column = memo(function Column({
   const [over, setOver] = useState<DropTarget | null>(null)
   const accepts = (e: DragEvent) => !!onMove && e.dataTransfer.types.includes(DRAG_MIME)
   const targetOf = (e: DragEvent): DropTarget => {
+    if (ownOff) return 'sub'
     if (!sub?.droppable) return 'col'
     if ((e.target as Element | null)?.closest?.(`[data-drop="${sub.id}"]`)) return 'sub'
     const box = ownBox.current?.getBoundingClientRect()
@@ -121,8 +130,8 @@ export const Column = memo(function Column({
   const mode = columnMode({ count: own.length, held: subTickets.length, focused, dragging })
   const dropLabel = meta.key === 'blocked' ? 'Drop to mark as Blocked' : `Drop to move to ${meta.label}`
   const emptyHint = meta.key === 'blocked' ? (dragging ? 'Drag a stuck card here' : 'Nothing blocked') : meta.key === 'qa' ? 'Nothing waiting for QA' : 'Nothing here'
-  const name = sub ? `${meta.label} and ${sub.label}` : meta.label
-  const stacked = !!sub
+  const name = ownOff ? sub!.label : sub ? `${meta.label} and ${sub.label}` : meta.label
+  const stacked = !!sub && !ownOff
 
   const card = (t: Ticket) => (
     <TicketCard
@@ -144,7 +153,9 @@ export const Column = memo(function Column({
       style={{ ...(mode === 'full' && meta.slim ? WIDTH_SLIM : WIDTH[mode]), marginInline: -6, paddingInline: 6 }}
       aria-label={
         mode === 'full'
-          ? `${meta.label} · ${own.length}${sub ? ` · ${sub.label} · ${subTickets.length}` : ''}`
+          ? ownOff
+            ? `${sub!.label} · ${subTickets.length}`
+            : `${meta.label} · ${own.length}${sub ? ` · ${sub.label} · ${subTickets.length}` : ''}`
           : `${name} — empty${mode === 'drop' ? ', drop a card here' : ''}`
       }
       onDragEnter={arm}
@@ -153,28 +164,29 @@ export const Column = memo(function Column({
       onDrop={onDrop}
     >
       <SpaceHeader
-        accent={meta.accent}
-        icon={<ColumnIcon col={meta.key} color={meta.accent} size={13} />}
-        label={meta.label}
-        count={mode === 'full' ? own.length : undefined}
+        accent={ownOff ? sub!.accent : meta.accent}
+        icon={ownOff ? <PauseIcon size={13} color={sub!.accent} /> : <ColumnIcon col={meta.key} color={meta.accent} size={13} />}
+        label={ownOff ? sub!.label : meta.label}
+        count={mode === 'full' ? (ownOff ? subTickets.length : own.length) : undefined}
         folded={mode === 'rail'}
         title={mode === 'rail' ? `${name} — empty. Drag a card here to move it in Jira.` : undefined}
       />
 
       {mode === 'rail' ? (
         <div className="flex flex-1 flex-col gap-3">
-          <RailBox boxRef={ownBox} accent={meta.accent} label={meta.label} stacked={stacked} />
-          {sub && <RailBox accent={sub.accent} label={sub.label} stacked sub={sub} />}
+          {!ownOff && <RailBox boxRef={ownBox} accent={meta.accent} label={meta.label} stacked={stacked} />}
+          {sub && <RailBox accent={sub.accent} label={sub.label} stacked={!ownOff} sub={sub} />}
         </div>
       ) : mode === 'drop' ? (
         <div className="flex flex-1 flex-col gap-2">
-          <DropZone boxRef={ownBox} accent={meta.accent} label={meta.label} active={over === 'col'} stacked={stacked} />
-          {sub && <DropZone accent={sub.accent} label={sub.label} active={over === 'sub'} stacked sub={sub} />}
+          {!ownOff && <DropZone boxRef={ownBox} accent={meta.accent} label={meta.label} active={over === 'col'} stacked={stacked} />}
+          {sub && <DropZone accent={sub.accent} label={sub.label} active={over === 'sub'} stacked={!ownOff} sub={sub} />}
         </div>
       ) : (
         <div className={`flex flex-1 flex-col ${stacked ? 'gap-4' : ''}`}>
           {/* The column's own box. Alone it fills the column's height, so a drop anywhere below the
               cards counts; with a second space it is sized to its cards and that space follows. */}
+          {!ownOff && (
           <div
             ref={ownBox}
             className={`relative flex flex-col gap-2 rounded-2xl border border-dashed p-2 transition-[background,border-color,box-shadow] duration-150 ${stacked ? '' : 'flex-1'}`}
@@ -195,6 +207,7 @@ export const Column = memo(function Column({
               </motion.div>
             )}
           </div>
+          )}
 
           {/* The second space: its own header and box, slim when empty. */}
           {sub && (
@@ -208,6 +221,7 @@ export const Column = memo(function Column({
               over={over === 'sub'}
               dragging={dragging}
               droppable={sub.droppable}
+              bare={ownOff}
               texts={SUB_TEXTS[sub.id]}
               hint={sub.droppable ? 'Drag a card here to put it on hold in Jira.' : 'Picked up by the QA team in Jira. Cards cannot be dropped here — drop them on QA and QA takes it from there.'}
             />

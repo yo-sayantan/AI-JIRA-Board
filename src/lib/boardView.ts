@@ -1,34 +1,52 @@
 import { completedToTicket, raisedToTicket, type JiraData, type Ticket } from '../types'
+import { isQaInProgress } from './columns'
 import { isNextSprint, prListOf } from './format'
 import { matches, type Term } from './search'
+
+/** Which optional board sections are switched on (Settings → Board sections). */
+export interface BoardSections {
+  blocked: boolean
+  onHold: boolean
+  qaInProgress: boolean
+}
+export const ALL_SECTIONS: BoardSections = { blocked: true, onHold: true, qaInProgress: true }
+
+/** A ticket that lives in a section the user switched off is not on the board at all — no card, no count. */
+export function inHiddenSection(t: Pick<Ticket, 'column' | 'status'>, s: BoardSections): boolean {
+  if (t.column === 'blocked') return !s.blocked
+  if (t.column === 'hold') return !s.onHold
+  if (t.column === 'qa') return !s.qaInProgress && isQaInProgress(t.status)
+  return false
+}
 
 export interface BoardView {
   /** Every active ticket the search matched, wherever it renders. */
   matched: Ticket[]
-  /** The kanban columns. With the On Hold section off, held tickets sit in To Do instead. */
+  /** The kanban columns. */
   board: Ticket[]
+  /** On Hold — its own space under Blocked. Empty when that section is off. */
   hold: Ticket[]
   /** To Do tickets whose sprint has not started. */
   nextSprint: Ticket[]
 }
 
-export function splitBoard(tickets: Ticket[], terms: Term[], now: number, onHoldSection: boolean): BoardView {
+export function splitBoard(tickets: Ticket[], terms: Term[], now: number, sections: BoardSections = ALL_SECTIONS): BoardView {
   const view: BoardView = { matched: [], board: [], hold: [], nextSprint: [] }
   for (const t of tickets) {
-    if (!matches(t, terms)) continue
+    if (inHiddenSection(t, sections) || !matches(t, terms)) continue
     view.matched.push(t)
     if (isNextSprint(t, now)) view.nextSprint.push(t)
-    else if (t.column !== 'hold') view.board.push(t)
-    else if (onHoldSection) view.hold.push(t)
-    else view.board.push({ ...t, column: 'todo' })
+    else if (t.column === 'hold') view.hold.push(t)
+    else view.board.push(t)
   }
   return view
 }
 
 /**
  * Ignores next sprint's queue, or finishing a sprint would never earn the empty-board celebration.
- * Held tickets DO count: they sit on the board (their own space under Blocked, or To Do
- * when that shelf is off), so a board holding only parked work is not an empty board.
+ * Held tickets DO count: they sit on the board (their own space under Blocked), so a board holding
+ * only parked work is not an empty board. So do tickets in a section the user switched off — hiding
+ * a section must not turn the board into a "nothing left to do" celebration.
  */
 export function hasActiveWork(tickets: Ticket[], now: number): boolean {
   return tickets.some((t) => !isNextSprint(t, now))
