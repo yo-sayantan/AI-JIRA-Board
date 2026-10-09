@@ -67,6 +67,9 @@ which is the slow one. This run PRESERVES the existing `completed[]` untouched (
 TIGHT JQL — query only my active set (small — usually a handful):
   assignee = currentUser() AND statusCategory != Done
   UNION  assignee = currentUser() AND statusCategory = Done AND resolved >= -10d
+  ALSO add QA tickets NOT assigned to me: open (or resolved in the last 10d) tickets I REPORTED (reporter = currentUser()) and tickets
+  linked to one of mine, whose issue type is QA/Test, whose labels include qa / qa-ticket / testing, or whose title starts "QA:" / "[QA]".
+  They go in tickets[] like any other (their own status decides the column).
   (NOTE: the BOARD only shows a Done ticket for 5 days (config app.doneBoardDays), then auto-retires it to the Completed archive.
    The fetch window is deliberately WIDER (-10d) than that so a done ticket never falls out of tickets[]
    before the weekly job has archived it into completed[] — otherwise it would vanish from both views.)

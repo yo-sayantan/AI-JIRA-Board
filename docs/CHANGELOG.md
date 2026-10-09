@@ -11,6 +11,7 @@ code does now, so a reader can check them against the tree.
   Done. In Review needs a PR (or, for a sub-ticket, an open PR on its parent); Done needs every PR
   merged or declined and a QA ticket raised — no longer a finished one. The old "no PR" warning for
   In Review is now a refusal.
+- **QA tickets show up on the board.** The daily fetch now also pulls QA tickets that are not assigned to you — ones you raised and ones linked to your tickets (`qa_rules.py`, shared with the move rules) — so a QA ticket linked to a Blocked ticket appears in To Do, and can then move only within the QA lane.
 - **Why, force, undo.** While dragging, a refusing zone says why. ⌥-drop on a PR / QA gate asks to
   force it; a live refusal from the server offers *Move anyway*; every finished move has **Undo** for
   8 s (`mode=force|undo` on `/api/move-ticket`). The QA lane can never be forced.
