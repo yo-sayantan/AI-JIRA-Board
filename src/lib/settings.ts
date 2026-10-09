@@ -167,8 +167,8 @@ export const FEATURES = [
     key: 'onHold',
     default: true,
     label: 'On Hold section',
-    hint: 'The strip for paused and waiting tickets',
-    detail: 'Shows On Hold under the board. Off puts those tickets back in To Do instead of hiding them.',
+    hint: 'Its own space under Blocked to park tickets',
+    detail: 'On Hold gets its own small space in the Blocked column, under Blocked: it shows paused and waiting tickets, and a card dropped on it is put On Hold in Jira (with a notice if its pull request is still open). It stays slim when empty. Off puts held tickets back in To Do and removes the drop target.',
   },
   {
     key: 'reloadActive',

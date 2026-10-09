@@ -166,7 +166,7 @@ select.jb-field:disabled {
   border-color: color-mix(in srgb, var(--card-accent) 46%, var(--line));
   background-color: color-mix(in srgb, var(--card-accent) 8%, var(--surface-solid));
 }
-/* Board columns: width eases when the Blocked rail folds or opens (flex-basis/grow/min-width are
+/* Board columns: width eases when an empty column folds to a rail or opens to a drop zone (flex-basis/grow/min-width are
    the animatable parts of a flex column). */
 .jb-col {
   transition:

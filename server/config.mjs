@@ -24,6 +24,7 @@ export const PATHS = {
   archiveScript: join(RUNNER, 'update-completed.sh'),
   refreshScript: join(RUNNER, 'refresh-ticket.sh'),
   transitionPy: join(INTERN, 'transition.py'),
+  moveTargets: join(INTERN, 'move_targets.json'),
   raisedScript: join(RUNNER, 'refresh-raised.sh'),
   modelCatalog: join(ROOT, 'ai-intern', 'models.json'),
 }

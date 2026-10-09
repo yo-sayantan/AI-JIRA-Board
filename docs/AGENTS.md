@@ -159,6 +159,9 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
   `applySettings`) for framer-motion, whose JS animations ignore CSS and otherwise follow only the OS
   reduce-motion setting. New motion code needs no extra wiring — but a CSS "off" rule must also set
   `animation-iteration-count: 1`, or a 0.001 ms infinite loop becomes a strobe.
+- Drag targets live in ONE file, `jira-intern/move_targets.json`, read by `src/lib/columns.ts`,
+  `server/jobs.mjs` and `transition.py` (whose `PREFERRED` must have an entry per target — a test
+  checks). Adding a target means that file plus a `PREFERRED` row, nothing else.
 - localStorage keys in use: `jb-settings`, `jb-archived`, `jb-completed-show-context`,
   `jb-guide-os` (+ legacy `jb-theme`, `jb-hidden` migrations). No cookies anywhere.
 - The board can run from `file://` — every feature must degrade: served-only controls hide or

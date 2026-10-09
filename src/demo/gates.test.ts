@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Ticket } from '../types'
 import { demoDump } from './index'
-import { evaluateMove, qaIssuesOf } from './gates'
+import { demoMoveVerdict, evaluateMove, qaIssuesOf } from './gates'
 
 const base: Ticket = { key: 'T-1', title: 'A ticket', status: 'In Progress', column: 'prog' }
 const withPr = (merged: boolean): Ticket => ({ ...base, pr: { state: merged ? 'merged' : 'comments', id: 7, merged } })
@@ -147,5 +147,23 @@ describe('demo move gates — sub-tickets', () => {
 
   it('does not warn a sub-ticket about a missing PR when it moves to review', () => {
     expect(evaluateMove('rev', sub).warnings).toEqual([])
+  })
+})
+
+describe('demo move gates — On Hold', () => {
+  it('parks any card, warning when its pull request is still open', () => {
+    const { blocker, warnings } = evaluateMove('hold', withPr(false))
+    expect(blocker).toBeNull()
+    expect(warnings.join(' ')).toContain('#7 is still open')
+  })
+  it('says nothing when the PR is merged, declined, or there is none', () => {
+    expect(evaluateMove('hold', withPr(true))).toEqual({ blocker: null, warnings: [] })
+    expect(evaluateMove('hold', { ...base, prs: [{ state: 'declined', id: 4 }] })).toEqual({ blocker: null, warnings: [] })
+    expect(evaluateMove('hold', base)).toEqual({ blocker: null, warnings: [] })
+  })
+  it('moves the card on the demo board', () => {
+    const v = demoMoveVerdict(withPr(false), 'hold')
+    expect(v.ok).toBe(true)
+    expect(v.status).toBe('On Hold')
   })
 })

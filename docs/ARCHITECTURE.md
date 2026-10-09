@@ -122,7 +122,7 @@ One user, one tab, mostly idle with bursts of background work. So:
 ## Board rules worth knowing
 
 - **Columns:** To Do · Blocked · In Progress · In Review (folds in Ready4Review + Code Review) · QA (with a QA In Progress shelf) · Done.
-- **On Hold:** its own section, shown only when something is paused/waiting.
+- **On Hold:** its own space under Blocked in the Blocked column — a drop target that stays slim when empty.
 - **Next Sprint:** To Do tickets whose sprint hasn't started yet (Jira sprint state `future`, or
   a grooming bucket like `… READY`) are pulled out of To Do into their own collapsible bar, so a
   cleared current-sprint To Do doesn't look full. See `src/lib/format.ts` → `isNextSprint`.

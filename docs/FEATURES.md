@@ -7,14 +7,14 @@ are the fastest way into any feature.
 
 | Aspect | Behaviour | Code |
 |---|---|---|
-| Columns | To Do · **Blocked** · In Progress · In Review (folds Ready4Review/Code Review) · QA · Done, fixed order. Blocked is a side state (not a pipeline stage); while empty and nothing is being dragged it folds to a slim rail so the working columns get the width, and opens the moment a drag starts | `src/lib/columns.ts` (`BOARD_COLUMNS`), mapping fallback `mapStatusToColumn` |
+| Columns | To Do · **Blocked** · In Progress · In Review (folds Ready4Review/Code Review) · QA · Done, fixed order. Blocked is a side state (not a pipeline stage). **Every empty column folds to a slim labelled rail** and its width goes to the columns that have cards; while a card is dragged it opens only to a compact (7rem) drop zone labelled *Drop here*, so the board barely moves under the cursor. A column focused by a stat chip never folds. The rule is one pure function, `columnMode` | `src/lib/columns.ts` (`BOARD_COLUMNS`, `columnMode`), mapping fallback `mapStatusToColumn`; widths in `board/Column.tsx` |
 | Column assignment | The intern maps raw Jira status → `column`; the app trusts it, with a word-boundary fallback for unknown statuses | `jira-intern/_jira.py::status_column`, `src/data.ts::normalizeTicket` |
 | QA In Progress | A shelf inside the QA column for tickets the QA team has picked up (`In QA`, `Under QA`, `In Testing`, `QA In Progress`… — any QA status that is not a ready/awaiting word). Appears only when occupied. Never a drop target: dropping on QA lands on a ready-for-QA status and QA moves it on in Jira | `src/lib/columns.ts` (`isQaInProgress`, `QA_IN_PROGRESS`), `board/Column.tsx`, `transition.py` (`PREFERRED['qa']`) |
 | Cards | Key, title, type/priority glyphs, points, branch, PR badge (the PR of the ticket's newest branch), `+N PR` for the others, comment count, age, sprint-carryover marker | `src/components/board/TicketCard.tsx` |
 | Done retirement | A Done ticket stays ~3 days as a "recent win", then auto-retires into Completed (`app.doneBoardDays`) | `src/data.ts::prepare` |
 | Manual archive | Trophy button on a Done card/drawer moves it to Completed immediately; undoable until reload drops it | `src/data.ts` (localStorage `jb-archived`), `ArchivedUndo` in `board/BoardNotices.tsx` |
 | Empty board | Celebration state when nothing is active | `board/FunEmptyBoard.tsx` |
-| Drag to change status | Drop a card in To Do / Blocked / In Progress / In Review / QA / Done and the ticket is transitioned **in Jira** in the background. The card moves at once; Jira's verdict arrives a few seconds later. In Review warns when there is no PR, QA warns when there is no QA ticket (the move still happens). Done is **refused** until every PR is merged and every QA ticket is done — the card slides back. A **sub-ticket** is lighter: with no PR (and no QA ticket) of its own it can go straight to Done, because its work usually rides on the parent's PR; a PR *of its own* that is not merged (or an open QA ticket) still blocks. The parent's PR never counts for its sub-tickets, and no ticket counts a PR that names only other tickets (a release PR, a merge from dev) — a ticket whose work shipped only inside someone else's PR therefore has no PR of its own here and is closed in Jira. Gates read live Jira, not the cached dump. Settings → *Drag to change status*; needs the local server. | `board/Column.tsx` (drop target), `board/TicketCard.tsx` (native drag), `src/hooks/useTicketMoves.ts` (optimistic override + bounce-back), `POST /api/move-ticket` in `server/serve.mjs` → `server/jobs.mjs::moveTicket` → `jira-intern/transition.py` |
+| Drag to change status | Drop a card in To Do / Blocked / **On Hold** / In Progress / In Review / QA / Done and the ticket is transitioned **in Jira** in the background. The card moves at once; Jira's verdict arrives a few seconds later. In Review warns when there is no PR, QA warns when there is no QA ticket, On Hold warns when a PR is still open (the move still happens). Done is **refused** until every PR is merged and every QA ticket is done — the card slides back. A **sub-ticket** is lighter: with no PR (and no QA ticket) of its own it can go straight to Done, because its work usually rides on the parent's PR; a PR *of its own* that is not merged (or an open QA ticket) still blocks. The parent's PR never counts for its sub-tickets, and no ticket counts a PR that names only other tickets (a release PR, a merge from dev) — a ticket whose work shipped only inside someone else's PR therefore has no PR of its own here and is closed in Jira. Gates read live Jira, not the cached dump. Settings → *Drag to change status*; needs the local server. | `board/Column.tsx` (drop target), `board/TicketCard.tsx` (native drag), `src/hooks/useTicketMoves.ts` (optimistic override + bounce-back), `POST /api/move-ticket` in `server/serve.mjs` → `server/jobs.mjs::moveTicket` → `jira-intern/transition.py` |
 
 ## Demo mode
 
@@ -95,8 +95,18 @@ are pulled OUT of To Do into a collapsible bar so a finished sprint doesn't look
 
 ## On Hold
 
-Blocked/waiting statuses get their own strip below the board (feature-toggleable; off folds
-them back into To Do). `board/OnHold.tsx`, `splitBoard` in `lib/boardView.ts`.
+Its **own space in the Blocked column**, under Blocked and separate from it — its own header and
+its own box, never nested inside Blocked's. It is always there to drop on — a card dropped on it is
+put On Hold in Jira (`transition.py` picks an On Hold status; an open PR earns a notice, never a
+refusal) — but stays a slim box when empty, and Blocked's box shrinks to its cards so On Hold sits
+right below it. When both are empty the column folds to a rail of two separate boxes (Blocked above
+⏸ On Hold); during a drag it opens to two separate drop boxes at the top. Settings → *On Hold section* off folds held tickets back
+into To Do and removes the target. The column's one set of drag listeners tells the two targets
+apart by `closest('[data-drop="hold"]')`. `board/OnHold.tsx` (`OnHoldSection`), `board/Column.tsx`,
+`splitBoard` in `lib/boardView.ts`.
+
+Drag targets are ONE list, `jira-intern/move_targets.json`, read by the board
+(`lib/columns.ts::MOVE_TARGETS`), the server (`server/jobs.mjs`) and `transition.py`.
 
 ## Ticket detail drawer
 

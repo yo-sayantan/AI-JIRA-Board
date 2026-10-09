@@ -33,8 +33,8 @@ React 19 · Vite 6 · Tailwind v4 · Motion · a Python fetch pipeline · one se
 
 - **Kanban board** — To Do · In Progress · In Review (folds in Ready4Review + Code Review) · QA ·
   Done. Colour-coded animated cards; click any for a full detail drawer. Chips filter; live search.
-- **Blocked** — a column between To Do and In Progress for stuck work; folds to a rail while empty.
-- **On Hold** — its own section, shown only when something is paused/waiting.
+- **Blocked** — a column between To Do and In Progress for stuck work. Every empty column folds to a slim rail so the columns with cards get the width.
+- **On Hold** — its own small space under Blocked, in the same column; always there to drop a card on.
 - **Next Sprint** — tickets queued in a sprint that hasn't started yet, kept out of To Do so a
   cleared sprint doesn't look full. Toggle it from the top chips; **All** reveals everything at once.
 - **PR Readiness Report** — for every ticket with a pull request: a management-grade, colour-coded

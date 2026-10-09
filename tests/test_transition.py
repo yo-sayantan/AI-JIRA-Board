@@ -136,3 +136,49 @@ class SubticketGates(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OnHoldTarget(unittest.TestCase):
+    """On Hold is a drop target (the shelf in the Blocked column): never blocked, but an open PR is
+    called out — it will sit unreviewed while the ticket is parked."""
+
+    def test_hold_is_a_target_from_the_shared_list(self):
+        import json
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jira-intern", "move_targets.json")
+        with open(path, encoding="utf-8") as f:
+            self.assertEqual(COLUMNS, tuple(json.load(f)))
+        self.assertIn("hold", COLUMNS)
+
+    def test_every_target_has_preferred_status_names(self):
+        from transition import PREFERRED
+        self.assertEqual(set(PREFERRED), set(COLUMNS))
+
+    def test_an_open_pr_warns_but_does_not_block(self):
+        blocker, warnings = evaluate("hold", [OPEN_PR], [])
+        self.assertIsNone(blocker)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("#7 is still open", warnings[0])
+
+    def test_merged_declined_or_no_pr_is_silent(self):
+        self.assertEqual(evaluate("hold", [MERGED_PR], []), (None, []))
+        self.assertEqual(evaluate("hold", [DECLINED_PR], []), (None, []))
+        self.assertEqual(evaluate("hold", [], []), (None, []))
+
+    def test_picks_an_on_hold_status(self):
+        transitions = [
+            {"id": "1", "to": {"name": "Waiting"}},
+            {"id": "2", "to": {"name": "On Hold"}},
+            {"id": "3", "to": {"name": "In Progress"}},
+        ]
+        self.assertEqual(pick_transition(transitions, "hold")["id"], "2")
+
+    def test_the_command_line_accepts_hold(self):
+        import io
+        from contextlib import redirect_stdout
+        from unittest import mock
+        import transition
+        out = io.StringIO()
+        with mock.patch.object(transition, "move", return_value={"ok": True, "moved": True, "status": "On Hold", "warnings": []}), \
+                mock.patch.object(transition, "load_env"), redirect_stdout(out):
+            self.assertEqual(transition.main(["transition.py", "abc-1", "hold"]), 0)
+        self.assertIn('"On Hold"', out.getvalue())
