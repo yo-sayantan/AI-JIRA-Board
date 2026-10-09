@@ -49,42 +49,35 @@ export function RefreshIcon({ size = 16, className = '', color }: IP) {
 }
 
 /**
- * Priority as a level meter: six ascending bars, as many lit as the tier — the same picture as phone
- * signal strength, so "more bars = more urgent" needs no legend. The old up/down chevrons were
- * near-identical at 16px (high vs highest, low vs lowest).
- *   1 Lowest  ▂ lit: 1 of 6      (sky)       4 High      4 of 6   (orange)
- *   2 Low     2 of 6             (green)     5 Highest   5 of 6   (red)
- *   3 Medium  3 of 6             (amber)     6 Critical  6 of 6, white on a solid deep-red tile
- *   0 None    a single dot       (gray)
+ * Priority: a rounded tile with one bold glyph per tier — a different SHAPE for each, so the tiers
+ * read at 16px without a legend. Critical is the one solid tile (white "!"); every other tier is a
+ * tinted tile with a bold chevron in the tier's colour.
+ *   6 Critical  !  on a solid deep-red tile     3 Medium   —  amber
+ *   5 Highest   double chevron up   red         2 Low      ⌄  green
+ *   4 High      single chevron up   orange      1 Lowest   double chevron down  sky
+ *   0 None      a quiet grey dot
  */
 export function PriorityIcon({ rank, color, size = 15 }: { rank: number; color: string; size?: number }) {
-  if (rank <= 0) {
-    return (
-      <svg width={px(size)} height={px(size)} viewBox="0 0 16 16" aria-hidden>
-        <circle cx="8" cy="8" r="2" fill={color} />
-      </svg>
-    )
-  }
-  const critical = rank >= 6
-  const lit = Math.min(rank, 6)
+  const c = (width: number) => ({ fill: 'none', stroke: color, strokeWidth: width, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const })
   return (
-    <svg width={px(size)} height={px(size)} viewBox="0 0 16 16" aria-hidden>
-      {critical && <rect x="0" y="0" width="16" height="16" rx="4" fill={color} />}
-      {[0, 1, 2, 3, 4, 5].map((i) => {
-        const h = 3.4 + i * 1.95
-        return (
-          <rect
-            key={i}
-            x={1 + i * 2.5}
-            y={14 - h}
-            width="2"
-            height={h}
-            rx="0.6"
-            fill={critical ? '#fff' : color}
-            opacity={i < lit ? 1 : 0.28}
-          />
-        )
-      })}
+    <svg width={px(size)} height={px(size)} viewBox="0 0 24 24" aria-hidden>
+      {rank >= 6 ? (
+        <>
+          <rect x="1" y="1" width="22" height="22" rx="7" fill={color} />
+          <path d="M12 6.5v7" fill="none" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" />
+          <circle cx="12" cy="17.4" r="1.6" fill="#fff" />
+        </>
+      ) : (
+        <>
+          <rect x="1" y="1" width="22" height="22" rx="7" fill={color} fillOpacity={rank <= 0 ? 0.12 : 0.2} />
+          {rank === 5 && <path d="M6.5 11.5l5.5-5 5.5 5M6.5 17.5l5.5-5 5.5 5" {...c(2.8)} />}
+          {rank === 4 && <path d="M6.5 14.5l5.5-5.5 5.5 5.5" {...c(2.8)} />}
+          {rank === 3 && <path d="M7 12h10" {...c(3)} />}
+          {rank === 2 && <path d="M6.5 9.5l5.5 5.5 5.5-5.5" {...c(2.8)} />}
+          {rank === 1 && <path d="M6.5 6.5l5.5 5 5.5-5M6.5 12.5l5.5 5 5.5-5" {...c(2.8)} />}
+          {rank <= 0 && <circle cx="12" cy="12" r="2.6" fill={color} />}
+        </>
+      )}
     </svg>
   )
 }
