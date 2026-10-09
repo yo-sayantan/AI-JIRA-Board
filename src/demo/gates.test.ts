@@ -1,59 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import type { Ticket } from '../types'
+import { isQaTicket } from '../lib/moveRules'
 import { demoDump } from './index'
-import { demoMoveVerdict, evaluateMove, qaIssuesOf } from './gates'
+import { demoMoveVerdict, evaluateMove } from './gates'
 
+// The rules themselves are pinned in lib/moveRules.test.ts; here: the demo verdict (modes) and the demo data.
 const base: Ticket = { key: 'T-1', title: 'A ticket', status: 'In Progress', column: 'prog' }
-const withPr = (merged: boolean): Ticket => ({ ...base, pr: { state: merged ? 'merged' : 'comments', id: 7, merged } })
-const qaSub = (status: string): Ticket => ({ key: 'T-1-1', title: 'QA: verify the flow', type: 'QA Task', status, column: 'prog' })
+const qaTicket: Ticket = { key: 'Q-1', title: 'QA: verify the export', type: 'QA Task', status: 'Ready for QA', column: 'qa' }
 
-describe('demo move gates', () => {
-  it('warns when In Review has no pull request, but allows the move', () => {
-    const { blocker, warnings } = evaluateMove('rev', base)
-    expect(blocker).toBeNull()
-    expect(warnings.join(' ')).toContain('No pull request')
+describe('demo move verdict', () => {
+  it('refuses a gate in normal mode and says it can be forced', () => {
+    expect(demoMoveVerdict(base, 'rev')).toMatchObject({ ok: false, blocked: true, forcible: true, reason: expect.stringContaining('In Review') })
   })
-
-  it('refuses a dev ticket moved to QA or QA In Progress — those lanes hold QA tickets', () => {
-    for (const to of ['qa', 'qaip'] as const) {
-      expect(evaluateMove(to, withPr(false)).blocker).toContain('Only QA tickets')
-    }
+  it('force skips the PR / QA gates', () => {
+    expect(demoMoveVerdict(base, 'done', 'force')).toMatchObject({ ok: true, moved: true, status: 'Done' })
   })
-
-  it('is silent for To Do, Blocked and In Progress', () => {
-    for (const to of ['todo', 'blocked', 'prog'] as const) {
-      expect(evaluateMove(to, base)).toEqual({ blocker: null, warnings: [] })
-    }
+  it('force never skips the QA lane', () => {
+    expect(demoMoveVerdict(base, 'qa', 'force')).toMatchObject({ ok: false, blocked: true, forcible: false })
+    expect(demoMoveVerdict(qaTicket, 'prog', 'force')).toMatchObject({ ok: false, forcible: false })
   })
-
-  it('blocks Done when the pull request is not merged', () => {
-    expect(evaluateMove('done', { ...withPr(false), subtasks: [qaSub('Done')] }).blocker).toContain('#7 not merged yet')
+  it('undo puts a ticket back wherever it came from', () => {
+    expect(demoMoveVerdict(qaTicket, 'todo', 'undo')).toMatchObject({ ok: true, status: 'To Do' })
   })
-
-  it('blocks Done when there is no pull request at all', () => {
-    expect(evaluateMove('done', { ...base, subtasks: [qaSub('Done')] }).blocker).toContain('no merged pull request')
+  it('names QA In Progress in the verdict', () => {
+    expect(demoMoveVerdict(qaTicket, 'qaip')).toMatchObject({ ok: true, status: 'QA In Progress' })
   })
-
-  it('blocks Done when the QA ticket is still open', () => {
-    expect(evaluateMove('done', { ...withPr(true), subtasks: [qaSub('In Progress')] }).blocker).toContain('QA not done')
-  })
-
-  it('blocks Done when no QA ticket exists', () => {
-    expect(evaluateMove('done', withPr(true)).blocker).toContain('no QA ticket')
-  })
-
-  it('allows Done once the PR is merged and QA is done', () => {
-    expect(evaluateMove('done', { ...withPr(true), subtasks: [qaSub('Done')] })).toEqual({ blocker: null, warnings: [] })
-  })
-
-  it('ignores a declined PR when judging Done', () => {
-    const t: Ticket = { ...base, prs: [{ state: 'declined', id: 4 }, { state: 'merged', id: 9, merged: true }], subtasks: [qaSub('Done')] }
-    expect(evaluateMove('done', t).blocker).toBeNull()
-  })
-
-  it('finds QA tickets among sub-tasks and linked issues', () => {
-    const t: Ticket = { ...base, subtasks: [qaSub('Done')], related: [{ key: 'T-9', title: 'Test the importer', status: 'Open' }, { key: 'T-8', title: 'Refactor the writer', status: 'Open' }] }
-    expect(qaIssuesOf(t).map((q) => q.key)).toEqual(['T-1-1', 'T-9'])
+  it('passes on warnings for a normal move only', () => {
+    const open: Ticket = { ...base, pr: { state: 'comments', id: 7 } }
+    expect(demoMoveVerdict(open, 'hold').warnings?.join(' ')).toContain('#7 is still open')
   })
 })
 
@@ -85,13 +59,26 @@ describe('demo dump', () => {
     expect(byKey('DEMO-212').pr!.merged).toBe(true) // merged, yet still blocked
   })
 
-  it('gives one ticket that passes the Done gate, and one for each refusal', () => {
+  it('gives tickets that pass the Done gate, and one for each refusal', () => {
     expect(evaluateMove('done', byKey('DEMO-242')).blocker).toBeNull() // merged + QA done
-    expect(evaluateMove('done', byKey('DEMO-240')).blocker).toContain('QA not done') // QA not started
-    expect(evaluateMove('done', byKey('DEMO-241')).blocker).toContain('no QA ticket')
+    expect(evaluateMove('done', byKey('DEMO-240')).blocker).toBeNull() // merged + QA raised (not started yet)
+    expect(evaluateMove('done', byKey('DEMO-241')).blocker).toContain('no QA ticket raised')
     expect(byKey('DEMO-241').column).toBe('rev') // dev work waiting to close, not a ticket in the QA lane
-    expect(evaluateMove('done', byKey('DEMO-244')).blocker).toContain('not merged yet') // QA failed, fix open
-    expect(evaluateMove('done', byKey('DEMO-201')).blocker).toContain('no merged pull request')
+    expect(evaluateMove('done', byKey('DEMO-244')).blocker).toContain('#433 still open') // QA failed, fix open
+    expect(evaluateMove('done', byKey('DEMO-201')).blocker).toContain('no pull request raised')
+  })
+
+  it('gives an In Review refusal and a sub-ticket riding on its parent’s open PR', () => {
+    const index = new Map(d.tickets.flatMap((t) => [t, ...(t.subtasks ?? [])]).map((t) => [t.key, t] as const))
+    expect(evaluateMove('rev', byKey('DEMO-222')).blocker).toContain('no pull request raised') // in progress, no PR
+    const riding = byKey('DEMO-220').subtasks!.find((s) => s.key === 'DEMO-220-2')!
+    expect(evaluateMove('rev', riding, index).blocker).toBeNull() // parent DEMO-220 has PR #430 open
+  })
+
+  it('has QA tickets in the lane and one waiting in To Do — none of the dev tickets counts as one', () => {
+    expect(isQaTicket(byKey('DEMO-245')) && isQaTicket(byKey('DEMO-246')) && isQaTicket(byKey('DEMO-247'))).toBe(true)
+    expect(byKey('DEMO-247').column).toBe('todo')
+    expect(isQaTicket(byKey('DEMO-244'))).toBe(false) // labelled qa-failed: a dev bug, not a QA ticket
   })
 
   it('mixes ownership and nests sub-tasks', () => {
@@ -124,66 +111,3 @@ describe('demo dump', () => {
     for (const url of json.match(/https?:\/\/[^"\\\s]+/g) ?? []) expect(url).toMatch(/\/\/[a-z.]*example\.com(\/|$)/)
   })
 })
-
-describe('demo move gates — sub-tickets', () => {
-  const sub: Ticket = { ...base, key: 'T-1-2', parentKey: 'T-1' }
-
-  it('lets a sub-ticket reach Done with no PR and no QA ticket of its own', () => {
-    expect(evaluateMove('done', sub)).toEqual({ blocker: null, warnings: [] })
-  })
-
-  it('still blocks a sub-ticket whose own PR is not merged', () => {
-    const t: Ticket = { ...sub, pr: { state: 'comments', id: 9, merged: false } }
-    expect(evaluateMove('done', t).blocker).toContain('#9 not merged yet')
-  })
-
-  it('allows it once that PR is merged', () => {
-    const t: Ticket = { ...sub, pr: { state: 'merged', id: 9, merged: true } }
-    expect(evaluateMove('done', t).blocker).toBeNull()
-  })
-
-  it('still blocks a sub-ticket with an open QA ticket', () => {
-    expect(evaluateMove('done', { ...sub, subtasks: [qaSub('In Progress')] }).blocker).toContain('QA not done')
-  })
-
-  it('does not warn a sub-ticket about a missing PR when it moves to review', () => {
-    expect(evaluateMove('rev', sub).warnings).toEqual([])
-  })
-})
-
-describe('demo move gates — On Hold', () => {
-  it('parks any card, warning when its pull request is still open', () => {
-    const { blocker, warnings } = evaluateMove('hold', withPr(false))
-    expect(blocker).toBeNull()
-    expect(warnings.join(' ')).toContain('#7 is still open')
-  })
-  it('says nothing when the PR is merged, declined, or there is none', () => {
-    expect(evaluateMove('hold', withPr(true))).toEqual({ blocker: null, warnings: [] })
-    expect(evaluateMove('hold', { ...base, prs: [{ state: 'declined', id: 4 }] })).toEqual({ blocker: null, warnings: [] })
-    expect(evaluateMove('hold', base)).toEqual({ blocker: null, warnings: [] })
-  })
-  it('moves the card on the demo board', () => {
-    const v = demoMoveVerdict(withPr(false), 'hold')
-    expect(v.ok).toBe(true)
-    expect(v.status).toBe('On Hold')
-  })
-})
-
-describe('demo move gates — the QA lane', () => {
-  const qaTicket: Ticket = { key: 'Q-1', title: 'QA: verify the export', type: 'QA Task', status: 'Ready for QA', column: 'qa' }
-  it('lets a QA ticket go between QA and QA In Progress, and to To Do or Done (no PR needed)', () => {
-    for (const to of ['qa', 'qaip', 'todo', 'done'] as const) expect(evaluateMove(to, qaTicket).blocker).toBeNull()
-  })
-  it('keeps a QA ticket out of every other column', () => {
-    for (const to of ['blocked', 'hold', 'prog', 'rev'] as const) expect(evaluateMove(to, qaTicket).blocker).toContain('only be moved between')
-  })
-  it('lets a QA ticket waiting in To Do be moved in', () => {
-    const todo: Ticket = { ...qaTicket, column: 'todo', status: 'To Do' }
-    expect(evaluateMove('qa', todo).blocker).toBeNull()
-    expect(evaluateMove('qaip', todo).blocker).toBeNull()
-  })
-  it('names QA In Progress in the verdict', () => {
-    expect(demoMoveVerdict(qaTicket, 'qaip')).toMatchObject({ ok: true, status: 'QA In Progress' })
-  })
-})
-

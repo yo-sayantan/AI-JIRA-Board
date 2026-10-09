@@ -30,7 +30,7 @@ bash scripts/start-jira-board.sh                                      # build, d
 |---|---|
 | ⚡ **Instant** | A single-file React app reads a local snapshot. Refreshing data never rebuilds the app. |
 | 🖱️ **Drag to update Jira** | Drop a card on To Do / In Progress / In Review / QA / Done — the ticket moves in Jira, in the background, while you keep working. |
-| 🛡️ **Guard-rails built in** | In Review warns when there's no PR, the **QA lane** only takes QA tickets (and keeps them among QA · QA In Progress · To Do · Done), and **Done is refused until every PR is merged and QA is done** — the card slides back with the reason. Checked against live Jira, not stale data. |
+| 🛡️ **Guard-rails built in** | The **QA lane** only takes QA tickets (and keeps them among QA · QA In Progress · Blocked · On Hold · Done), **In Review needs a PR**, and **Done needs every PR merged or declined plus a QA ticket** — a zone that won't take the card says why while you drag, ⌥-drop forces past a PR / QA rule, and every move has **Undo**. Checked against live Jira, not just the cached data. |
 | 🤖 **AI that explains the work** | Per-ticket briefs and **PR Readiness Reports** with a ship / no-ship verdict, evidence, risks and file-by-file notes. |
 | 🔒 **Private by default** | Local AI (Ollama) means no tokens and no data leaving the box. Loopback-only, non-root containers, verified TLS. |
 | 🧩 **Works with what you have** | Jira + Bitbucket (on-prem or cloud). Cursor, Gemini or Claude for cloud AI. No lock-in. |

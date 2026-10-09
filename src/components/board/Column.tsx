@@ -1,12 +1,13 @@
 import { memo, useRef, useState, type DragEvent, type Ref } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { HOLD_COLUMN, QA_IN_PROGRESS, columnMode, isQaInProgress, moveBlockedReason, type ColumnMeta, type ColumnMode, type MoveTarget } from '../../lib/columns'
+import { HOLD_COLUMN, QA_IN_PROGRESS, columnMode, isQaInProgress, type ColumnMeta, type ColumnMode, type MoveTarget } from '../../lib/columns'
+import { MOVE_OK, checkMove, readinessOf, type MoveCheck, type TicketLookup } from '../../lib/moveRules'
 import type { Ticket } from '../../types'
 import { DRAG_MIME, TicketCard } from './TicketCard'
 import { hexToRgba } from '../../lib/format'
 import { ColumnIcon, PauseIcon } from '../common/Icons'
 import { SubSection } from './SubSection'
-import { LandingSlot, SpaceHeader, dropBoxStyle } from './boardParts'
+import { DeniedNote, LandingSlot, SpaceHeader, dropBoxStyle, deniedOpacity } from './boardParts'
 
 // Widths per mode (lib/columns.ts::columnMode). Every column carries 6px of invisible padding per
 // side (see the section style) so the hit areas of neighbouring columns touch — a card dragged across
@@ -53,6 +54,8 @@ export const Column = memo(function Column({
   held,
   hideOwn = false,
   showQaInProgress = true,
+  lookup,
+  readiness = false,
 }: {
   meta: ColumnMeta
   tickets: Ticket[]
@@ -61,12 +64,12 @@ export const Column = memo(function Column({
   onArchive?: (key: string) => void
   onRefreshTicket?: (key: string) => void
   refreshingKeys?: ReadonlySet<string>
-  /** Drop handler: the dragged ticket should take this column's status (or On Hold) in Jira. */
-  onMove?: (key: string, to: MoveTarget) => void
+  /** Drop handler: the dragged ticket should take this column's status (or On Hold) in Jira. `force`: ⌥ past a gate. */
+  onMove?: (key: string, to: MoveTarget, force?: boolean) => void
   movingKeys?: ReadonlySet<string>
   /** A card is being dragged somewhere on the board. */
   dragActive?: boolean
-  /** The ticket being dragged, so zones it may not be dropped on can say so (the QA lane rules). */
+  /** The ticket being dragged, so zones it may not be dropped on can say why (lib/moveRules.ts). */
   dragged?: Ticket
   /** This is the only column shown (a stat chip filtered the board to it). */
   focused?: boolean
@@ -76,6 +79,10 @@ export const Column = memo(function Column({
   hideOwn?: boolean
   /** Settings → QA In Progress off: no second space under QA. */
   showQaInProgress?: boolean
+  /** Every ticket the board knows, for the move rules (a sub-ticket's parent). */
+  lookup?: TicketLookup
+  /** Draw the In Review / Done readiness dots on cards. */
+  readiness?: boolean
 }) {
   // QA's cards split in two spaces: waiting for QA (the column's own box) and picked up by QA.
   const inProgress = meta.key === 'qa' ? tickets.filter((t) => isQaInProgress(t.status)) : []
@@ -91,12 +98,15 @@ export const Column = memo(function Column({
   // steady at the boundary instead of flipping back and forth.
   const ownBox = useRef<HTMLDivElement>(null)
   const [over, setOver] = useState<DropTarget | null>(null)
-  // Whether the ticket being dragged may land on each of this column's zones (QA lane rules). Zones it
-  // may not use are dimmed and never armed, so the cursor shows "not allowed" instead of a false promise.
+  // Whether the ticket being dragged may land on each of this column's zones (lib/moveRules.ts). A zone
+  // it may not use is dimmed and says why; it never arms, so the cursor shows "not allowed" instead of a
+  // false promise — except a PR / QA gate with ⌥ held, which arms and forces (after a confirm).
   const ownTarget: MoveTarget = meta.key
-  const okFor = (target: MoveTarget) => !dragged || !moveBlockedReason(dragged, target)
-  const ownOk = okFor(ownTarget)
-  const subOk = !sub || okFor(sub.id)
+  const checkFor = (target: MoveTarget): MoveCheck => (dragged ? checkMove(dragged, target, lookup) : MOVE_OK)
+  const ownCheck = checkFor(ownTarget)
+  const subCheck = sub ? checkFor(sub.id) : MOVE_OK
+  const [alt, setAlt] = useState(false)
+  const usable = (c: MoveCheck, altKey: boolean) => c.kind === null || (c.kind === 'gate' && altKey)
   const accepts = (e: DragEvent) => !!onMove && e.dataTransfer.types.includes(DRAG_MIME)
   const targetOf = (e: DragEvent): DropTarget => {
     if (ownOff) return 'sub'
@@ -111,7 +121,8 @@ export const Column = memo(function Column({
   const arm = (e: DragEvent) => {
     if (!accepts(e)) return
     const t = targetOf(e)
-    if (!(t === 'sub' ? subOk : ownOk)) {
+    setAlt((cur) => (cur === e.altKey ? cur : e.altKey))
+    if (!usable(t === 'sub' ? subCheck : ownCheck, e.altKey)) {
       // Not allowed here: do not cancel the event, so the browser shows "no drop" and nothing highlights.
       setOver((cur) => (cur === null ? cur : null))
       return
@@ -133,23 +144,30 @@ export const Column = memo(function Column({
     e.preventDefault()
     const where = targetOf(e)
     const to: MoveTarget = where === 'sub' && sub ? sub.id : ownTarget
+    const c = where === 'sub' ? subCheck : ownCheck
     setOver(null)
-    if (!(where === 'sub' ? subOk : ownOk)) return
+    setAlt(false)
+    if (!usable(c, e.altKey)) return
     const key = e.dataTransfer.getData(DRAG_MIME)
-    if (key) onMove?.(key, to)
+    if (key) onMove?.(key, to, c.kind === 'gate')
   }
 
   // An empty column has nothing to show: it folds to a rail and its width goes to the columns with
   // cards. While a card is dragged it opens only to a compact drop zone. A second space counts too.
-  // A column the dragged ticket may not use does not open as a drop zone — it stays out of the way.
-  const dragging = !!onMove && (dragActive || over != null) && (ownOk || subOk)
+  // A column the QA lane closes to the dragged ticket does not open as a drop zone — it stays out of the
+  // way. A gated one does open: it says what is missing, and ⌥ can still force it.
+  const dragging = !!onMove && (dragActive || over != null) && (ownCheck.kind !== 'lane' || subCheck.kind !== 'lane')
+  const ownDenied = dragActive && ownCheck.kind ? ownCheck : null
+  const subDenied = dragActive && subCheck.kind ? subCheck : null
   const mode = columnMode({ count: own.length, held: subTickets.length, focused, dragging })
   const dropLabel = meta.key === 'blocked' ? 'Drop to mark as Blocked' : `Drop to move to ${meta.label}`
   const emptyHint = meta.key === 'blocked' ? (dragging ? 'Drag a stuck card here' : 'Nothing blocked') : meta.key === 'qa' ? 'Nothing waiting for QA' : 'Nothing here'
   const name = ownOff ? sub!.label : sub ? `${meta.label} and ${sub.label}` : meta.label
   const stacked = !!sub && !ownOff
 
-  const card = (t: Ticket) => (
+  const card = (t: Ticket) => {
+    const r = readiness ? readinessOf(t, lookup) : null
+    return (
     <TicketCard
       key={t.key}
       ticket={t}
@@ -160,8 +178,11 @@ export const Column = memo(function Column({
       refreshing={refreshingKeys?.has(t.key)}
       draggable={!!onMove}
       moving={movingKeys?.has(t.key)}
+      readyRev={r ? (r.rev ? r.rev.reason : undefined) : undefined}
+      readyDone={r ? r.done.reason : undefined}
     />
-  )
+    )
+  }
 
   return (
     <section
@@ -195,8 +216,8 @@ export const Column = memo(function Column({
         </div>
       ) : mode === 'drop' ? (
         <div className="flex flex-1 flex-col gap-2">
-          {!ownOff && <DropZone boxRef={ownBox} accent={meta.accent} label={meta.label} active={over === 'col'} stacked={stacked} denied={!ownOk} />}
-          {sub && <DropZone accent={sub.accent} label={sub.label} active={over === 'sub'} stacked={!ownOff} sub={sub} denied={!subOk} />}
+          {!ownOff && <DropZone boxRef={ownBox} accent={meta.accent} label={meta.label} active={over === 'col'} stacked={stacked} denied={ownDenied} alt={alt} />}
+          {sub && <DropZone accent={sub.accent} label={sub.label} active={over === 'sub'} stacked={!ownOff} sub={sub} denied={subDenied} alt={alt} />}
         </div>
       ) : (
         <div className={`flex flex-1 flex-col ${stacked ? 'gap-4' : ''}`}>
@@ -206,13 +227,15 @@ export const Column = memo(function Column({
           <div
             ref={ownBox}
             className={`relative flex flex-col gap-2 rounded-2xl border border-dashed p-2 transition-[background,border-color,box-shadow] duration-150 ${stacked ? '' : 'flex-1'}`}
-            style={{ ...dropBoxStyle(meta.accent, over === 'col'), opacity: dragActive && !ownOk ? 0.4 : 1 }}
+            style={{ ...dropBoxStyle(meta.accent, over === 'col'), opacity: deniedOpacity(ownDenied, over === 'col') }}
+            title={ownDenied?.reason ?? undefined}
           >
+            {ownDenied && <DeniedNote check={ownDenied} alt={alt} active={over === 'col'} />}
             <AnimatePresence mode="popLayout" initial={false}>
               {own.map(card)}
             </AnimatePresence>
             <LandingSlot accent={meta.accent} show={over === 'col'} label={dropLabel} />
-            {own.length === 0 && over !== 'col' && (
+            {own.length === 0 && over !== 'col' && !ownDenied && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -237,7 +260,8 @@ export const Column = memo(function Column({
               over={over === 'sub'}
               dragging={dragging}
               droppable={sub.droppable}
-              denied={dragActive && !subOk}
+              denied={subDenied}
+              alt={alt}
               bare={ownOff}
               texts={SUB_TEXTS[sub.id]}
               hint={sub.id === 'hold' ? 'Drag a card here to put it on hold in Jira.' : 'QA tickets being tested. Only QA tickets can be dropped here.'}
@@ -277,7 +301,8 @@ function DropZone({
   active,
   stacked,
   sub,
-  denied = false,
+  denied = null,
+  alt = false,
 }: {
   boxRef?: Ref<HTMLDivElement>
   accent: string
@@ -285,8 +310,10 @@ function DropZone({
   active: boolean
   stacked: boolean
   sub?: Sub
-  /** The dragged ticket may not be dropped here (QA lane rules). */
-  denied?: boolean
+  /** Why the dragged ticket may not be dropped here (lib/moveRules.ts), or null. */
+  denied?: MoveCheck | null
+  /** ⌥ is held: a gated zone can be forced. */
+  alt?: boolean
 }) {
   return (
     <div
@@ -294,12 +321,17 @@ function DropZone({
       data-drop={sub?.droppable ? sub.id : undefined}
       // The label sits near the top: on a tall board the middle of the column is below the fold.
       className={`flex flex-col items-center gap-1 rounded-2xl border-2 border-dashed px-1 text-center transition-[background,border-color,box-shadow,opacity] duration-150 ${stacked ? 'h-[132px] justify-center' : 'flex-1 justify-start pt-16'}`}
-      style={{ ...dropBoxStyle(accent, active && !denied), opacity: denied ? 0.4 : 1 }}
+      style={{ ...dropBoxStyle(accent, active), opacity: deniedOpacity(denied, active) }}
+      title={denied?.reason ?? undefined}
     >
       {sub && (sub.id === 'hold' ? <PauseIcon size={13} color={accent} /> : <ColumnIcon col="qa" color={accent} size={13} />)}
-      <span className="text-[11px] font-bold leading-tight" style={{ color: accent }}>
-        {denied ? 'Not for this ticket' : active ? 'Release' : 'Drop here'}
-      </span>
+      {denied ? (
+        <DeniedNote check={denied} alt={alt} active={active} inline />
+      ) : (
+        <span className="text-[11px] font-bold leading-tight" style={{ color: accent }}>
+          {active ? 'Release' : 'Drop here'}
+        </span>
+      )}
       <span className="text-[10px] font-semibold uppercase leading-tight tracking-wider" style={{ color: hexToRgba(accent, 0.75) }}>
         {label}
       </span>

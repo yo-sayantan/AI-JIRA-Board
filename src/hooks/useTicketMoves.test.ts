@@ -76,7 +76,50 @@ describe('the QA lane in the move hook', () => {
   it('refuses a QA ticket to leave the lane', async () => {
     const { moves, toast } = mountMoves()
     await act(async () => moves().moveTicket(qaTicket, 'prog'))
-    expect(toast).toHaveBeenCalledWith(expect.stringContaining('only be moved between'), 'error')
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining('can only be moved to'), 'error')
   })
 })
 
+describe('gates, force and undo', () => {
+  const dev: Ticket = { key: 'D-1', title: 'Build it', type: 'Story', status: 'In Progress', column: 'prog' }
+  type Opts = { action?: { label: string; run: () => void }; seconds?: number }
+  const last = (toast: ReturnType<typeof vi.fn>) => toast.mock.calls[toast.mock.calls.length - 1]
+  const lastOpts = (toast: ReturnType<typeof vi.fn>) => last(toast)[2] as Opts | undefined
+
+  it('a gate refuses before Jira is asked, offering "Move anyway" — which forces it', async () => {
+    const { moves, toast } = mountMoves()
+    await act(async () => moves().moveTicket(dev, 'rev'))
+    expect(last(toast)[0]).toContain('no pull request raised')
+    expect(moves().applyOverrides([dev])[0].column).toBe('prog') // nothing moved yet
+    const opts = lastOpts(toast)!
+    expect(opts.action!.label).toBe('Move anyway')
+    await act(async () => opts.action!.run())
+    expect(moves().applyOverrides([dev])[0].column).toBe('rev')
+    expect(last(toast)[0]).toContain('(forced)')
+  })
+
+  it('⌥ on drop asks to force rather than reporting a refusal', async () => {
+    const { moves, toast } = mountMoves()
+    await act(async () => moves().moveTicket(dev, 'done', { forceAsk: true }))
+    expect(last(toast)[0]).toMatch(/^Force D-1 to Done\?/)
+    expect(lastOpts(toast)!.action!.label).toBe('Force move')
+  })
+
+  it('a lane refusal can never be forced', async () => {
+    const { moves, toast } = mountMoves()
+    await act(async () => moves().moveTicket(dev, 'qa', { forceAsk: true }))
+    expect(lastOpts(toast)).toBeUndefined()
+  })
+
+  it('every finished move offers Undo, which puts the card back', async () => {
+    const { moves, toast } = mountMoves()
+    await act(async () => moves().moveTicket(dev, 'blocked'))
+    expect(moves().applyOverrides([dev])[0].column).toBe('blocked')
+    const opts = lastOpts(toast)!
+    expect(opts.action!.label).toBe('Undo')
+    expect(opts.seconds).toBeGreaterThan(0)
+    await act(async () => opts.action!.run())
+    expect(moves().applyOverrides([dev])[0].column).toBe('prog')
+    expect(lastOpts(toast)).toBeUndefined() // an undo is not itself undoable
+  })
+})

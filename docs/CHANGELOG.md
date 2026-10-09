@@ -5,6 +5,17 @@ code does now, so a reader can check them against the tree.
 
 ## Unreleased — primary branch
 
+- **Move rules, enforced everywhere.** One rule set (`src/lib/moveRules.ts`, mirrored by
+  `jira-intern/transition.py` on live Jira): only QA tickets (type QA/Test, a `QA` label, a "QA:" title)
+  enter QA / QA In Progress, and a QA ticket moves only to QA · QA In Progress · Blocked · On Hold ·
+  Done. In Review needs a PR (or, for a sub-ticket, an open PR on its parent); Done needs every PR
+  merged or declined and a QA ticket raised — no longer a finished one. The old "no PR" warning for
+  In Review is now a refusal.
+- **Why, force, undo.** While dragging, a refusing zone says why. ⌥-drop on a PR / QA gate asks to
+  force it; a live refusal from the server offers *Move anyway*; every finished move has **Undo** for
+  8 s (`mode=force|undo` on `/api/move-ticket`). The QA lane can never be forced.
+- **Rev / Done readiness dots** on In Progress, Blocked, On Hold and In Review cards (Settings →
+  *Move readiness on cards*).
 - **Cursor models are offered by price, from the full table.** The hand-typed id allow-list is gone
   (it had silently shrunk the Settings dropdown to three models, and an earlier refresh had read
   only the first 20 of Cursor's 59 rows). `ai-intern/cursor-prices.json` holds the whole

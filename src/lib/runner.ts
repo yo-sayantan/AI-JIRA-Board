@@ -533,25 +533,33 @@ export async function stopReportRun(): Promise<void> {
 /** Any board column, On Hold and QA In Progress included; the server validates against jira-intern/move_targets.json. */
 export type { MoveTarget } from './columns'
 
+/**
+ * `normal`: every rule applies. `force` (⌥ on drop, or "Move anyway"): skips the PR / QA gates — the
+ * cached data may be behind Jira — but never the QA lane. `undo`: puts a ticket back where it was, no checks.
+ */
+export type MoveMode = 'normal' | 'force' | 'undo'
+
 export interface MoveVerdict {
   ok: boolean
   /** True when Jira actually changed status; false with ok when it was already there. */
   moved?: boolean
   /** The Jira status the ticket landed in. */
   status?: string | null
-  /** Soft gate misses (no PR for review, no QA ticket) — the move still happened. */
+  /** Soft notes (an open PR parked on hold) — the move still happened. */
   warnings?: string[]
-  /** Hard gate: Done refused because a PR is unmerged or QA is open. */
+  /** Refused: the QA lane, or a PR / QA gate (In Review with no PR, Done with an open PR or no QA ticket). */
   blocked?: boolean
   reason?: string
+  /** The refusal was a PR / QA gate (not the QA lane), so a forced move would go through. */
+  forcible?: boolean
   error?: string
 }
 
 /** Move a ticket to another column IN JIRA. Resolves when Jira has answered (a few seconds). */
-export async function moveTicketInJira(key: string, to: MoveTarget): Promise<MoveVerdict> {
+export async function moveTicketInJira(key: string, to: MoveTarget, mode: MoveMode = 'normal'): Promise<MoveVerdict> {
   if (demoMode) return { ok: false, error: 'demo mode is on' }
   try {
-    const r = await fetch(`/api/move-ticket?key=${encodeURIComponent(key)}&to=${to}`, { method: 'POST' })
+    const r = await fetch(`/api/move-ticket?key=${encodeURIComponent(key)}&to=${to}${mode === 'normal' ? '' : `&mode=${mode}`}`, { method: 'POST' })
     const body = (await r.json().catch(() => null)) as MoveVerdict | null
     if (body) return body
     return { ok: false, error: `server answered ${r.status}` }

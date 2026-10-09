@@ -91,6 +91,8 @@ export const TicketCard = memo(function TicketCard({
   refreshing,
   draggable = false,
   moving = false,
+  readyRev,
+  readyDone,
 }: {
   ticket: Ticket
   now: number
@@ -103,6 +105,12 @@ export const TicketCard = memo(function TicketCard({
   draggable?: boolean
   /** Jira is being updated for this card right now. */
   moving?: boolean
+  /**
+   * Readiness dots (lib/moveRules.ts::readinessOf), as primitives so the card stays memoised: undefined =
+   * no dot, null = ready, a string = what is missing.
+   */
+  readyRev?: string | null
+  readyDone?: string | null
 }) {
   const meta = COLUMN_META[ticket.column]
   const accent = meta?.accent ?? '#64748b'
@@ -133,7 +141,9 @@ export const TicketCard = memo(function TicketCard({
       if (!e.dataTransfer) return
       e.dataTransfer.setData(DRAG_MIME, ticket.key)
       e.dataTransfer.setData('text/plain', ticket.key)
-      e.dataTransfer.effectAllowed = 'move'
+      // copyMove, not move: holding ⌥ (force past a gate) asks the browser for a copy, and a drag
+      // that only allows "move" would then be refused before the board ever saw the drop.
+      e.dataTransfer.effectAllowed = 'copyMove'
       setTranslucentDragImage(e, el)
       // The browser snapshots the card for the drag image first; then the card itself leaves
       // its column, so the drag reads as picking the whole card up. Removing it from the DOM
@@ -319,6 +329,7 @@ export const TicketCard = memo(function TicketCard({
             overflow
           </Pill>
         )}
+        {(readyRev !== undefined || readyDone !== undefined) && <ReadinessDots rev={readyRev} done={readyDone} />}
         {archiveIn != null && (
           <Pill color="#b45309" title={`Recent win — moves to the Completed archive in ${archiveIn} day${archiveIn === 1 ? '' : 's'}`}>
             <TrophyIcon size={10} /> archives in {archiveIn}d
@@ -335,6 +346,30 @@ export const TicketCard = memo(function TicketCard({
     </motion.div>
   )
 })
+
+const READY = '#17c47a'
+const NOT_YET = '#f59e0b'
+
+/** Can this card go to In Review / Done right now? Green = yes; amber = something is missing (tooltip says what). */
+function ReadinessDots({ rev, done }: { rev?: string | null; done?: string | null }) {
+  const dot = (label: string, target: string, reason: string | null | undefined) => {
+    if (reason === undefined) return null
+    const color = reason ? NOT_YET : READY
+    const text = reason ?? `Ready for ${target}`
+    return (
+      <span className="inline-flex items-center gap-[3px] text-[9.5px] font-bold uppercase tracking-wide" style={{ color }} title={text} aria-label={`${target}: ${text}`}>
+        <span aria-hidden className="h-[7px] w-[7px] rounded-full" style={{ background: reason ? 'transparent' : color, boxShadow: `inset 0 0 0 1.5px ${color}, 0 0 0 2px ${hexToRgba(color, 0.16)}` }} />
+        {label}
+      </span>
+    )
+  }
+  return (
+    <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 pl-1">
+      {dot('Rev', 'In Review', rev)}
+      {dot('Done', 'Done', done)}
+    </span>
+  )
+}
 
 function DoneBurst() {
   const sparks = Array.from({ length: 10 }, (_, i) => i)

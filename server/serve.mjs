@@ -189,7 +189,9 @@ const routes = {
     const to = param(url, 'to').toLowerCase()
     if (!KEY_RE.test(key)) return json(res, 400, { ok: false, error: 'bad key' })
     if (!MOVE_TARGETS.has(to)) return json(res, 400, { ok: false, error: 'bad target' })
-    json(res, 200, { key, to, ...(await moveTicket(key, to)) })
+    const mode = param(url, 'mode') || 'normal'
+    if (!['normal', 'force', 'undo'].includes(mode)) return json(res, 400, { ok: false, error: 'bad mode' })
+    json(res, 200, { key, to, ...(await moveTicket(key, to, mode)) })
   },
 
   'GET /api/reports': async (req, res) => {
