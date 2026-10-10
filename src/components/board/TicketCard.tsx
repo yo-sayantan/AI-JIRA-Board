@@ -90,6 +90,7 @@ export const TicketCard = memo(function TicketCard({
   onRefreshTicket,
   refreshing,
   draggable = false,
+  calm = false,
   moving = false,
   readyRev,
   readyDone,
@@ -103,6 +104,8 @@ export const TicketCard = memo(function TicketCard({
   refreshing?: boolean
   /** Card can be dragged to another column (status change written to Jira). */
   draggable?: boolean
+  /** A drag is in flight (or just ended) somewhere on the board: no position animation, so columns re-flowing under it do not make it spring around. */
+  calm?: boolean
   /** Jira is being updated for this card right now. */
   moving?: boolean
   /**
@@ -150,7 +153,12 @@ export const TicketCard = memo(function TicketCard({
       // would cancel the drag, so it only turns invisible.
       requestAnimationFrame(() => el.classList.add('ticket-card-dragging'))
     }
-    const end = () => el.classList.remove('ticket-card-dragging')
+    // The card fades back in rather than popping, when a drop leaves it where it was.
+    const end = () => {
+      el.classList.remove('ticket-card-dragging')
+      el.classList.add('ticket-card-return')
+      setTimeout(() => el.classList.remove('ticket-card-return'), 260)
+    }
     el.addEventListener('dragstart', start)
     el.addEventListener('dragend', end)
     return () => {
@@ -185,7 +193,7 @@ export const TicketCard = memo(function TicketCard({
     // are valid (a <button> may not contain interactive descendants). Enter/Space open it.
     <motion.div
       ref={cardRef}
-      layout="position"
+      layout={calm ? false : 'position'}
       draggable={draggable || undefined}
       role="button"
       tabIndex={0}

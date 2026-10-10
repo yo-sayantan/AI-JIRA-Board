@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Move one Jira ticket to another board column — the write side of drag-and-drop.
 
-    python3 transition.py <KEY> <todo|blocked|hold|prog|rev|qa|qaip|done> [--force|--undo]
+    python3 transition.py <KEY> <todo|blocked|hold|prog|rev|qa|qaip|done|next> [--force|--undo]
 
 Prints ONE JSON line and exits 0 whenever it reached a verdict:
     {"ok": true,  "moved": true, "status": "In Review", "warnings": ["No pull request…"]}
@@ -14,6 +14,11 @@ so a PR merged five minutes ago counts. Mirror of src/lib/moveRules.ts (which ju
                 QA ticket may enter them, and a QA ticket — wherever it sits — moves only to QA · QA In
                 Progress · Blocked · On Hold · Done (`lane_blocker`). `qa` lands on a READY-for-QA status,
                 `qaip` on an in-progress one. QA tickets face no PR / QA gate.
+  • Next Sprint → a SPRINT ASSIGNMENT, not a status. Only To Do · Blocked · QA (ready, not QA In Progress) · On Hold
+                tickets may be moved in — Jira: the nearest dated future sprint, else the READY bucket, else
+                REFINEMENT; a ticket not already To Do is also transitioned to To Do. A ticket in a Next Sprint
+                (To Do + a future dated / READY / REFINEMENT sprint) can only move back to To Do — Jira: the
+                active sprint. Nothing else, no PR / QA gate (`lane_blocker`, `move_sprint`).
   • On Hold   → WARN when a PR of the ticket is still open (it sits unreviewed while parked).
   • In Review → BLOCK unless the ticket has a PR (open or merged) — or, for a sub-ticket, its parent has
                 an OPEN one.
@@ -49,6 +54,8 @@ PREFERRED = {
     "qa": ("ready for qa", "ready4qa", "qa", "awaiting qa", "ready for testing", "in qa", "testing", "in testing"),
     "qaip": ("qa in progress", "in qa", "under qa", "in testing", "testing", "in test"),
     "done": ("done", "closed", "resolved", "completed"),
+    # Next Sprint is not a status: the ticket is made To Do (when it is not already) and its sprint changes.
+    "next": ("to do", "open", "reopened", "backlog"),
 }
 
 
@@ -56,9 +63,10 @@ PREFERRED = {
 # waiting word count as "QA In Progress"; the rest are ready-for-QA.
 _QA_READY = ("qa", "ready for qa", "ready4qa", "awaiting qa", "qa ready", "ready for testing", "ready for test", "to test", "to be tested")
 _QA_WAITING_WORDS = {"ready", "awaiting", "pending", "queued", "moved", "handed", "for"}
-QA_LANE = ("qa", "qaip", "blocked", "hold", "done")
-LANE_NAMES = "QA, QA In Progress, Blocked, On Hold or Done"
-LABELS = {"todo": "To Do", "blocked": "Blocked", "hold": "On Hold", "prog": "In Progress", "rev": "In Review", "qa": "QA", "qaip": "QA In Progress", "done": "Done"}
+QA_LANE = ("qa", "qaip", "blocked", "hold", "done", "next")
+LANE_NAMES = "QA, QA In Progress, Blocked, On Hold, Next Sprint or Done"
+NEXT_FROM = ("todo", "blocked", "qa", "hold")
+LABELS = {"todo": "To Do", "blocked": "Blocked", "hold": "On Hold", "prog": "In Progress", "rev": "In Review", "qa": "QA", "qaip": "QA In Progress", "done": "Done", "next": "Next Sprint"}
 
 
 def is_qa_in_progress(status):
@@ -68,15 +76,98 @@ def is_qa_in_progress(status):
     return not any(w in _QA_WAITING_WORDS for w in re.split(r"[^a-z0-9]+", s))
 
 
-def lane_blocker(current_column, target, qa_ticket):
-    """Why the QA lane forbids moving to `target` (None when it allows it). Anything in the QA column is the
-    lane's; only a QA ticket may enter QA / QA In Progress; a QA ticket goes only to QA_LANE."""
+def lane_blocker(current_column, target, qa_ticket, in_next=False, qa_in_progress=False):
+    """Why the QA lane or the Next Sprint rule forbids moving to `target` (None when it allows it). Next Sprint
+    is a one-way street in and out: only To Do leaves it, and only To Do · Blocked · QA (ready) · On Hold enter
+    it. Otherwise anything in the QA column is the lane's; only a QA ticket may enter QA / QA In Progress; a QA
+    ticket goes only to QA_LANE."""
+    if in_next:
+        return None if target == "todo" else f"A Next Sprint ticket can only be moved back to To Do — not to {LABELS[target]}."
+    if target == "next":
+        here = "qaip" if current_column == "qa" and qa_in_progress else current_column
+        if here not in NEXT_FROM:
+            return f"Only To Do, Blocked, QA and On Hold tickets can be moved to Next Sprint — not ones in {LABELS[here]}."
+        return None
     in_lane = current_column == "qa" or qa_ticket
     if target in ("qa", "qaip") and not in_lane:
         return f"Only QA tickets can be moved to {LABELS[target]} — this ticket is not one."
     if in_lane and target not in QA_LANE:
         return f"A QA ticket can only be moved to {LANE_NAMES} — not to {LABELS[target]}."
     return None
+
+
+# ── Next Sprint: a sprint assignment (Jira Agile API) ───────────────────────────────────────────────────────
+_BUCKET_READY = re.compile(r"\bready\b", re.I)
+_BUCKET_REFINEMENT = re.compile(r"\brefinement\b", re.I)
+
+
+def is_next_sprint(todo_column, sprint):
+    """A To Do ticket in a not-started sprint that is dated or the READY / REFINEMENT bucket. Mirror of
+    isNextSprint in src/lib/format.ts. `sprint` is the Agile API sprint object ({name, state, startDate})."""
+    if not todo_column or not sprint or (sprint.get("state") or "").lower() != "future":
+        return False
+    name = sprint.get("name") or ""
+    return bool(sprint.get("startDate")) or bool(_BUCKET_READY.search(name) or _BUCKET_REFINEMENT.search(name))
+
+
+def pick_future_sprint(sprints):
+    """Where Next Sprint lands: the nearest DATED future sprint, else the READY bucket, else REFINEMENT."""
+    future = [sp for sp in sprints if (sp.get("state") or "").lower() == "future"]
+    dated = sorted((sp for sp in future if sp.get("startDate")), key=lambda sp: sp["startDate"])
+    if dated:
+        return dated[0]
+    for rx in (_BUCKET_READY, _BUCKET_REFINEMENT):
+        for sp in future:
+            if rx.search(sp.get("name") or ""):
+                return sp
+    return None
+
+
+def pick_active_sprint(sprints):
+    return next((sp for sp in sprints if (sp.get("state") or "").lower() == "active"), None)
+
+
+def agile_sprint_of(key):
+    """The ticket's current sprint object from the Agile API ({id, name, state, originBoardId…}), or None."""
+    try:
+        data = jira_get(f"/rest/agile/1.0/issue/{key}?fields=sprint", timeout=30, retries=1)
+    except Exception:  # noqa: BLE001 — no Agile API / no sprint: not in a next sprint, and a move says so below
+        return None
+    return (data.get("fields") or {}).get("sprint") or None
+
+
+def board_sprints(key, current_sprint):
+    """Every sprint of the ticket's board: the board its sprint came from, else the first scrum board of its project."""
+    board = (current_sprint or {}).get("originBoardId")
+    if not board:
+        project = key.rsplit("-", 1)[0]
+        boards = jira_get(f"/rest/agile/1.0/board?projectKeyOrId={project}&type=scrum", timeout=30, retries=1).get("values") or []
+        if not boards:
+            raise RuntimeError(f"no scrum board found for project {project}")
+        board = boards[0]["id"]
+    sprints, start = [], 0
+    while True:
+        page = jira_get(f"/rest/agile/1.0/board/{board}/sprint?state=active,future&startAt={start}&maxResults=50", timeout=30, retries=1)
+        sprints.extend(page.get("values") or [])
+        if page.get("isLast", True) or not page.get("values"):
+            return sprints
+        start += len(page["values"])
+
+
+def move_sprint(key, here, target, current_sprint):
+    """Next Sprint in: add the ticket to the chosen future sprint. Out (back to To Do): add it to the active one.
+    Returns the sprint's name. Raises when there is no such sprint — the board then shows why."""
+    sprints = board_sprints(key, current_sprint)
+    if target == "next":
+        chosen = pick_future_sprint(sprints)
+        if not chosen:
+            raise RuntimeError("there is no future sprint, READY bucket or REFINEMENT bucket to move it into")
+    else:
+        chosen = pick_active_sprint(sprints)
+        if not chosen:
+            raise RuntimeError("there is no active sprint to move it into")
+    jira_post(f"/rest/agile/1.0/sprint/{chosen['id']}/issue", {"issues": [key]})
+    return chosen.get("name") or str(chosen["id"])
 
 
 def is_qa(issue):
@@ -210,19 +301,24 @@ def move(key, target, mode="normal"):
     fields = issue["fields"]
     current = fields["status"]["name"]
     here = status_column(current)
+    # Next Sprint is a sprint assignment on a To Do ticket; only the Agile API can tell. One call, and only when
+    # the move could involve it (a ticket that is not To Do cannot be in a Next Sprint).
+    sprint = agile_sprint_of(key) if here == "todo" or target == "next" else None
+    in_next = is_next_sprint(here == "todo", sprint)
     # QA is one board column but two drop targets; "already there" has to tell them apart.
-    here_target = ("qaip" if is_qa_in_progress(current) else "qa") if here == "qa" else here
+    here_target = "next" if in_next else ("qaip" if is_qa_in_progress(current) else "qa") if here == "qa" else here
     if here_target == target:
         return {"ok": True, "moved": False, "status": current, "warnings": []}
 
     warnings = []
     if mode != "undo":
         qa_ticket = is_qa_ticket((fields.get("issuetype") or {}).get("name"), fields.get("summary"), fields.get("labels"))
-        lane = lane_blocker(here, target, qa_ticket)
+        lane = lane_blocker(here, target, qa_ticket, in_next, here == "qa" and is_qa_in_progress(current))
         if lane:
             return {"ok": False, "blocked": True, "forcible": False, "reason": lane}
-        # A QA ticket is someone else's test: no PR or QA ticket of its own to wait for.
-        if mode == "normal" and not (qa_ticket or here == "qa"):
+        # A QA ticket is someone else's test: no PR or QA ticket of its own to wait for. A Next Sprint hop only
+        # reassigns the sprint — no PR or QA gate.
+        if mode == "normal" and not (qa_ticket or here == "qa" or in_next or target == "next"):
             parent = fields.get("parent") or None
             is_sub = bool(parent) or bool((fields.get("issuetype") or {}).get("subtask"))
             parent_prs, parent_qa = parent_facts(parent) if is_sub and target in ("rev", "done") else (None, None)
@@ -230,10 +326,24 @@ def move(key, target, mode="normal"):
             if blocker:
                 return {"ok": False, "blocked": True, "forcible": True, "reason": blocker}
 
+    # The sprint first (the riskier call), then the status — so a failure leaves the ticket where it was.
+    sprint_name = None
+    if target == "next" or in_next:
+        try:
+            sprint_name = move_sprint(key, here, target, sprint)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": f"Couldn't change {key}'s sprint: {e}."}
+        if sprint_name:
+            warnings = [*warnings, f"Sprint → {sprint_name}."]
+    # Next Sprint tickets are To Do work; leaving it to To Do keeps the status. Any other destination (an Undo)
+    # needs its own transition.
+    status_target = "todo" if target == "next" else target
+    if here_target == "next" and status_target == "todo" or here == status_target and not (here == "qa" and target in ("qa", "qaip")):
+        return {"ok": True, "moved": True, "status": current, "warnings": warnings}
     transitions = jira_get(f"/rest/api/2/issue/{key}/transitions", timeout=30, retries=1).get("transitions") or []
-    chosen = pick_transition(transitions, target)
+    chosen = pick_transition(transitions, status_target)
     if not chosen:
-        return {"ok": False, "error": f"Jira offers no transition from “{current}” to {target} for {key}."}
+        return {"ok": False, "error": f"Jira offers no transition from “{current}” to {status_target} for {key}."}
     jira_post(f"/rest/api/2/issue/{key}/transitions", {"transition": {"id": chosen["id"]}})
     return {"ok": True, "moved": True, "status": chosen["to"]["name"], "warnings": warnings}
 

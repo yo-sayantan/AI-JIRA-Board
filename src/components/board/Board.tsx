@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { BOARD_COLUMNS } from '../../lib/columns'
 import { ALL_SECTIONS, type BoardSections } from '../../lib/boardView'
 import type { ColumnKey, Ticket } from '../../types'
@@ -14,6 +14,9 @@ const byUrgency = (a: Ticket, b: Ticket) =>
   (b.lastUpdate ?? '').localeCompare(a.lastUpdate ?? '')
 const byRecency = (a: Ticket, b: Ticket) =>
   (b.resolved ?? b.lastUpdate ?? '').localeCompare(a.resolved ?? a.lastUpdate ?? '')
+
+/** How long the board stays calm after a drag ends — long enough for the columns to snap and the cards to settle. */
+const SETTLE_MS = 450
 
 export const Board = memo(function Board({
   tickets,
@@ -90,6 +93,20 @@ export const Board = memo(function Board({
   // The ticket being carried, so each zone can tell whether it may land there (QA lane rules).
   const [dragKey, setDragKey] = useState<string | null>(null)
   const dragActive = dragKey !== null
+  // For a moment after a drag ends the board stays "calm": column widths snap back instead of easing and cards
+  // do not animate their position. Dropping a card where it already was changes nothing in Jira, but the empty
+  // columns still fold back and every card shifts with them — with springs and a width transition running on
+  // top of each other that read as stutter.
+  const [settling, setSettling] = useState(false)
+  const settleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const endDrag = () => {
+    setDragKey(null)
+    setSettling(true)
+    clearTimeout(settleTimer.current)
+    settleTimer.current = setTimeout(() => setSettling(false), SETTLE_MS)
+  }
+  useEffect(() => () => clearTimeout(settleTimer.current), [])
+  const calm = dragActive || settling
   const dragged = useMemo(
     () => (dragKey ? ([...tickets, ...(held ?? []), ...(nextSprint ?? [])].find((t) => t.key === dragKey) ?? lookup?.get(dragKey)) : undefined),
     [dragKey, tickets, held, nextSprint, lookup],
@@ -100,16 +117,17 @@ export const Board = memo(function Board({
       // container's matching padding keeps the first and last from being clipped. While a drag is in
       // flight widths change instantly (jb-dragging): zones sliding under the pointer were why a hover
       // sometimes "missed" and the drop felt late.
-      className={`-mx-1.5 flex items-stretch gap-3 overflow-x-auto px-1.5 pb-3 ${dragActive ? 'jb-dragging' : ''}`}
+      className={`-mx-1.5 flex items-stretch gap-3 overflow-x-auto px-1.5 pb-3 ${calm ? 'jb-dragging' : ''}`}
       onDragStart={(e) => setDragKey((e.target as HTMLElement).closest?.('[data-ticket-key]')?.getAttribute('data-ticket-key') ?? '')}
-      onDragEnd={() => setDragKey(null)}
-      onDrop={() => setDragKey(null)}
+      onDragEnd={endDrag}
+      onDrop={endDrag}
     >
       {cols.map((meta) => (
         <Column
           key={meta.key}
           meta={meta}
           dragActive={dragActive}
+          calm={calm}
           dragged={dragged}
           focused={cols.length === 1}
           tickets={byColumn.get(meta.key) ?? []}

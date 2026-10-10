@@ -85,6 +85,11 @@ export interface Ticket {
   created?: string | null
   done?: boolean
   onHold?: boolean
+  /**
+   * Board-only, never written by the intern: set by an optimistic drag-and-drop so the card sits in (true) or
+   * leaves (false) the Next Sprint space before Jira's new sprint comes back. Undefined = decided by `sprint`.
+   */
+  queued?: boolean
   /** Resolution / close date (mainly for completed tickets). */
   resolved?: string | null
   /** Parent issue key, if this ticket is itself a sub-task. */

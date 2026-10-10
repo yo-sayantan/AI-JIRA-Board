@@ -112,7 +112,10 @@ assignee, hand-off history) is the most recent full-stack feature — copy its s
   Never monochrome; keep gradients, the freshness pill, the sprint block, and animations.
 - Drag and drop: a zone must arm on `dragenter` as well as `dragover`, columns overlap their gap by 6px so
   hit areas touch, widths do not animate while a drag is in flight (`jb-dragging`), and the carried card is a
-  translucent clone (`DRAG_GHOST_OPACITY`) so the drop zone shows through it.
+  translucent clone (`DRAG_GHOST_OPACITY`) so the drop zone shows through it. The board stays "calm"
+  (`Board.tsx::SETTLE_MS`: widths snap, cards skip `layout="position"`) during a drag and for 450 ms after it —
+  dropping a card back where it was changes nothing in Jira, but the columns re-flow, and a width
+  transition plus card springs on top of each other stuttered. The card itself fades back in (`ticket-card-return`).
 - Fixed-width right-hand "rails" in list rows (one width table shared by header + rows) so
   columns align to the pixel; labels truncate, never overflow.
 - Every icon-only button gets `aria-label`; toggles get `aria-pressed`; overlays are
@@ -174,6 +177,10 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
   label, a "QA:" title) must stay identical; the looser `looksLikeQa` / `is_qa` only find LINKED QA tickets.
   The lane is never forcible; `--force` skips gates only; `--undo` skips everything. Change one side →
   change the other, tests on both (`moveRules.test.ts`, `tests/test_transition.py`).
+- `next` (Next Sprint) is a sprint assignment, not a status: `transition.py::move_sprint` talks to the Jira Agile
+  API, the board decides membership with `isNextSprint` (a dated future sprint or READY / REFINEMENT; the
+  optimistic `Ticket.queued` flag overrides it between a drop and the refresh), and `moveRules.laneBlocker` /
+  `lane_blocker` keep it one-way (4 entrances, only To Do out). Mirror both sides.
 - Native drag with ⌥ held asks the browser for a COPY: cards set `effectAllowed = 'copyMove'` and zones set
   `dropEffect = 'move'`, or an Option-drop is refused before the board sees it.
 - localStorage keys in use: `jb-settings`, `jb-archived`, `jb-completed-show-context`,

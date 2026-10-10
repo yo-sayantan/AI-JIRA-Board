@@ -193,7 +193,7 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(onMove).not.toHaveBeenCalled()
   })
 
-  it('To Do gets a Next Sprint space at its end — its own header and box, not a drop target', () => {
+  it('To Do gets a Next Sprint space at its end — its own header and box, and a drop target', () => {
     const onMove = vi.fn()
     const todo = { key: 'T-1', title: 'This sprint', status: 'To Do', column: 'todo' as const }
     const queued = { key: 'T-2', title: 'Later', status: 'To Do', column: 'todo' as const, sprint: 'Sprint 99' }
@@ -201,13 +201,39 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(s.getAttribute('aria-label')).toBe('To Do · 1 · Next Sprint · 1')
     const group = s.querySelector('[role=group]')!
     expect(group.textContent).toContain('Later')
-    expect(group.getAttribute('data-drop')).toBeNull() // nothing can be dropped on it
+    expect(group.getAttribute('data-drop')).toBe('next')
+    drop(group, 'ABC-1')
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'next', false)
     drop(s, 'ABC-1', 5)
-    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'todo', false) // a drop anywhere in the column is a To Do drop
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'todo', false) // the rest of the column is a To Do drop
   })
 
-  it('no Next Sprint space when nothing is queued', () => {
-    expect(render({ meta: COLUMN_META.todo, queued: [] }).querySelector('[role=group]')).toBeNull()
+  it('the Next Sprint space is always there to drop on (even empty), unless Settings turned it off', () => {
+    const s = render({ meta: COLUMN_META.todo, queued: [] })
+    expect(s.getAttribute('aria-label')).toBe('To Do and Next Sprint — empty')
+    act(() => root!.unmount())
+    expect(render({ meta: COLUMN_META.todo }).querySelector('[role=group]')).toBeNull()
+  })
+
+  it('only To Do, Blocked, QA and On Hold cards may enter Next Sprint; from it only To Do is open', () => {
+    const inProgress = { key: 'P-1', title: 'Working', status: 'In Progress', column: 'prog' as const }
+    const blocked = { key: 'B-1', title: 'Stuck', status: 'Blocked', column: 'blocked' as const }
+    const queuedTicket = { key: 'N-1', title: 'Queued', status: 'To Do', column: 'todo' as const, sprint: 'S99 (future · 2999-01-10 → 2999-01-24)' }
+    const onMove = vi.fn()
+    // Dragging an In Progress card: Next Sprint refuses it ("Not from here"), never forcible.
+    let s = render({ meta: COLUMN_META.todo, queued: [], onMove, dragActive: true, dragged: inProgress })
+    expect(s.querySelector('[data-drop="next"]')!.textContent).toContain('Not from here')
+    drop(s.querySelector('[data-drop="next"]')!, 'P-1', undefined, true)
+    expect(onMove).not.toHaveBeenCalled()
+    act(() => root!.unmount())
+    // A Blocked card may enter.
+    s = render({ meta: COLUMN_META.todo, queued: [], onMove, dragActive: true, dragged: blocked })
+    drop(s.querySelector('[data-drop="next"]')!, 'B-1')
+    expect(onMove).toHaveBeenLastCalledWith('B-1', 'next', false)
+    act(() => root!.unmount())
+    // A Next Sprint card may go to To Do, but not to In Progress.
+    s = render({ meta: COLUMN_META.prog, onMove, dragActive: true, dragged: queuedTicket })
+    expect(s.textContent).toContain('Next Sprint: back to To Do only')
   })
 
   it('Next Sprint names each sprint and when it starts, one caption per group', () => {

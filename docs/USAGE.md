@@ -9,7 +9,7 @@ A tour of what's on screen and how to drive it.
 - **Stat chips** — one per column plus scope toggles. Click to filter; click again to clear.
 - **Board** — the kanban columns: To Do · Blocked · In Progress · In Review · QA · Done. Any empty column folds to a slim rail so the columns with cards get the width (it opens to a compact *Drop here* zone while you drag); QA has a separate **QA In Progress** space under it, in the same column, for tickets the QA team has picked up (like On Hold under Blocked, but you cannot drop on it).
 - **QA lane** — QA and QA In Progress are for QA tickets (raised by you or linked to your work — type QA/Test, a `QA` label, or a "QA:" title). A ticket of yours can't be dropped there, and a QA ticket can only go to QA · QA In Progress · Blocked · On Hold · Done.
-- **Move rules** — In Review needs a PR (a sub-ticket can use its parent's open PR); Done needs every PR merged or declined and a QA ticket raised. While you drag, a zone that won't take the card says why. For a PR / QA rule, hold **⌥ Option** while dropping to force it (you confirm in the notification). Every move can be undone from its notification for 8 s. The **Rev / Done dots** on cards show ahead of time whether those moves would go through.
+- **Move rules** — Next Sprint takes only To Do, Blocked, QA and On Hold cards and releases them only to To Do. In Review needs a PR (a sub-ticket can use its parent's open PR); Done needs every PR merged or declined and a QA ticket raised. While you drag, a zone that won't take the card says why. For a PR / QA rule, hold **⌥ Option** while dropping to force it (you confirm in the notification). Every move can be undone from its notification for 8 s. The **Rev / Done dots** on cards show ahead of time whether those moves would go through.
 - **On Hold** — its own small space under Blocked, in the same column: drop a card on it to put the ticket On Hold in Jira; held tickets are listed there. Blocked, On Hold and QA In Progress can each be switched off in Settings → Board sections — a switched-off section and its tickets are not shown at all.
 - **Demo mode** (Settings → Features) — swaps in a sample board to try drag-and-drop and the
   gates on. Nothing reaches Jira while it is on, and your real board returns when you turn it off.
@@ -56,16 +56,15 @@ on the board. The whole feature toggles in Settings → **Raised by me**.
 
 ## Next Sprint
 
-Tickets assigned to you whose sprint **hasn't started yet** (Jira sprint state `future`, or a
-grooming bucket like `… READY`) are deliberately kept **out** of the To Do column — otherwise a
-sprint where you've finished all your To Do work still looks full. They live in their own space at
-the **end of the To Do column**, under the To Do box (like QA In Progress under QA):
+Tickets assigned to you whose sprint **hasn't started yet** — a dated future sprint, or the **READY** /
+**REFINEMENT** bucket — are kept **out** of the To Do box, so a sprint where you've finished all your To Do work
+doesn't look full. They live in their own space at the **end of the To Do column** (like QA In Progress under QA):
 
-- Tickets are grouped by sprint, each group headed by the sprint's name and when it starts ("starts in 3 days · Oct 14", or "not started" when it has no dates).
-- It appears only while something is queued, and counts in the To Do chip.
-- It is not a drop target — a drop anywhere in the To Do column is just a To Do drop.
-- Drag a card out of it like any other. The moment you actually start one (In Progress / Review /
-  QA), it moves onto the board where its real status lives.
+- Tickets are grouped by sprint, each headed by its name and when it starts ("starts in 3 days · Oct 14", or "not started" for a bucket).
+- It's always there to drop on, and counts in the To Do chip.
+- **Into it:** drag a To Do, Blocked, QA (not QA In Progress) or On Hold card. In Jira it joins the nearest
+  dated future sprint (else READY, else REFINEMENT) and becomes To Do. In Progress, In Review, Done and QA In Progress cards can't go.
+- **Out of it:** a Next Sprint card can only go back to **To Do** (it joins the active sprint). Everything else dims.
 
 ## PR Readiness Report
 

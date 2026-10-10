@@ -11,6 +11,12 @@ code does now, so a reader can check them against the tree.
   Done. In Review needs a PR (or, for a sub-ticket, an open PR on its parent); Done needs every PR
   merged or declined and a QA ticket raised — no longer a finished one. The old "no PR" warning for
   In Review is now a refusal.
+- **Smoother no-op drops.** Dropping a card back where it started no longer stutters: the board holds still
+  (columns snap, cards skip their position animation) during the drag and for a moment after, and the card fades back in.
+- **Next Sprint is a drop target with its own rules.** Only To Do, Blocked, QA (ready) and On Hold tickets can
+  be moved in — Jira: nearest dated future sprint, else the READY bucket, else REFINEMENT, status To Do — and a
+  Next Sprint ticket can only go back to To Do (active sprint). Nothing else. Next Sprint = a dated future
+  sprint or the READY / REFINEMENT bucket (`move_targets.json` gains `next`; `transition.py::move_sprint`).
 - **Next Sprint moves into To Do; All comes first.** Tickets in a sprint that has not started now live in a
   space at the end of the To Do column (like QA In Progress under QA). The old bar below the board, its
   Next Sprint chip and the expand / scroll behaviour are removed. The chip row starts with **All N**,

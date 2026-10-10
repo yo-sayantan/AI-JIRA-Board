@@ -536,8 +536,27 @@ export function futureSprintOf(sprint?: string | null, now: number = Date.now())
  * Deliberately scoped to `todo`: the moment you actually pick a next-sprint ticket up,
  * it shows in In Progress / Review / QA / On Hold where the real work state is.
  */
-export function isNextSprint(t: { column: string; sprint?: string | null }, now: number): boolean {
-  return t.column === 'todo' && futureSprintOf(t.sprint, now) != null
+export function isNextSprint(t: { column: string; sprint?: string | null; queued?: boolean }, now: number): boolean {
+  if (t.column !== 'todo') return false
+  if (t.queued !== undefined) return t.queued // an optimistic drop decides before Jira's sprint comes back
+  const sp = futureSprintOf(t.sprint, now)
+  return sp != null && isNextSprintBucket(sp)
+}
+
+/**
+ * Which not-yet-started sprints are "Next Sprint": a dated sprint (the one the team is heading into), or one of
+ * the two grooming buckets — READY (groomed, waiting for a sprint) and REFINEMENT (still being groomed).
+ * Any other undated future-state sprint is not, so its tickets stay in the To Do box.
+ */
+export function isNextSprintBucket(sp: SprintInfo): boolean {
+  return sp.start != null || bucketRank(sp) < 2
+}
+
+/** READY first, then REFINEMENT; 2 = not a bucket. */
+function bucketRank(sp: SprintInfo): number {
+  if (/\bready\b/i.test(sp.name)) return 0
+  if (/\brefinement\b/i.test(sp.name)) return 1
+  return 2
 }
 
 /**
@@ -552,9 +571,9 @@ export function sprintWhen(sp: SprintInfo, now: number = Date.now()): string {
   return `starts in ${d} day${d === 1 ? '' : 's'} · ${fmtDateShort(sp.start)}`
 }
 
-/** Order for the sprints of the Next Sprint space: dated ones soonest first, undated grooming buckets last. */
+/** Order for the sprints of the Next Sprint space: dated ones soonest first, then READY, then REFINEMENT. */
 export function compareFutureSprints(a: SprintInfo, b: SprintInfo): number {
-  return (a.start ?? '9999').localeCompare(b.start ?? '9999') || a.name.localeCompare(b.name)
+  return (a.start ?? '9999').localeCompare(b.start ?? '9999') || bucketRank(a) - bucketRank(b) || a.name.localeCompare(b.name)
 }
 
 /** Compact "Jul 9" style date (no year) — for tight UI like the header sprint chip. */

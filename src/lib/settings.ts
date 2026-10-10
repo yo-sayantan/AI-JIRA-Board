@@ -98,7 +98,7 @@ export const FEATURES = [
     label: 'Next Sprint section',
     hint: 'The sprint that has not started, at the end of To Do',
     detail:
-      'Gives the To Do column a second space at its end — a separate header and box, like QA In Progress under QA — holding the tickets whose sprint has not begun yet, so upcoming work stays visible without mixing into this sprint\'s To Do. Off hides those tickets entirely.',
+      'Gives the To Do column a second space at its end — a separate header and box, like QA In Progress under QA — holding the tickets in a dated future sprint or the READY / REFINEMENT bucket, so upcoming work stays visible without mixing into this sprint\'s To Do. Drop To Do, Blocked, QA or On Hold cards on it to queue them (Jira: nearest future sprint); from it they can only go back to To Do. Off hides those tickets entirely.',
   },
   {
     key: 'completedArchive',

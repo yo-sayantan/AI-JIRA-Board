@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Ticket } from '../types'
-import { checkMove, isQaTicket, laneBlocker, looksLikeQa, qaIssuesOf, readinessOf } from './moveRules'
+import { checkMove, isQaTicket, laneBlocker, looksLikeQa, moveTargetOf, qaIssuesOf, readinessOf } from './moveRules'
 
 const dev: Ticket = { key: 'T-1', title: 'Build the export', type: 'Story', status: 'In Progress', column: 'prog' }
 const qaReady: Ticket = { key: 'Q-1', title: 'QA: verify the export', type: 'QA Task', status: 'Ready for QA', column: 'qa' }
@@ -55,6 +55,50 @@ describe('the QA lane', () => {
   })
   it('QA tickets close freely — no PR or QA ticket of their own to wait for', () => {
     expect(checkMove(qaReady, 'done').kind).toBeNull()
+  })
+})
+
+describe('Next Sprint', () => {
+  const FUTURE = 'S99 (future · 2999-01-10 → 2999-01-24)'
+  const at = (column: Ticket['column'], status: string, extra: Partial<Ticket> = {}): Ticket => ({ key: 'N-1', title: 'Build it', type: 'Story', status, column, ...extra })
+  const queued = at('todo', 'To Do', { sprint: FUTURE })
+
+  it('To Do, Blocked, QA (ready) and On Hold tickets may be moved in', () => {
+    for (const t of [at('todo', 'To Do'), at('blocked', 'Blocked'), at('hold', 'On Hold'), { ...qaReady }]) {
+      expect(laneBlocker(t, 'next'), t.column).toBeNull()
+      expect(checkMove(t, 'next').kind, t.column).toBeNull()
+    }
+  })
+  it('nothing else may: not In Progress, In Review, Done and not QA In Progress', () => {
+    for (const t of [at('prog', 'In Progress'), at('rev', 'In Review'), at('done', 'Done'), { ...qaReady, status: 'QA In Progress' }]) {
+      expect(laneBlocker(t, 'next'), t.column).toMatch(/Only To Do, Blocked, QA and On Hold/)
+      expect(checkMove(t, 'next').kind).toBe('lane') // never forcible
+    }
+  })
+  it('a ticket in it can only go back to To Do', () => {
+    expect(moveTargetOf(queued)).toBe('next')
+    expect(laneBlocker(queued, 'todo')).toBeNull()
+    for (const to of ['blocked', 'hold', 'prog', 'rev', 'qa', 'qaip', 'done'] as const) {
+      expect(laneBlocker(queued, to), to).toMatch(/can only be moved back to To Do/)
+    }
+  })
+  it('applies to a QA ticket too — it may enter from To Do, QA, Blocked or On Hold, and leaves only to To Do', () => {
+    expect(laneBlocker({ ...qaTodo }, 'next')).toBeNull()
+    expect(laneBlocker({ ...qaTodo, sprint: FUTURE }, 'todo')).toBeNull()
+    expect(laneBlocker({ ...qaTodo, sprint: FUTURE }, 'qa')).toMatch(/back to To Do/)
+  })
+  it('is a sprint assignment: no PR or QA gate applies', () => {
+    expect(checkMove(at('blocked', 'Blocked'), 'next').kind).toBeNull()
+    expect(checkMove(queued, 'todo').kind).toBeNull()
+  })
+  it('an optimistic drop decides before the sprint arrives, in and out', () => {
+    expect(moveTargetOf({ ...at('todo', 'To Do'), queued: true })).toBe('next')
+    expect(moveTargetOf({ ...queued, queued: false })).toBe('todo')
+  })
+  it('an undated future sprint is Next Sprint only when it is the READY or REFINEMENT bucket', () => {
+    expect(moveTargetOf(at('todo', 'To Do', { sprint: 'Team READY (future)' }))).toBe('next')
+    expect(moveTargetOf(at('todo', 'To Do', { sprint: 'Team REFINEMENT (future · <null> → <null>)' }))).toBe('next')
+    expect(moveTargetOf(at('todo', 'To Do', { sprint: 'Some Backlog (future)' }))).toBe('todo')
   })
 })
 

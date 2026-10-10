@@ -1,6 +1,6 @@
 import type { LinkRef, PullRequest, Ticket } from '../types'
-import { prListOf } from './format'
-import { targetLabel, type MoveTarget } from './columns'
+import { isNextSprint, prListOf } from './format'
+import { isQaInProgress, targetLabel, type MoveTarget } from './columns'
 
 // Every rule a drag-and-drop move answers to, in one place: the drop zones (dimmed, with the reason),
 // the readiness dots on cards, demo mode and the move hook all ask here. MIRRORED server-side in
@@ -10,6 +10,10 @@ import { targetLabel, type MoveTarget } from './columns'
 //  • The QA lane — QA and QA In Progress hold QA tickets (raised by the user or linked to their work).
 //    Only a QA ticket may enter them, and a QA ticket — wherever it sits — moves only to QA, QA In
 //    Progress, Blocked, On Hold or Done. Everything else moves freely outside the lane.
+//  • Next Sprint — a sprint assignment, not a status. Only To Do, Blocked, QA (ready shelf, not QA In Progress)
+//    and On Hold tickets can be moved into it (Jira: the nearest dated future sprint, else READY, else
+//    REFINEMENT; status To Do); a ticket in it can only move back to To Do (Jira: the active sprint).
+//    Nothing else. Overrides the QA lane for that one hop.
 //  • In Review — needs a pull request (open or merged), or for a sub-ticket an OPEN PR on its parent.
 //  • Done — needs no PR still open (each merged or declined), at least one PR (a sub-ticket may have
 //    none of its own), and a QA ticket raised (a sub-ticket's parent's QA ticket counts). QA tickets
@@ -18,8 +22,10 @@ import { targetLabel, type MoveTarget } from './columns'
 // The lane is structural and can never be forced. The PR / QA gates can, with ⌥ on drop — the cached
 // data may be behind Jira.
 
-const QA_LANE: ReadonlySet<MoveTarget> = new Set<MoveTarget>(['qa', 'qaip', 'blocked', 'hold', 'done'])
-const LANE_NAMES = 'QA, QA In Progress, Blocked, On Hold or Done'
+const QA_LANE: ReadonlySet<MoveTarget> = new Set<MoveTarget>(['qa', 'qaip', 'blocked', 'hold', 'done', 'next'])
+/** Where a ticket must be sitting to be moved into Next Sprint. */
+const NEXT_FROM: ReadonlySet<MoveTarget> = new Set<MoveTarget>(['todo', 'blocked', 'qa', 'hold'])
+const LANE_NAMES = 'QA, QA In Progress, Blocked, On Hold, Next Sprint or Done'
 
 /** Loose guess for LINKED issues, whose type is often unknown: the title mentions QA / test / verify. */
 export function looksLikeQa(type: string | null | undefined, title: string | null | undefined): boolean {
@@ -51,13 +57,33 @@ export function isQaTicket(t: { type?: string | null; title?: string | null; lab
   )
 }
 
-type LaneTicket = { column: Ticket['column']; type?: string | null; title?: string | null; labels?: string[] | null }
+type LaneTicket = {
+  column: Ticket['column']
+  status?: string | null
+  sprint?: string | null
+  queued?: boolean
+  type?: string | null
+  title?: string | null
+  labels?: string[] | null
+}
+
+/** Where a displayed ticket sits as a move target — QA splits in two (both column 'qa') and Next Sprint is a space of To Do. */
+export function moveTargetOf(t: LaneTicket, now: number = Date.now()): MoveTarget {
+  if (isNextSprint(t, now)) return 'next'
+  return t.column === 'qa' ? (isQaInProgress(t.status) ? 'qaip' : 'qa') : t.column
+}
 
 /** Anything sitting in QA / QA In Progress is the lane's, whatever its type or title says. */
 export const inQaLane = (t: LaneTicket) => t.column === 'qa' || isQaTicket(t)
 
-/** Why the QA lane forbids moving `t` to `to` — null when it allows it. */
-export function laneBlocker(t: LaneTicket, to: MoveTarget): string | null {
+/** Why the QA lane or the Next Sprint rule forbids moving `t` to `to` — null when it allows it. */
+export function laneBlocker(t: LaneTicket, to: MoveTarget, now: number = Date.now()): string | null {
+  const from = moveTargetOf(t, now)
+  // Next Sprint is a one-way street in and out: nothing but To Do leaves it, and only four places enter it.
+  if (from === 'next') return to === 'todo' ? null : `A Next Sprint ticket can only be moved back to To Do — not to ${targetLabel(to)}.`
+  if (to === 'next') {
+    return NEXT_FROM.has(from) ? null : `Only To Do, Blocked, QA and On Hold tickets can be moved to Next Sprint — not ones in ${targetLabel(from)}.`
+  }
   const qa = inQaLane(t)
   if ((to === 'qa' || to === 'qaip') && !qa) return `Only QA tickets can be moved to ${targetLabel(to)} — this ticket is not one.`
   if (qa && !QA_LANE.has(to)) return `A QA ticket can only be moved to ${LANE_NAMES} — not to ${targetLabel(to)}.`
@@ -106,8 +132,9 @@ export type TicketLookup = ReadonlyMap<string, Ticket>
 export function checkMove(t: Ticket, to: MoveTarget, lookup?: TicketLookup): MoveCheck {
   const lane = laneBlocker(t, to)
   if (lane) return { kind: 'lane', reason: lane, warnings: [] }
-  // A QA ticket is someone else's test: no PR or QA ticket of its own to wait for.
-  if (inQaLane(t)) return OK
+  // A QA ticket is someone else's test: no PR or QA ticket of its own to wait for. A Next Sprint hop only
+  // reassigns the sprint — no PR or QA gate applies to it.
+  if (inQaLane(t) || to === 'next' || moveTargetOf(t) === 'next') return OK
 
   const prs = prListOf(t)
   const open = prs.filter(isOpenPr)
@@ -153,7 +180,12 @@ export function readinessOf(t: Ticket, lookup?: TicketLookup): { rev: MoveCheck 
 /** A refusal in a few words, for a narrow drop zone. The full reason is the zone's tooltip. */
 export function shortReason(c: MoveCheck): string {
   if (!c.reason) return ''
-  if (c.kind === 'lane') return c.reason.startsWith('Only QA') ? 'QA tickets only' : 'QA tickets stay in the QA lane'
+  if (c.kind === 'lane') {
+    if (c.reason.startsWith('Only QA')) return 'QA tickets only'
+    if (c.reason.includes('Next Sprint ticket')) return 'Next Sprint: back to To Do only'
+    if (c.reason.startsWith('Only To Do')) return 'Not from here'
+    return 'QA tickets stay in the QA lane'
+  }
   const s = c.reason.replace(/^Can't move to [^:]+:\s*/, '').replace(/\.$/, '')
   return s.charAt(0).toUpperCase() + s.slice(1)
 }

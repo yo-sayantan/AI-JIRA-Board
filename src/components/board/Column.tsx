@@ -33,18 +33,17 @@ interface Sub {
 }
 const SUB_HOLD: Sub = { id: 'hold', label: HOLD_COLUMN.label, accent: HOLD_COLUMN.accent, droppable: true }
 const SUB_QAIP: Sub = { id: 'qaip', label: QA_IN_PROGRESS.label, accent: QA_IN_PROGRESS.accent, droppable: true }
-/** Next Sprint is not a place to drop on — its tickets are placed there by their sprint, not by a status. */
-const SUB_NEXT: Sub = { id: 'next', label: NEXT_SPRINT_SECTION.label, accent: NEXT_SPRINT_SECTION.accent, droppable: false }
+const SUB_NEXT: Sub = { id: 'next', label: NEXT_SPRINT_SECTION.label, accent: NEXT_SPRINT_SECTION.accent, droppable: true }
 const SUB_TEXTS = {
   hold: { idle: 'Nothing on hold', dragging: 'Drop here to put on hold', slot: 'Drop to put on hold' },
   qaip: { idle: 'Nobody testing yet', dragging: 'Drop here to mark as in QA', slot: 'Drop to move to QA In Progress' },
-  next: { idle: 'Nothing queued', dragging: 'Nothing queued', slot: '' },
+  next: { idle: 'Nothing queued', dragging: 'Drop here to queue for next sprint', slot: 'Drop to move to Next Sprint' },
 } as const
 
 const SUB_HINTS = {
   hold: 'Drag a card here to put it on hold in Jira.',
   qaip: 'QA tickets being tested. Only QA tickets can be dropped here.',
-  next: 'Assigned to you, but the sprint has not started.',
+  next: 'Drag a card here to queue it for the next sprint (To Do, Blocked, QA and On Hold tickets only).',
 } as const
 
 function SubIcon({ sub, size, color }: { sub: Sub; size: number; color?: string }) {
@@ -63,6 +62,7 @@ export const Column = memo(function Column({
   onMove,
   movingKeys,
   dragActive = false,
+  calm = false,
   dragged,
   focused = false,
   held,
@@ -84,13 +84,15 @@ export const Column = memo(function Column({
   movingKeys?: ReadonlySet<string>
   /** A card is being dragged somewhere on the board. */
   dragActive?: boolean
+  /** A drag is in flight or has only just ended: cards hold still instead of animating their position. */
+  calm?: boolean
   /** The ticket being dragged, so zones it may not be dropped on can say why (lib/moveRules.ts). */
   dragged?: Ticket
   /** This is the only column shown (a stat chip filtered the board to it). */
   focused?: boolean
   /** Blocked only: the On Hold space's tickets. Undefined = no On Hold space (Settings → On Hold off). */
   held?: Ticket[]
-  /** To Do only: tickets whose sprint has not started, as a space at the end of the column. Undefined / empty = no such space. */
+  /** To Do only: tickets whose sprint has not started, as a space at the end of the column (a drop target). Undefined = Settings → Next Sprint is off. */
   queued?: Ticket[]
   /** Settings → Blocked off while On Hold is on: the column is just the On Hold space, no Blocked box. */
   hideOwn?: boolean
@@ -105,7 +107,7 @@ export const Column = memo(function Column({
   const inProgress = meta.key === 'qa' ? tickets.filter((t) => isQaInProgress(t.status)) : []
   const own = meta.key === 'qa' ? tickets.filter((t) => !isQaInProgress(t.status)) : tickets
   const sub: Sub | null =
-    meta.key === 'qa' ? (showQaInProgress ? SUB_QAIP : null) : meta.key === 'blocked' && held !== undefined ? SUB_HOLD : meta.key === 'todo' && queued?.length ? SUB_NEXT : null
+    meta.key === 'qa' ? (showQaInProgress ? SUB_QAIP : null) : meta.key === 'blocked' && held !== undefined ? SUB_HOLD : meta.key === 'todo' && queued !== undefined ? SUB_NEXT : null
   const subTickets = sub?.id === 'hold' ? (held ?? []) : sub?.id === 'next' ? (queued ?? []) : inProgress
   // With its own box off, the column IS its second space: it wears that space's header and fills with it.
   const ownOff = hideOwn && sub?.id === 'hold'
@@ -122,7 +124,7 @@ export const Column = memo(function Column({
   const ownTarget: MoveTarget = meta.key
   const checkFor = (target: MoveTarget): MoveCheck => (dragged ? checkMove(dragged, target, lookup) : MOVE_OK)
   const ownCheck = checkFor(ownTarget)
-  const subCheck = sub?.droppable && sub.id !== 'next' ? checkFor(sub.id) : MOVE_OK
+  const subCheck = sub ? checkFor(sub.id) : MOVE_OK
   const [alt, setAlt] = useState(false)
   const usable = (c: MoveCheck, altKey: boolean) => c.kind === null || (c.kind === 'gate' && altKey)
   const accepts = (e: DragEvent) => !!onMove && e.dataTransfer.types.includes(DRAG_MIME)
@@ -161,7 +163,7 @@ export const Column = memo(function Column({
     if (!accepts(e)) return
     e.preventDefault()
     const where = targetOf(e)
-    const to: MoveTarget = where === 'sub' && sub && sub.id !== 'next' ? sub.id : ownTarget
+    const to: MoveTarget = where === 'sub' && sub ? sub.id : ownTarget
     const c = where === 'sub' ? subCheck : ownCheck
     setOver(null)
     setAlt(false)
@@ -200,6 +202,7 @@ export const Column = memo(function Column({
       onRefreshTicket={onRefreshTicket}
       refreshing={refreshingKeys?.has(t.key)}
       draggable={!!onMove}
+      calm={calm}
       moving={movingKeys?.has(t.key)}
       readyRev={r ? (r.rev ? r.rev.reason : undefined) : undefined}
       readyDone={r ? r.done.reason : undefined}
