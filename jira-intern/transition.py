@@ -19,6 +19,7 @@ so a PR merged five minutes ago counts. Mirror of src/lib/moveRules.ts (which ju
                 REFINEMENT; a ticket not already To Do is also transitioned to To Do. A ticket in a Next Sprint
                 (To Do + a future dated / READY / REFINEMENT sprint) can only move back to To Do — Jira: the
                 active sprint. Nothing else, no PR / QA gate (`lane_blocker`, `move_sprint`).
+  • Done is final → a ticket already in Done cannot be moved anywhere (`lane_blocker`); only `--undo` reopens it.
   • On Hold   → WARN when a PR of the ticket is still open (it sits unreviewed while parked).
   • In Review → BLOCK unless the ticket has a PR (open or merged) — or, for a sub-ticket, its parent has
                 an OPEN one.
@@ -80,7 +81,9 @@ def lane_blocker(current_column, target, qa_ticket, in_next=False, qa_in_progres
     """Why the QA lane or the Next Sprint rule forbids moving to `target` (None when it allows it). Next Sprint
     is a one-way street in and out: only To Do leaves it, and only To Do · Blocked · QA (ready) · On Hold enter
     it. Otherwise anything in the QA column is the lane's; only a QA ticket may enter QA / QA In Progress; a QA
-    ticket goes only to QA_LANE."""
+    ticket goes only to QA_LANE. A Done ticket goes nowhere — finished work stays finished."""
+    if current_column == "done":
+        return "A Done ticket stays in Done — it can’t be moved to another column."
     if in_next:
         return None if target == "todo" else f"A Next Sprint ticket can only be moved back to To Do — not to {LABELS[target]}."
     if target == "next":

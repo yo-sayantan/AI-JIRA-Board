@@ -228,13 +228,37 @@ class QaLane(unittest.TestCase):
         self.assertEqual(pick_transition([{"id": "2", "to": {"name": "QA In Progress"}}], "qa")["id"], "2")
 
 
+class DoneIsFinal(unittest.TestCase):
+    """Finished work stays finished: a Done ticket cannot be moved to any other column."""
+
+    def test_no_target_is_open_to_a_done_ticket(self):
+        for target in ("todo", "blocked", "hold", "prog", "rev", "qa", "qaip", "next"):
+            self.assertIn("stays in Done", lane_blocker("done", target, qa_ticket=False), target)
+            self.assertIn("stays in Done", lane_blocker("done", target, qa_ticket=True), target)
+
+    def test_other_tickets_may_still_enter_done(self):
+        self.assertIsNone(lane_blocker("prog", "done", qa_ticket=False))
+
+    def test_the_move_is_refused_and_cannot_be_forced(self):
+        from unittest import mock
+        import transition
+
+        issue = {"id": "1", "fields": {"status": {"name": "Done"}, "subtasks": [], "issuelinks": [], "issuetype": {"name": "Story"}, "summary": "x", "labels": []}}
+        posts = []
+        with mock.patch.object(transition, "jira_get", return_value=issue), mock.patch.object(transition, "jira_post", side_effect=lambda p, b: posts.append(p)):
+            for mode in ("normal", "force"):
+                verdict = transition.move("ABC-1", "prog", mode)
+                self.assertEqual((verdict["blocked"], verdict["forcible"]), (True, False), mode)
+        self.assertEqual(posts, [])
+
+
 class NextSprint(unittest.TestCase):
     """Next Sprint is a sprint assignment: only To Do · Blocked · QA (ready) · On Hold go in, only To Do comes out."""
 
     def test_only_four_places_may_enter(self):
         for column in ("todo", "blocked", "hold", "qa"):
             self.assertIsNone(lane_blocker(column, "next", qa_ticket=False), column)
-        for column in ("prog", "rev", "done"):
+        for column in ("prog", "rev"):
             self.assertIn("Only To Do, Blocked, QA and On Hold", lane_blocker(column, "next", qa_ticket=False), column)
 
     def test_qa_in_progress_may_not_enter(self):

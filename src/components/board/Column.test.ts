@@ -208,6 +208,16 @@ describe('Column — empty columns and the On Hold space', () => {
     expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'todo', false) // the rest of the column is a To Do drop
   })
 
+  it('a Done card is not draggable; others are', () => {
+    const done = { key: 'D-1', title: 'Shipped', status: 'Done', column: 'done' as const }
+    const open = { key: 'P-1', title: 'Working', status: 'In Progress', column: 'prog' as const }
+    const s = render({ meta: COLUMN_META.done, tickets: [done], onMove: () => {} })
+    expect(s.querySelector('[data-ticket-key="D-1"]')!.getAttribute('draggable')).toBeNull()
+    act(() => root!.unmount())
+    const p = render({ meta: COLUMN_META.prog, tickets: [open], onMove: () => {} })
+    expect(p.querySelector('[data-ticket-key="P-1"]')!.getAttribute('draggable')).toBe('true')
+  })
+
   it('the Next Sprint space is always there to drop on (even empty), unless Settings turned it off', () => {
     const s = render({ meta: COLUMN_META.todo, queued: [] })
     expect(s.getAttribute('aria-label')).toBe('To Do and Next Sprint — empty')

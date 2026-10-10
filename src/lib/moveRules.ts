@@ -76,9 +76,13 @@ export function moveTargetOf(t: LaneTicket, now: number = Date.now()): MoveTarge
 /** Anything sitting in QA / QA In Progress is the lane's, whatever its type or title says. */
 export const inQaLane = (t: LaneTicket) => t.column === 'qa' || isQaTicket(t)
 
+export const DONE_LOCKED = 'A Done ticket stays in Done — it can’t be moved to another column.'
+
 /** Why the QA lane or the Next Sprint rule forbids moving `t` to `to` — null when it allows it. */
 export function laneBlocker(t: LaneTicket, to: MoveTarget, now: number = Date.now()): string | null {
   const from = moveTargetOf(t, now)
+  // Finished work stays finished: a Done ticket cannot be dragged anywhere (only the Undo right after the move can reopen it).
+  if (from === 'done') return DONE_LOCKED
   // Next Sprint is a one-way street in and out: nothing but To Do leaves it, and only four places enter it.
   if (from === 'next') return to === 'todo' ? null : `A Next Sprint ticket can only be moved back to To Do — not to ${targetLabel(to)}.`
   if (to === 'next') {
@@ -182,6 +186,7 @@ export function shortReason(c: MoveCheck): string {
   if (!c.reason) return ''
   if (c.kind === 'lane') {
     if (c.reason.startsWith('Only QA')) return 'QA tickets only'
+    if (c.reason === DONE_LOCKED) return 'Done is final'
     if (c.reason.includes('Next Sprint ticket')) return 'Next Sprint: back to To Do only'
     if (c.reason.startsWith('Only To Do')) return 'Not from here'
     return 'QA tickets stay in the QA lane'

@@ -201,7 +201,8 @@ export const Column = memo(function Column({
       onArchive={onArchive}
       onRefreshTicket={onRefreshTicket}
       refreshing={refreshingKeys?.has(t.key)}
-      draggable={!!onMove}
+      // A Done ticket is final: not draggable at all (moveRules.laneBlocker refuses it too, and so does the server).
+      draggable={!!onMove && t.column !== 'done'}
       calm={calm}
       moving={movingKeys?.has(t.key)}
       readyRev={r ? (r.rev ? r.rev.reason : undefined) : undefined}
