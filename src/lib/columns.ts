@@ -191,14 +191,11 @@ export function columnMode(o: { count: number; held?: number; focused?: boolean;
 }
 
 // ── Move targets ─────────────────────────────────────────────────────────────
-// The rules that decide which moves are allowed (QA lane, In Review / Done gates) live in lib/moveRules.ts.
+// The rules that decide which moves are allowed (QA lane, Next Sprint, In Review / Done gates) live in
+// lib/moveRules.ts.
 
-/** Everything the board can move a ticket to: a column, On Hold, or the QA In Progress space. */
-export type MoveTarget = ColumnKey | 'qaip'
+/** Everything the board can move a ticket to: a column, On Hold, QA In Progress, or the Next Sprint space. */
+export type MoveTarget = ColumnKey | 'qaip' | 'next'
 
-/** Where a displayed ticket sits as a move target — QA splits in two, though both are column 'qa'. */
-export function moveTargetOf(t: { column: ColumnKey; status?: string | null }): MoveTarget {
-  return t.column === 'qa' ? (isQaInProgress(t.status) ? 'qaip' : 'qa') : t.column
-}
-
-export const targetLabel = (to: MoveTarget): string => (to === 'qaip' ? QA_IN_PROGRESS.label : COLUMN_META[to].label)
+export const targetLabel = (to: MoveTarget): string =>
+  to === 'qaip' ? QA_IN_PROGRESS.label : to === 'next' ? NEXT_SPRINT_SECTION.label : COLUMN_META[to].label

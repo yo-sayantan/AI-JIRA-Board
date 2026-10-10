@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jira-intern"))
 from _jira import status_column  # noqa: E402
-from transition import COLUMNS, evaluate, is_qa, is_qa_in_progress, is_qa_ticket, lane_blocker, pick_transition  # noqa: E402
+from transition import COLUMNS, evaluate, is_next_sprint, is_qa, is_qa_in_progress, is_qa_ticket, lane_blocker, pick_active_sprint, pick_future_sprint, pick_transition  # noqa: E402
 
 OPEN_PR = {"id": 7, "state": "comments", "merged": False}
 MERGED_PR = {"id": 7, "state": "merged", "merged": True}
@@ -171,7 +171,7 @@ class QaLane(unittest.TestCase):
     """QA and QA In Progress hold QA tickets. A QA ticket — wherever it sits — moves only to QA · QA In
     Progress · Blocked · On Hold · Done; only a QA ticket may be moved into the lane."""
 
-    LANE = ("qa", "qaip", "blocked", "hold", "done")
+    LANE = ("qa", "qaip", "blocked", "hold", "done", "next")
     OUT = ("todo", "prog", "rev")
 
     def test_a_dev_ticket_cannot_be_moved_into_qa_or_qa_in_progress(self):
@@ -226,6 +226,127 @@ class QaLane(unittest.TestCase):
 
     def test_qa_falls_back_to_an_in_progress_status_only_when_nothing_else_fits(self):
         self.assertEqual(pick_transition([{"id": "2", "to": {"name": "QA In Progress"}}], "qa")["id"], "2")
+
+
+class NextSprint(unittest.TestCase):
+    """Next Sprint is a sprint assignment: only To Do · Blocked · QA (ready) · On Hold go in, only To Do comes out."""
+
+    def test_only_four_places_may_enter(self):
+        for column in ("todo", "blocked", "hold", "qa"):
+            self.assertIsNone(lane_blocker(column, "next", qa_ticket=False), column)
+        for column in ("prog", "rev", "done"):
+            self.assertIn("Only To Do, Blocked, QA and On Hold", lane_blocker(column, "next", qa_ticket=False), column)
+
+    def test_qa_in_progress_may_not_enter(self):
+        self.assertIn("not ones in QA In Progress", lane_blocker("qa", "next", qa_ticket=True, qa_in_progress=True))
+        self.assertIsNone(lane_blocker("qa", "next", qa_ticket=True, qa_in_progress=False))
+
+    def test_a_qa_ticket_in_to_do_may_enter_too(self):
+        self.assertIsNone(lane_blocker("todo", "next", qa_ticket=True))
+
+    def test_a_next_sprint_ticket_can_only_go_back_to_to_do(self):
+        self.assertIsNone(lane_blocker("todo", "todo", qa_ticket=False, in_next=True))
+        for target in ("blocked", "hold", "prog", "rev", "qa", "qaip", "done"):
+            self.assertIn("can only be moved back to To Do", lane_blocker("todo", target, qa_ticket=False, in_next=True), target)
+
+    def test_what_counts_as_a_next_sprint(self):
+        self.assertTrue(is_next_sprint(True, {"name": "S14", "state": "future", "startDate": "2026-10-29"}))
+        self.assertTrue(is_next_sprint(True, {"name": "Team READY", "state": "future"}))
+        self.assertTrue(is_next_sprint(True, {"name": "Team REFINEMENT", "state": "FUTURE"}))
+        self.assertFalse(is_next_sprint(True, {"name": "Some Backlog", "state": "future"}))
+        self.assertFalse(is_next_sprint(True, {"name": "S13", "state": "active", "startDate": "2026-10-08"}))
+        self.assertFalse(is_next_sprint(False, {"name": "S14", "state": "future", "startDate": "2026-10-29"}))
+        self.assertFalse(is_next_sprint(True, None))
+
+    def test_the_target_sprint_is_dated_then_ready_then_refinement(self):
+        dated = [{"id": 3, "name": "S15", "state": "future", "startDate": "2026-11-12"}, {"id": 2, "name": "S14", "state": "future", "startDate": "2026-10-29"}]
+        buckets = [{"id": 5, "name": "Team REFINEMENT", "state": "future"}, {"id": 4, "name": "Team READY", "state": "future"}]
+        self.assertEqual(pick_future_sprint(buckets + dated)["id"], 2)  # nearest dated
+        self.assertEqual(pick_future_sprint(buckets)["id"], 4)  # no dated one: READY
+        self.assertEqual(pick_future_sprint(buckets[:1])["id"], 5)  # no READY: REFINEMENT
+        self.assertIsNone(pick_future_sprint([{"id": 9, "name": "Other", "state": "future"}]))
+        self.assertIsNone(pick_future_sprint([{"id": 1, "name": "S13", "state": "active", "startDate": "2026-10-08"}]))
+
+    def test_the_active_sprint_is_where_it_comes_back_to(self):
+        self.assertEqual(pick_active_sprint([{"id": 1, "state": "future"}, {"id": 2, "state": "active"}])["id"], 2)
+        self.assertIsNone(pick_active_sprint([{"id": 1, "state": "future"}]))
+
+    def test_every_target_has_a_preferred_status(self):
+        from transition import PREFERRED
+        self.assertIn("next", COLUMNS)
+        self.assertIn("to do", PREFERRED["next"])
+
+
+class NextSprintMoves(unittest.TestCase):
+    """move(): sprint first through the Agile API, then (when needed) the To Do status."""
+
+    DEV = {"issuetype": {"name": "Story"}, "summary": "Build it", "labels": []}
+
+    def run_move(self, target, status, sprint=None, sprints=(), mode="normal"):
+        from unittest import mock
+        import transition
+
+        issue = {"id": "1", "fields": {"status": {"name": status}, "subtasks": [], "issuelinks": [], **self.DEV}}
+        posts = []
+
+        def get(path, **_):
+            if path.endswith("/transitions"):
+                return {"transitions": [{"id": "9", "to": {"name": n}} for n in ("To Do", "In Progress", "Blocked", "On Hold")]}
+            if "/board/" in path:
+                return {"values": list(sprints), "isLast": True}
+            if "/rest/agile/1.0/issue/" in path:
+                return {"fields": {"sprint": sprint}}
+            if "/rest/agile/1.0/board?" in path:
+                return {"values": [{"id": 7}]}
+            return issue
+
+        with mock.patch.object(transition, "jira_get", side_effect=get), mock.patch.object(transition, "jira_post", side_effect=lambda p, b: posts.append((p, b))):
+            return transition.move("ABC-1", target, mode), posts
+
+    ACTIVE = {"id": 1, "name": "S13", "state": "active", "startDate": "2026-10-08", "originBoardId": 7}
+    NEXT = {"id": 2, "name": "S14", "state": "future", "startDate": "2026-10-29"}
+    READY = {"id": 4, "name": "Team READY", "state": "future"}
+
+    def test_a_blocked_ticket_goes_to_the_nearest_future_sprint_and_becomes_to_do(self):
+        verdict, posts = self.run_move("next", "Blocked", sprint=self.ACTIVE, sprints=[self.ACTIVE, self.NEXT, self.READY])
+        self.assertTrue(verdict["moved"])
+        self.assertEqual([p for p, _ in posts], ["/rest/agile/1.0/sprint/2/issue", "/rest/api/2/issue/ABC-1/transitions"])
+        self.assertIn("Sprint → S14.", verdict["warnings"])
+
+    def test_a_to_do_ticket_only_changes_sprint(self):
+        verdict, posts = self.run_move("next", "To Do", sprint=self.ACTIVE, sprints=[self.ACTIVE, self.NEXT])
+        self.assertEqual([p for p, _ in posts], ["/rest/agile/1.0/sprint/2/issue"])
+        self.assertEqual(verdict["status"], "To Do")
+
+    def test_with_no_dated_sprint_it_falls_back_to_ready(self):
+        _, posts = self.run_move("next", "To Do", sprint=self.ACTIVE, sprints=[self.ACTIVE, self.READY])
+        self.assertEqual(posts[0][0], "/rest/agile/1.0/sprint/4/issue")
+
+    def test_no_future_sprint_at_all_is_an_error_not_a_silent_move(self):
+        verdict, posts = self.run_move("next", "To Do", sprint=self.ACTIVE, sprints=[self.ACTIVE])
+        self.assertFalse(verdict["ok"])
+        self.assertIn("no future sprint", verdict["error"])
+        self.assertEqual(posts, [])
+
+    def test_an_in_progress_ticket_is_refused_before_anything_is_written(self):
+        verdict, posts = self.run_move("next", "In Progress", sprint=self.ACTIVE, sprints=[self.ACTIVE, self.NEXT])
+        self.assertEqual((verdict["blocked"], verdict["forcible"]), (True, False))
+        self.assertEqual(posts, [])
+
+    def test_back_to_to_do_joins_the_active_sprint_and_keeps_the_status(self):
+        verdict, posts = self.run_move("todo", "To Do", sprint=self.NEXT, sprints=[self.ACTIVE, self.NEXT])
+        self.assertTrue(verdict["moved"])
+        self.assertEqual([p for p, _ in posts], ["/rest/agile/1.0/sprint/1/issue"])
+
+    def test_a_next_sprint_ticket_cannot_go_anywhere_else(self):
+        verdict, posts = self.run_move("prog", "To Do", sprint=self.NEXT, sprints=[self.ACTIVE, self.NEXT])
+        self.assertIn("back to To Do", verdict["reason"])
+        self.assertEqual(posts, [])
+
+    def test_a_ticket_already_in_next_sprint_is_a_no_op(self):
+        verdict, posts = self.run_move("next", "To Do", sprint=self.NEXT, sprints=[self.NEXT])
+        self.assertFalse(verdict["moved"])
+        self.assertEqual(posts, [])
 
 
 class Modes(unittest.TestCase):

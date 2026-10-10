@@ -83,8 +83,8 @@ describe('next-sprint timing', () => {
     expect(sprintWhen(parseSprint('S24 (future · 2026-10-01 → 2026-10-08)')!, NOW)).toBe('not started')
   })
   it('orders dated sprints soonest first and undated buckets last', () => {
-    const names = ['Platform READY (future)', 'S26 (future · 2026-11-01 → 2026-11-15)', 'S25 (future · 2026-10-18 → 2026-11-01)']
+    const names = ['Team REFINEMENT (future)', 'Platform READY (future)', 'S26 (future · 2026-11-01 → 2026-11-15)', 'S25 (future · 2026-10-18 → 2026-11-01)']
     const sorted = names.map((n) => parseSprint(n)!).sort(compareFutureSprints).map((x) => x.name)
-    expect(sorted).toEqual(['S25', 'S26', 'Platform READY'])
+    expect(sorted).toEqual(['S25', 'S26', 'Platform READY', 'Team REFINEMENT'])
   })
 })

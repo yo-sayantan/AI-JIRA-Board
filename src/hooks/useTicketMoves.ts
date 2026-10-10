@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ColumnKey, Ticket } from '../types'
-import { MOVE_TARGETS, moveTargetOf, targetLabel, type MoveTarget } from '../lib/columns'
-import { checkMove, shortReason, type TicketLookup } from '../lib/moveRules'
+import { MOVE_TARGETS, targetLabel, type MoveTarget } from '../lib/columns'
+import { checkMove, moveTargetOf, shortReason, type TicketLookup } from '../lib/moveRules'
 import { demoMoveVerdict } from '../demo'
 import { moveTicketInJira, type MoveMode } from '../lib/runner'
 import type { ToastFn } from './useToasts'
@@ -61,9 +61,10 @@ export function useTicketMoves({
     setPins((prev) => {
       const next = new Map(prev)
       if (target) {
-        // QA In Progress is a space inside the QA column: column 'qa', and a status the board reads as in progress.
-        const column: ColumnKey = target === 'qaip' ? 'qa' : target
-        next.set(key, { target, column, seq: ++seq.current, status: targetLabel(target) })
+        // QA In Progress is a space inside the QA column and Next Sprint one inside To Do: they pin the column
+        // (and, for QA In Progress, a status the board reads as in progress); Next Sprint is a To Do ticket.
+        const column: ColumnKey = target === 'qaip' ? 'qa' : target === 'next' ? 'todo' : target
+        next.set(key, { target, column, seq: ++seq.current, status: target === 'next' ? 'To Do' : targetLabel(target) })
       } else next.delete(key)
       return next
     })
@@ -145,7 +146,8 @@ export function useTicketMoves({
       return tickets.map((t) => {
         const pin = pins.get(t.key)
         if (!pin || moveTargetOf(t) === pin.target) return t
-        return { ...t, column: pin.column, status: pin.status, done: pin.column === 'done', onHold: pin.column === 'hold' }
+        // `queued` puts the card in (or, back in To Do, out of) the Next Sprint space before Jira's new sprint arrives.
+        return { ...t, column: pin.column, status: pin.status, done: pin.column === 'done', onHold: pin.column === 'hold', queued: pin.column === 'todo' ? pin.target === 'next' : undefined }
       })
     },
     [pins],

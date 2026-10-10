@@ -123,3 +123,36 @@ describe('gates, force and undo', () => {
     expect(lastOpts(toast)).toBeUndefined() // an undo is not itself undoable
   })
 })
+
+describe('Next Sprint moves', () => {
+  const blocked: Ticket = { key: 'B-1', title: 'Stuck', type: 'Story', status: 'Blocked', column: 'blocked' }
+  const dev: Ticket = { key: 'D-1', title: 'Build it', type: 'Story', status: 'In Progress', column: 'prog' }
+
+  it('a blocked ticket dropped on Next Sprint shows as To Do in the Next Sprint space, and Undo returns it', async () => {
+    const { moves, toast } = mountMoves()
+    await act(async () => moves().moveTicket(blocked, 'next'))
+    const shown = moves().applyOverrides([blocked])[0]
+    expect([shown.column, shown.status, shown.queued]).toEqual(['todo', 'To Do', true])
+    const calls = toast.mock.calls
+    const undo = calls[calls.length - 1][2] as { action: { label: string; run: () => void } }
+    expect(undo.action.label).toBe('Undo')
+    await act(async () => undo.action.run())
+    expect(moves().applyOverrides([blocked])[0].column).toBe('blocked')
+  })
+
+  it('and back: a queued ticket dropped on To Do leaves the Next Sprint space', async () => {
+    const { moves } = mountMoves()
+    const queued: Ticket = { ...blocked, column: 'todo', status: 'To Do', sprint: 'S99 (future · 2999-01-10 → 2999-01-24)' }
+    await act(async () => moves().moveTicket(queued, 'todo'))
+    const shown = moves().applyOverrides([queued])[0]
+    expect([shown.column, shown.queued]).toEqual(['todo', false])
+  })
+
+  it('refuses an In Progress ticket, and a queued ticket anywhere but To Do, with no way to force it', async () => {
+    const { moves, toast } = mountMoves()
+    await act(async () => moves().moveTicket(dev, 'next', { forceAsk: true }))
+    expect(toast.mock.calls[toast.mock.calls.length - 1][0]).toContain('Only To Do, Blocked, QA and On Hold')
+    expect(toast.mock.calls[toast.mock.calls.length - 1][2]).toBeUndefined()
+  })
+})
+

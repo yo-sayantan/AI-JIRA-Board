@@ -187,6 +187,14 @@ select.jb-field:disabled {
   opacity: 0 !important;
   pointer-events: none;
 }
+.ticket-card-return {
+  animation: ticket-card-return 0.22s ease-out;
+}
+@keyframes ticket-card-return {
+  from {
+    opacity: 0;
+  }
+}
 .ticket-card-wash,
 .ticket-card-glow,
 .ticket-card-edge {

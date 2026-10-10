@@ -90,16 +90,27 @@ Overlay (indigo megaphone chip, `open/total` count) for every non-sub-task ticke
 
 ## Next Sprint
 
-To Do tickets whose sprint hasn't started (Jira sprint state `future`, or a grooming bucket)
-are pulled OUT of the To Do box into their own space **at the end of the To Do column** — a
-separate header and box built exactly like QA In Progress under QA (`board/SubSection.tsx`). Inside it,
-each sprint gets a caption — its name and when it starts ("starts in 3 days · Oct 14", or "not started" for an undated
-grooming bucket / a slipped start); sprints are ordered soonest first, buckets last. It
-appears only while something is queued, is not a drop target (a ticket sits there because of its
-sprint, not a status — a drop anywhere in the column is a To Do drop), and its cards drag out like
-any other. The moment you pick one up it shows in In Progress / Review / QA where its real status
-lives. `src/lib/format.ts::isNextSprint`, `board/Column.tsx` (`queued`). The old bar below the
-board, its Next Sprint chip and the chip-driven expand/scroll are gone.
+To Do tickets in a sprint that hasn't started are pulled OUT of the To Do box into their own space **at the
+end of the To Do column** — a separate header and box built exactly like QA In Progress under QA
+(`board/SubSection.tsx`). Which sprints count: a **dated** future sprint, or the **READY** or **REFINEMENT**
+bucket (e.g. "Team READY"); any other undated future-state sprint leaves its tickets in the To Do box.
+Inside it each sprint is captioned with its name and when it starts ("starts in 3 days · Oct 14", or "not
+started" for a bucket / a slipped start), soonest first, then READY, then REFINEMENT. The space is always
+there to drop on (slim when empty). The fetch needs nothing special: every ticket assigned to you, in any
+sprint, is already imported, and the buckets are sprints like any other.
+
+**Moves — and only these:**
+- Into Next Sprint: **To Do, Blocked, QA (the ready shelf — not QA In Progress) and On Hold** tickets, QA tickets
+  included. In Jira the ticket joins the **nearest dated future sprint**, else the **READY** bucket, else
+  **REFINEMENT**, and is set to **To Do** when it was Blocked / On Hold / QA. No future sprint at all → refused
+  with that reason. In Progress, In Review, Done and QA In Progress tickets cannot enter.
+- Out of Next Sprint: **only to To Do** — in Jira the ticket joins the **active sprint** (status stays To Do).
+  Every other zone dims ("Next Sprint: back to To Do only").
+- It is a sprint assignment, so no PR / QA gate applies; it is never forcible with ⌥; Undo works.
+
+`src/lib/format.ts::isNextSprint`, `src/lib/moveRules.ts` (rules), `board/Column.tsx` (`queued`),
+`jira-intern/transition.py::move_sprint` (Jira Agile API: `/rest/agile/1.0/board/{id}/sprint`,
+`/sprint/{id}/issue`). The old bar below the board, its Next Sprint chip and the chip-driven expand/scroll are gone.
 
 ## On Hold
 

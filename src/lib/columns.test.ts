@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BOARD_COLUMNS, MOVE_TARGETS, PIPELINE_COLUMNS, columnMode, isQaInProgress, mapStatusToColumn, moveTargetOf, qaStage } from './columns'
+import { BOARD_COLUMNS, MOVE_TARGETS, PIPELINE_COLUMNS, columnMode, isQaInProgress, mapStatusToColumn, qaStage } from './columns'
 import sharedTargets from '../../jira-intern/move_targets.json'
 
 describe('board columns', () => {
@@ -64,8 +64,8 @@ describe('move targets', () => {
     expect([...MOVE_TARGETS]).toEqual(sharedTargets)
     expect(MOVE_TARGETS.has('hold')).toBe(true)
   })
-  it('cover every board column, On Hold and QA In Progress, nothing else', () => {
-    expect(new Set(MOVE_TARGETS)).toEqual(new Set([...BOARD_COLUMNS.map((c) => c.key), 'hold', 'qaip']))
+  it('cover every board column, On Hold, QA In Progress and Next Sprint, nothing else', () => {
+    expect(new Set(MOVE_TARGETS)).toEqual(new Set([...BOARD_COLUMNS.map((c) => c.key), 'hold', 'qaip', 'next']))
   })
 })
 
@@ -86,12 +86,3 @@ describe('quiet columns', () => {
     expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(30)
   })
 })
-
-describe('move targets of a displayed ticket', () => {
-  it('QA and QA In Progress are two targets in one column', () => {
-    expect(moveTargetOf({ column: 'qa', status: 'Ready for QA' })).toBe('qa')
-    expect(moveTargetOf({ column: 'qa', status: 'QA In Progress' })).toBe('qaip')
-    expect(moveTargetOf({ column: 'prog', status: 'In Progress' })).toBe('prog')
-  })
-})
-
