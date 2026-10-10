@@ -1033,11 +1033,9 @@ function CloudModelPicker({
     ? 'Loading the model list…'
     : !hasKey
       ? info.missingKey
-      : selected?.inCatalog === false
-        ? `${selected.label} is not in your Cursor catalog — Cursor may reject it. Run one report to check; pick another model if it fails.`
-        : pricey
-          ? `${selected?.label} costs ${usd(selected?.price?.output)} per 1M output tokens${selected?.exception ? ' — above the $10 cap' : ''}. A lower effort spends fewer tokens.`
-          : (cloud.error ?? info.about)
+      : pricey
+        ? `${selected?.label} costs ${usd(selected?.price?.output)} per 1M output tokens. A lower effort spends fewer tokens.`
+        : (cloud.error ?? info.about)
 
   return (
     <>
@@ -1104,7 +1102,7 @@ function CloudModelPicker({
           )}
         </span>
       </div>
-      <p className={`h-8 line-clamp-2 text-[10.5px] leading-4 ${pricey && selected?.inCatalog !== false ? 'text-[#dc2626]' : 'text-[var(--muted)]'}`} title={hint}>
+      <p className={`h-8 line-clamp-2 text-[10.5px] leading-4 ${pricey ? 'text-[#dc2626]' : 'text-[var(--muted)]'}`} title={hint}>
         {hint}
       </p>
     </>
