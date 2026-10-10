@@ -124,8 +124,8 @@ One user, one tab, mostly idle with bursts of background work. So:
 - **Columns:** To Do · Blocked · In Progress · In Review (folds in Ready4Review + Code Review) · QA (with a separate QA In Progress space under it) · Done.
 - **On Hold:** its own space under Blocked in the Blocked column — a drop target that stays slim when empty.
 - **Next Sprint:** To Do tickets whose sprint hasn't started yet (Jira sprint state `future`, or
-  a grooming bucket like `… READY`) are pulled out of To Do into their own collapsible bar, so a
-  cleared current-sprint To Do doesn't look full. See `src/lib/format.ts` → `isNextSprint`.
+  a grooming bucket like `… READY`) are pulled out of the To Do box into their own space at the end
+  of the To Do column, so a cleared current-sprint To Do doesn't look full. See `src/lib/format.ts` → `isNextSprint`.
 - **Completed:** the full historical archive, collapsed by default.
 - **Raised by me:** every non-sub-task ticket you REPORTED (bugs filed for later), with status,
   current assignee and the full hand-off trail — its own overlay behind the indigo chip, fed by

@@ -192,4 +192,21 @@ describe('Column — empty columns and the On Hold space', () => {
     drop(s, 'Q-2', undefined, true)
     expect(onMove).not.toHaveBeenCalled()
   })
+
+  it('To Do gets a Next Sprint space at its end — its own header and box, not a drop target', () => {
+    const onMove = vi.fn()
+    const todo = { key: 'T-1', title: 'This sprint', status: 'To Do', column: 'todo' as const }
+    const queued = { key: 'T-2', title: 'Later', status: 'To Do', column: 'todo' as const, sprint: 'Sprint 99' }
+    const s = render({ meta: COLUMN_META.todo, tickets: [todo], queued: [queued], onMove })
+    expect(s.getAttribute('aria-label')).toBe('To Do · 1 · Next Sprint · 1')
+    const group = s.querySelector('[role=group]')!
+    expect(group.textContent).toContain('Later')
+    expect(group.getAttribute('data-drop')).toBeNull() // nothing can be dropped on it
+    drop(s, 'ABC-1', 5)
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'todo', false) // a drop anywhere in the column is a To Do drop
+  })
+
+  it('no Next Sprint space when nothing is queued', () => {
+    expect(render({ meta: COLUMN_META.todo, queued: [] }).querySelector('[role=group]')).toBeNull()
+  })
 })

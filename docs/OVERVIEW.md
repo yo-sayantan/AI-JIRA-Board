@@ -35,8 +35,8 @@ React 19 · Vite 6 · Tailwind v4 · Motion · a Python fetch pipeline · one se
   Done. Colour-coded animated cards; click any for a full detail drawer. Chips filter; live search.
 - **Blocked** — a column between To Do and In Progress for stuck work. Every empty column folds to a slim rail so the columns with cards get the width.
 - **On Hold** — its own small space under Blocked, in the same column; always there to drop a card on.
-- **Next Sprint** — tickets queued in a sprint that hasn't started yet, kept out of To Do so a
-  cleared sprint doesn't look full. Toggle it from the top chips; **All** reveals everything at once.
+- **Next Sprint** — tickets queued in a sprint that hasn't started yet, kept out of the To Do box so a
+  cleared sprint doesn't look full: their own space at the end of the To Do column. **All** (first chip, on by default) shows the whole board.
 - **PR Readiness Report** — for every ticket with a pull request: a management-grade, colour-coded
   tabbed report (verdict + score, evidence chain, per-file change assessment, risks & release gate,
   open scope, timeline). Generated automatically in the background when a PR appears or changes —

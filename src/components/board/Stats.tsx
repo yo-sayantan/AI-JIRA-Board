@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react'
 import { motion, useSpring } from 'motion/react'
-import { BOARD_COLUMNS, NEXT_SPRINT_SECTION } from '../../lib/columns'
+import { BOARD_COLUMNS } from '../../lib/columns'
 import type { ColumnKey, Ticket } from '../../types'
 import { hexToRgba } from '../../lib/format'
 import { MegaphoneIcon, TrophyIcon, TicketGlyph } from '../common/Icons'
@@ -9,12 +9,10 @@ import { MegaphoneIcon, TrophyIcon, TicketGlyph } from '../common/Icons'
 const RAISED = '#6366f1'
 
 /**
- * What the top chip row currently has selected. A column key filters the board to that
- * column; 'next' reveals the Next Sprint bar; 'all' reveals everything (board + Next Sprint
- * expanded); null is the default view. Selections are mutually exclusive — picking any chip
- * clears the others, which is what hides the Next Sprint bar when another chip is chosen.
+ * What the top chip row currently has selected. A column key filters the board to that column;
+ * null is "All" — the whole board, selected by default. Picking a column chip again returns to All.
  */
-export type StatSelection = ColumnKey | 'next' | 'all' | null
+export type StatSelection = ColumnKey | null
 
 function AnimatedNumber({ value }: { value: number }) {
   const spring = useSpring(value, { stiffness: 110, damping: 22 })
@@ -31,13 +29,12 @@ export const Stats = memo(function Stats({
   hideBlocked = false,
   completedCount,
   raisedCount,
-  nextSprintCount = 0,
   active,
   onSelect,
   onOpenCompleted,
   onOpenRaised,
 }: {
-  /** Board + On Hold tickets only — next-sprint work is counted separately. */
+  /** Every ticket on the board, On Hold and Next Sprint included (they are spaces inside the Blocked and To Do columns). */
   tickets: Ticket[]
   /** Settings → Blocked section off: no Blocked chip. */
   hideBlocked?: boolean
@@ -45,29 +42,28 @@ export const Stats = memo(function Stats({
   completedCount: number | null
   /** Tickets I reported: open/total. null hides the chip (feature off or nothing raised). */
   raisedCount: { total: number; open: number } | null
-  /** To Do tickets whose sprint hasn't started (rendered in the Next Sprint section). */
-  nextSprintCount?: number
   active: StatSelection
   onSelect: (key: StatSelection) => void
   onOpenCompleted?: () => void
   onOpenRaised?: () => void
 }) {
   const counts = (k: ColumnKey) => tickets.filter((t) => t.column === k).length
-  const total = tickets.filter((t) => t.column !== 'hold').length
-  const NS = NEXT_SPRINT_SECTION.accent
+  const total = tickets.length
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
+      {/* "All" — the whole board; first in the row and selected by default. */}
       <button
         onClick={() => onSelect(null)}
         aria-pressed={active === null}
+        title="Show every column"
         className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all ${
           active === null
             ? 'border-transparent bg-[var(--ink)] text-[var(--bg)]'
             : 'border-[var(--line)] bg-[var(--surface-solid)] text-[var(--ink-soft)] hover:border-[var(--muted)]'
         }`}
       >
-        <AnimatedNumber value={total} /> active
+        <TicketGlyph size={13} /> All <b className="tabular-nums"><AnimatedNumber value={total} /></b>
       </button>
 
       {BOARD_COLUMNS.filter((c) => !(hideBlocked && c.key === 'blocked')).map((c) => {
@@ -96,58 +92,6 @@ export const Stats = memo(function Stats({
           </motion.button>
         )
       })}
-
-      {/* A toggle, not a filter: it shows/hides the Next Sprint bar below the board. Selecting any
-          other chip clears `active`, so the bar closes on its own — no cross-component wiring. */}
-      {nextSprintCount > 0 &&
-        (() => {
-          const on = active === 'next'
-          return (
-            <motion.button
-              whileHover={{ scale: 1.05, y: -1 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-              onClick={() => onSelect(on ? null : 'next')}
-              aria-pressed={on}
-              title="Assigned to you, but the sprint hasn’t started — show or hide the Next Sprint bar"
-              className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors"
-              style={{
-                borderColor: on ? NS : hexToRgba(NS, 0.5),
-                background: on ? hexToRgba(NS, 0.16) : 'var(--surface-solid)',
-                color: NS,
-                boxShadow: on ? `0 0 0 1px ${hexToRgba(NS, 0.4)}` : 'none',
-              }}
-            >
-              <span className="inline-block h-2 w-2 rounded-full" style={{ background: NS }} />
-              {NEXT_SPRINT_SECTION.label}
-              <b>
-                <AnimatedNumber value={nextSprintCount} />
-              </b>
-            </motion.button>
-          )
-        })()}
-
-      {/* "All" — reveal everything at once: every column plus the Next Sprint queue, expanded. */}
-      {(() => {
-        const on = active === 'all'
-        return (
-          <motion.button
-            whileHover={{ scale: 1.05, y: -1 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-            onClick={() => onSelect(on ? null : 'all')}
-            aria-pressed={on}
-            title="Show every ticket at once — all columns plus the Next Sprint queue, expanded"
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all ${
-              on
-                ? 'border-transparent bg-[var(--ink)] text-[var(--bg)]'
-                : 'border-[var(--line)] bg-[var(--surface-solid)] text-[var(--ink-soft)] hover:border-[var(--muted)]'
-            }`}
-          >
-            <TicketGlyph size={13} /> All
-          </motion.button>
-        )
-      })()}
 
       {(completedCount != null || raisedCount != null) && (
         <div className="ml-auto flex flex-wrap items-center gap-2">

@@ -27,6 +27,7 @@ export const Board = memo(function Board({
   movingKeys,
   bottomOrder,
   held,
+  nextSprint,
   sections = ALL_SECTIONS,
   lookup,
   readiness = false,
@@ -45,6 +46,8 @@ export const Board = memo(function Board({
   bottomOrder?: ReadonlyMap<string, number>
   /** On Hold tickets, shown as their own space under Blocked. Undefined = Settings → On Hold is off. */
   held?: Ticket[]
+  /** To Do tickets whose sprint has not started, shown as their own space at the end of To Do. Undefined = Settings → Next Sprint is off. */
+  nextSprint?: Ticket[]
   /** Which optional sections are on (Settings → Board sections). */
   sections?: BoardSections
   /** Every ticket the board knows — the move rules read a sub-ticket's parent from it. */
@@ -62,11 +65,13 @@ export const Board = memo(function Board({
     }
     return groups
   }, [tickets, bottomOrder])
-  const heldSorted = useMemo(() => {
-    if (!held) return undefined
+  const sortedSpace = (list?: Ticket[]) => {
+    if (!list) return undefined
     const pin = (t: Ticket) => bottomOrder?.get(t.key) ?? 0
-    return [...held].sort((a, b) => pin(a) - pin(b) || byUrgency(a, b))
-  }, [held, bottomOrder])
+    return [...list].sort((a, b) => pin(a) - pin(b) || byUrgency(a, b))
+  }
+  const heldSorted = useMemo(() => sortedSpace(held), [held, bottomOrder]) // eslint-disable-line react-hooks/exhaustive-deps
+  const queuedSorted = useMemo(() => sortedSpace(nextSprint), [nextSprint, bottomOrder]) // eslint-disable-line react-hooks/exhaustive-deps
   // Blocked is also the home of the On Hold space: with Blocked off and On Hold on the column stays, as On Hold alone.
   const shown = BOARD_COLUMNS.filter((c) => c.key !== 'blocked' || sections.blocked || held !== undefined)
   const cols = focus ? shown.filter((c) => c.key === focus) : shown
@@ -76,8 +81,8 @@ export const Board = memo(function Board({
   const [dragKey, setDragKey] = useState<string | null>(null)
   const dragActive = dragKey !== null
   const dragged = useMemo(
-    () => (dragKey ? ([...tickets, ...(held ?? [])].find((t) => t.key === dragKey) ?? lookup?.get(dragKey)) : undefined),
-    [dragKey, tickets, held, lookup],
+    () => (dragKey ? ([...tickets, ...(held ?? []), ...(nextSprint ?? [])].find((t) => t.key === dragKey) ?? lookup?.get(dragKey)) : undefined),
+    [dragKey, tickets, held, nextSprint, lookup],
   )
   return (
     <div
@@ -108,6 +113,7 @@ export const Board = memo(function Board({
           onMove={onMove}
           movingKeys={movingKeys}
           held={meta.key === 'blocked' ? heldSorted : undefined}
+          queued={meta.key === 'todo' ? queuedSorted : undefined}
           hideOwn={meta.key === 'blocked' && !sections.blocked}
           showQaInProgress={sections.qaInProgress}
           lookup={lookup}

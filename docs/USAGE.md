@@ -13,17 +13,15 @@ A tour of what's on screen and how to drive it.
 - **On Hold** — its own small space under Blocked, in the same column: drop a card on it to put the ticket On Hold in Jira; held tickets are listed there. Blocked, On Hold and QA In Progress can each be switched off in Settings → Board sections — a switched-off section and its tickets are not shown at all.
 - **Demo mode** (Settings → Features) — swaps in a sample board to try drag-and-drop and the
   gates on. Nothing reaches Jira while it is on, and your real board returns when you turn it off.
-- **Next Sprint** — a bar for tickets queued in a sprint that hasn't started (see below).
+- **Next Sprint** — a space at the end of the To Do column for tickets queued in a sprint that hasn't started (see below).
 - **Completed** — the full historical archive (top-right trophy chip).
 
 ## The chips (top row)
 
 | Chip | Does |
 |---|---|
-| **N active** | Clears all filters — the default view. |
+| **All N** | First in the row and selected by default — the whole board. Picking a column chip filters; click it again (or All) to return. |
 | **To Do / In Progress / In Review / QA / Done** | Filters the board to that one column. Click again to clear. |
-| **Next Sprint N** | Toggles the Next Sprint bar. Picking any other chip hides it again. |
-| **All** | Reveals everything at once — every column plus the Next Sprint queue, expanded. |
 | **Raised open/total** | Opens the Raised-by-me view — every ticket you reported (see below). |
 | **Completed** | Opens the full archive of every Done ticket. |
 
@@ -60,13 +58,13 @@ on the board. The whole feature toggles in Settings → **Raised by me**.
 
 Tickets assigned to you whose sprint **hasn't started yet** (Jira sprint state `future`, or a
 grooming bucket like `… READY`) are deliberately kept **out** of the To Do column — otherwise a
-sprint where you've finished all your To Do work still looks full. They live in their own bar:
+sprint where you've finished all your To Do work still looks full. They live in their own space at
+the **end of the To Do column**, under the To Do box (like QA In Progress under QA):
 
-- Click the **Next Sprint** chip (top row) to reveal a minimal icon in the bottom-right corner.
-- Click that icon to expand the full list; grouped by sprint, with when each one starts.
-- Click **All** to jump straight to the fully-expanded list.
-- The moment you actually start one (In Progress / Review / QA), it moves onto the board where
-  its real status lives.
+- It appears only while something is queued, and counts in the To Do chip.
+- It is not a drop target — a drop anywhere in the To Do column is just a To Do drop.
+- Drag a card out of it like any other. The moment you actually start one (In Progress / Review /
+  QA), it moves onto the board where its real status lives.
 
 ## PR Readiness Report
 
