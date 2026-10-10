@@ -10,6 +10,21 @@ export function isPricey(m: { price?: { output: number | null } | null } | null 
   return out != null && out > WARN_ABOVE_OUTPUT_USD
 }
 
+export type EffortId = 'low' | 'medium' | 'high'
+const ALL_EFFORTS: readonly EffortId[] = ['low', 'medium', 'high']
+
+/**
+ * The efforts the Settings dropdown offers for a model. Every model has one — except a pricey one (output above
+ * $10 per 1M tokens, the ⚠ ones), whose cost note says to pick a cheaper model instead. A model that advertises
+ * the efforts it supports offers just those; one that advertises none (no effort parameter) gets all three, which
+ * the worker then applies as guidance in the prompt.
+ */
+export function effortChoicesFor(m: { efforts?: string[]; price?: { output: number | null } | null } | null | undefined): EffortId[] {
+  if (!m || isPricey(m)) return []
+  const advertised = ALL_EFFORTS.filter((e) => m.efforts?.includes(e))
+  return advertised.length ? advertised : [...ALL_EFFORTS]
+}
+
 export function usd(n: number | null | undefined): string {
   if (n == null) return '—'
   if (Number.isInteger(n)) return `$${n}`

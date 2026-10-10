@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CloudModelChoice } from './runner'
-import { groupByProvider, isPricey, usd } from './cloudModels'
+import { effortChoicesFor, groupByProvider, isPricey, usd } from './cloudModels'
 
 describe('usd', () => {
   it('writes whole dollars bare and fractions to the precision Cursor quotes', () => {
@@ -47,5 +47,22 @@ describe('isPricey', () => {
     expect(isPricey({})).toBe(false)
     expect(isPricey(null)).toBe(false)
     expect(isPricey(undefined)).toBe(false)
+  })
+})
+
+describe('effortChoicesFor', () => {
+  it('offers Low / Medium / High for a model that advertises none (it has no effort parameter)', () => {
+    expect(effortChoicesFor({ efforts: [], price: { output: 2 } })).toEqual(['low', 'medium', 'high'])
+    expect(effortChoicesFor({ price: null })).toEqual(['low', 'medium', 'high'])
+  })
+  it('offers just the efforts a model advertises', () => {
+    expect(effortChoicesFor({ efforts: ['low', 'high'] })).toEqual(['low', 'high'])
+  })
+  it('offers none for a pricey model — above $10 output — and for no model', () => {
+    expect(effortChoicesFor({ efforts: ['low', 'medium'], price: { output: 15 } })).toEqual([])
+    expect(effortChoicesFor(null)).toEqual([])
+  })
+  it('$10 exactly is not pricey (the ⚠ starts above it), so it still has the dropdown', () => {
+    expect(effortChoicesFor({ price: { output: 10 } })).toEqual(['low', 'medium', 'high'])
   })
 })

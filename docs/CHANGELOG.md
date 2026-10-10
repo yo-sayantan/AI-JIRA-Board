@@ -11,6 +11,13 @@ code does now, so a reader can check them against the tree.
   Done. In Review needs a PR (or, for a sub-ticket, an open PR on its parent); Done needs every PR
   merged or declined and a QA ticket raised — no longer a finished one. The old "no PR" warning for
   In Review is now a refusal.
+- **Report progress bar covers the AI pass.** The generating list the bar watched empties as soon as the quick base
+  reports are built, so a large run read "done" while the AI intern was still working through them. The bar now
+  counts a report until its AI pass finishes too (`useReports.working`), and its batch size resets only after a few
+  quiet seconds, so the hand-over between the two queues cannot zero it. Queued AI passes of a downed intern don't count.
+- **Effort dropdown for every non-pricey model.** Low / Medium / High is offered for each Cursor model except those
+  marked ⚠ (output above $10 per 1M); it used to appear only for models that advertised an effort parameter. A model
+  without one gets the effort as guidance in the prompt.
 - **Smoother no-op drops.** Dropping a card back where it started no longer stutters: the board holds still
   (columns snap, cards skip their position animation) during the drag and for a moment after, and the card fades back in.
 - **Next Sprint is a drop target with its own rules.** Only To Do, Blocked, QA (ready) and On Hold tickets can

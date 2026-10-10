@@ -17,7 +17,7 @@ Backend choice is independent of level:
   checkbox, Ollama.app on the host via `host.docker.internal:11434` (Apple-Silicon Metal; use for
   14B+ models). Ticket text never leaves the machine.
 - **Cloud** — Cursor, Anthropic (Claude), or Gemini, with per-provider model dropdowns and (Cursor
-  only) an effort setting. Uses YOUR API keys from `~/.cursor/mcp-secrets.env`; the summarised
+  only) an effort setting for every model except the pricey ones (above $10 per 1M output tokens); a model with no effort parameter of its own gets it as prompt guidance. Uses YOUR API keys from `~/.cursor/mcp-secrets.env`; the summarised
   ticket text goes to that provider under its terms.
 
 Settings relevant to jobs mirror to `jira-intern/.settings.json` (`server/settings.mjs`), which

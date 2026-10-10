@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ACTIVE_CADENCE, AI_LEVELS, BOARD_CADENCE, FEATURES, LIMITS, clampSetting, type AiCloudProvider, type FeatureKey, type Settings } from '../../lib/settings'
 import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice, type CloudPrice, type CursorCatalogInfo, type OllamaContainerInfo } from '../../lib/runner'
-import { groupByProvider, isPricey, usd } from '../../lib/cloudModels'
+import { effortChoicesFor, groupByProvider, isPricey, usd } from '../../lib/cloudModels'
 import fallbackCatalog from '../../../ai-intern/models.json'
 import { hexToRgba } from '../../lib/format'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
@@ -1017,7 +1017,8 @@ function CloudModelPicker({
   const models = useMemo(() => cloud?.models ?? [], [cloud])
   const hasKey = !!cloud?.hasKey
   const selected = models.find((m) => m.id === settings.aiCloudModel) ?? null
-  const efforts = selected?.efforts ?? []
+  // Every model offers an effort except a pricey one (see effortChoicesFor).
+  const effortChoices = CLOUD_EFFORTS.filter((e) => effortChoicesFor(selected).includes(e.id))
 
   // Only pre-fill an EMPTY draft (nothing ever saved, or the provider was just switched — both
   // cases where the user is already choosing). Overwriting a saved model that merely isn't in this
@@ -1034,7 +1035,7 @@ function CloudModelPicker({
     : !hasKey
       ? info.missingKey
       : pricey
-        ? `${selected?.label} costs ${usd(selected?.price?.output)} per 1M output tokens. A lower effort spends fewer tokens.`
+        ? `${selected?.label} costs ${usd(selected?.price?.output)} per 1M output tokens, so it has no effort choice — pick a cheaper model to set one.`
         : (cloud.error ?? info.about)
 
   return (
@@ -1063,21 +1064,23 @@ function CloudModelPicker({
             )
           })}
         </select>
-        {provider === 'cursor' && efforts.length > 0 && (
+        {provider === 'cursor' && selected && effortChoices.length > 0 && (
           <select
-            value={efforts.includes(settings.aiCloudEffort) ? settings.aiCloudEffort : efforts[0]}
+            value={effortChoices.some((e) => e.id === settings.aiCloudEffort) ? settings.aiCloudEffort : effortChoices[0].id}
             onChange={(e) => onChange({ ...settings, aiCloudEffort: e.target.value as Settings['aiCloudEffort'] })}
             aria-label="Cursor effort"
             title="Effort — Low uses the fewest tokens, High the most (and the best answers)"
             className="jb-field h-8 w-[5.75rem] shrink-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)]"
           >
-            {CLOUD_EFFORTS.filter((e) => efforts.includes(e.id)).map((e) => (
+            {effortChoices.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.label}
               </option>
             ))}
           </select>
         )}
+        {/* A pricey model has no effort choice; keep its width so the model dropdown does not jump. */}
+        {provider === 'cursor' && selected && effortChoices.length === 0 && <span aria-hidden className="w-[5.75rem] shrink-0" />}
         <a
           href={guideUrl('ai-cloud-prices')}
           target="_blank"

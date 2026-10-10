@@ -7,6 +7,8 @@ import { SparkleIcon } from '../common/Icons'
 import { ScopeMenu, StopButton, type MenuScope } from './ScopeMenu'
 
 const AI = '#a855f7'
+/** How long nothing may be generating before the next run counts as a new batch. */
+const PEAK_RESET_MS = 4000
 
 function formatModelPart(part: string): string {
   return part
@@ -57,7 +59,7 @@ function AiSpark({ busy }: { busy: boolean }) {
 
 export interface ReportsMenuProps {
   served: boolean
-  /** Keys generating right now — server queue ∪ terminal/cron runs. */
+  /** Keys still being worked on — base report queue ∪ terminal/cron runs ∪ the AI pass that follows each. */
   generating: ReadonlySet<string>
   /** Tickets on the board that have at least one pull request (the eligible population). */
   withPrCount: number
@@ -79,9 +81,16 @@ export function ReportsMenu({ served, generating, withPrCount, reportCount, boar
   const [force, setForce] = useState(false)
   const [peak, setPeak] = useState(0)
   const busy = generating.size
-  // The queue arrives all at once, then shrinks as each report finishes. Peak is the batch size.
+  // The queue arrives all at once, then shrinks as each report finishes. Peak is the batch size. It resets only
+  // after a few quiet seconds: a key hands over from the base queue to the AI queue between two status polls, and
+  // a bar that zeroed (and re-peaked smaller) in that gap jumped to "done" mid-run.
   useEffect(() => {
-    setPeak((n) => (busy === 0 ? 0 : Math.max(n, busy)))
+    if (busy > 0) {
+      setPeak((n) => Math.max(n, busy))
+      return
+    }
+    const t = setTimeout(() => setPeak(0), PEAK_RESET_MS)
+    return () => clearTimeout(t)
   }, [busy])
   const done = peak > 0 ? Math.max(0, peak - busy) : 0
   const pct = peak > 0 ? Math.round((done / peak) * 100) : 0

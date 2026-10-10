@@ -103,7 +103,7 @@ or **not verified** (a gap — shown, never hidden). A ring shows the 0–100 re
    the base. **Max** is the longest timeout (`full`). Cloud AI is Claude or Cursor; the intern
    reads `ANTHROPIC_API_KEY`, `CURSOR_API_KEY`, or `GEMINI_API_KEY` only from `~/.cursor/mcp-secrets.env`.
    Cursor lists a few Gemini Flash models, GPT-4o, Grok, and Chinese models (Qwen, DeepSeek, Kimi, GLM).
-   Cursor effort is **low** (default) or **medium**. Local models see on-disk
+   Cursor effort is **Low** (default), **Medium** or **High**, offered for every model except the pricey ones (⚠, output above $10 per 1M tokens). A model with no effort parameter of its own gets it as guidance in the prompt. Local models see on-disk
    intern data plus live Jira/Bitbucket (MCP tokens). CI / Checkmarx / live Dynatrace stay Not verified.
 
 **When they are generated.** Automatically after every fetch for any ticket whose PR appeared or
