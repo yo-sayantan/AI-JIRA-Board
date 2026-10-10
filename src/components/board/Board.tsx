@@ -4,7 +4,7 @@ import { ALL_SECTIONS, type BoardSections } from '../../lib/boardView'
 import type { ColumnKey, Ticket } from '../../types'
 import type { MoveTarget } from '../../lib/columns'
 import type { TicketLookup } from '../../lib/moveRules'
-import { priorityMeta } from '../../lib/format'
+import { compareFutureSprints, futureSprintOf, priorityMeta } from '../../lib/format'
 import { Column } from './Column'
 
 // Within a column: most urgent first, then most recently touched. The Done column
@@ -71,7 +71,17 @@ export const Board = memo(function Board({
     return [...list].sort((a, b) => pin(a) - pin(b) || byUrgency(a, b))
   }
   const heldSorted = useMemo(() => sortedSpace(held), [held, bottomOrder]) // eslint-disable-line react-hooks/exhaustive-deps
-  const queuedSorted = useMemo(() => sortedSpace(nextSprint), [nextSprint, bottomOrder]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Next Sprint: grouped by sprint (soonest first, undated grooming buckets last) so each group gets its caption.
+  const queuedSorted = useMemo(() => {
+    const list = sortedSpace(nextSprint)
+    if (!list) return undefined
+    const sp = (t: Ticket) => futureSprintOf(t.sprint, now)
+    return list.sort((a, b) => {
+      const x = sp(a)
+      const y = sp(b)
+      return x && y ? compareFutureSprints(x, y) : 0
+    })
+  }, [nextSprint, bottomOrder, now]) // eslint-disable-line react-hooks/exhaustive-deps
   // Blocked is also the home of the On Hold space: with Blocked off and On Hold on the column stays, as On Hold alone.
   const shown = BOARD_COLUMNS.filter((c) => c.key !== 'blocked' || sections.blocked || held !== undefined)
   const cols = focus ? shown.filter((c) => c.key === focus) : shown

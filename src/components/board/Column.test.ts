@@ -209,4 +209,17 @@ describe('Column — empty columns and the On Hold space', () => {
   it('no Next Sprint space when nothing is queued', () => {
     expect(render({ meta: COLUMN_META.todo, queued: [] }).querySelector('[role=group]')).toBeNull()
   })
+
+  it('Next Sprint names each sprint and when it starts, one caption per group', () => {
+    const t = (key: string, sprint: string) => ({ key, title: key, status: 'To Do', column: 'todo' as const, sprint })
+    const dated = 'S99 (future · 2999-01-10 → 2999-01-24)'
+    const queued = [t('Q-1', dated), t('Q-2', dated), t('Q-3', 'Platform READY (future)')]
+    const s = render({ meta: COLUMN_META.todo, tickets: [], queued })
+    const group = s.querySelector('[role=group]')!
+    expect(group.textContent).toContain('S99')
+    expect(group.textContent).toMatch(/starts in \d+ days? · Jan 10/)
+    expect(group.textContent).toContain('Platform READY')
+    expect(group.textContent).toContain('not started')
+    expect(group.textContent!.match(/S99/g)).toHaveLength(1) // one caption for both its tickets
+  })
 })

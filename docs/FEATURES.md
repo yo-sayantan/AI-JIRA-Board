@@ -92,7 +92,9 @@ Overlay (indigo megaphone chip, `open/total` count) for every non-sub-task ticke
 
 To Do tickets whose sprint hasn't started (Jira sprint state `future`, or a grooming bucket)
 are pulled OUT of the To Do box into their own space **at the end of the To Do column** — a
-separate header and box built exactly like QA In Progress under QA (`board/SubSection.tsx`). It
+separate header and box built exactly like QA In Progress under QA (`board/SubSection.tsx`). Inside it,
+each sprint gets a caption — its name and when it starts ("starts in 3 days · Oct 14", or "not started" for an undated
+grooming bucket / a slipped start); sprints are ordered soonest first, buckets last. It
 appears only while something is queued, is not a drop target (a ticket sits there because of its
 sprint, not a status — a drop anywhere in the column is a To Do drop), and its cards drag out like
 any other. The moment you pick one up it shows in In Progress / Review / QA where its real status

@@ -25,6 +25,7 @@ export const SubSection = memo(function SubSection({
   texts,
   hint,
   bare = false,
+  captionOf,
 }: {
   /** Drop-target id, matched by Column's `targetOf` (droppable sections only). */
   id: string
@@ -48,8 +49,18 @@ export const SubSection = memo(function SubSection({
   hint?: string
   /** The column already wears this space's header (its own box is off): no second header, fill the column. */
   bare?: boolean
+  /** A line above the first ticket of each run that shares a caption (Next Sprint: the sprint and when it starts). Tickets must already be grouped. */
+  captionOf?: (t: Ticket) => { text: string; detail?: string } | null
 }) {
   const empty = tickets.length === 0
+  // Consecutive tickets with the same caption form one group; without captions it is one plain group.
+  const groups: { cap: { text: string; detail?: string } | null; tickets: Ticket[] }[] = []
+  for (const t of tickets) {
+    const cap = captionOf?.(t) ?? null
+    const last = groups[groups.length - 1]
+    if (last && last.cap?.text === cap?.text) last.tickets.push(t)
+    else groups.push({ cap, tickets: [t] })
+  }
   return (
     <div
       data-drop={droppable ? id : undefined}
@@ -64,9 +75,19 @@ export const SubSection = memo(function SubSection({
         style={{ ...dropBoxStyle(accent, droppable && over), opacity: deniedOpacity(denied, over) }}
       >
         {denied && <DeniedNote check={denied} alt={alt} active={over} inline={empty} />}
-        <AnimatePresence mode="popLayout" initial={false}>
-          {tickets.map(card)}
-        </AnimatePresence>
+        {groups.map((g, i) => (
+          <div key={g.cap?.text ?? `g${i}`} className="flex flex-col gap-2">
+            {g.cap && (
+              <div className="flex flex-wrap items-baseline gap-x-1.5 px-1 pt-0.5 text-[10.5px] font-semibold leading-tight" style={{ color: accent }}>
+                <span className="min-w-0 break-words">{g.cap.text}</span>
+                {g.cap.detail && <span className="font-medium text-[var(--muted)]">· {g.cap.detail}</span>}
+              </div>
+            )}
+            <AnimatePresence mode="popLayout" initial={false}>
+              {g.tickets.map(card)}
+            </AnimatePresence>
+          </div>
+        ))}
         {droppable && <LandingSlot accent={accent} show={over} label={texts.slot} />}
         {empty && !denied && !(droppable && over) && (
           <div className="flex items-center justify-center py-2.5 text-center text-[11px] italic" style={{ color: droppable && dragging ? accent : 'var(--muted)' }}>

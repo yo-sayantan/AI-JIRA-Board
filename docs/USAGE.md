@@ -61,6 +61,7 @@ grooming bucket like `… READY`) are deliberately kept **out** of the To Do col
 sprint where you've finished all your To Do work still looks full. They live in their own space at
 the **end of the To Do column**, under the To Do box (like QA In Progress under QA):
 
+- Tickets are grouped by sprint, each group headed by the sprint's name and when it starts ("starts in 3 days · Oct 14", or "not started" when it has no dates).
 - It appears only while something is queued, and counts in the To Do chip.
 - It is not a drop target — a drop anywhere in the To Do column is just a To Do drop.
 - Drag a card out of it like any other. The moment you actually start one (In Progress / Review /

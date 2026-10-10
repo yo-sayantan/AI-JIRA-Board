@@ -4,7 +4,7 @@ import { HOLD_COLUMN, NEXT_SPRINT_SECTION, QA_IN_PROGRESS, columnMode, isQaInPro
 import { MOVE_OK, checkMove, readinessOf, type MoveCheck, type TicketLookup } from '../../lib/moveRules'
 import type { Ticket } from '../../types'
 import { DRAG_MIME, TicketCard } from './TicketCard'
-import { hexToRgba } from '../../lib/format'
+import { futureSprintOf, hexToRgba, sprintWhen } from '../../lib/format'
 import { CalendarIcon, ColumnIcon, PauseIcon } from '../common/Icons'
 import { SubSection } from './SubSection'
 import { DeniedNote, LandingSlot, SpaceHeader, dropBoxStyle, deniedOpacity } from './boardParts'
@@ -183,6 +183,11 @@ export const Column = memo(function Column({
   const name = ownOff ? sub!.label : sub ? `${meta.label} and ${sub.label}` : meta.label
   const stacked = !!sub && !ownOff
 
+  // Next Sprint: which sprint each ticket waits for, and when it starts.
+  const sprintCaption = (t: Ticket) => {
+    const sp = futureSprintOf(t.sprint, now)
+    return sp ? { text: sp.name, detail: sprintWhen(sp, now) } : null
+  }
   const card = (t: Ticket) => {
     const r = readiness ? readinessOf(t, lookup) : null
     return (
@@ -283,6 +288,7 @@ export const Column = memo(function Column({
               bare={ownOff}
               texts={SUB_TEXTS[sub.id]}
               hint={SUB_HINTS[sub.id]}
+              captionOf={sub.id === 'next' ? sprintCaption : undefined}
             />
           )}
         </div>

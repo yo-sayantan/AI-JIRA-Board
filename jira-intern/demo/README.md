@@ -36,7 +36,7 @@ the whole set.
 ## What the set covers
 
 - **Every column** — To Do, Blocked, In Progress, In Review, QA (both the ready shelf and *QA In
-  Progress*), Done, plus On Hold and Next Sprint.
+  Progress*), Done, plus On Hold and Next Sprint (`DEMO-270` / `DEMO-272` in a dated sprint, `DEMO-271` in an undated READY bucket, so both captions show).
 - **Every pull-request state** — merged, approved, changes requested, unresolved comments,
   declined, none; one approval short of the requirement; approved while comments are still open;
   every attempt declined; several PRs across repositories; merged while the ticket is still
