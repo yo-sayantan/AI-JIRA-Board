@@ -37,7 +37,7 @@ same level/backend/model as the button.
   Job types: `enrich-report`, `summarize-active`, `pull-model`. Report jobs run several in
   parallel (Settings → parallelism); summarize and pulls are exclusive.
 - **`ai-intern/models.json`** — the local-model catalog (Ollama tag, RAM, GGUF download links,
-  container-vs-host fit). The Settings dropdown, the setup guide's tables, and pull commands all
+  container-vs-host fit). The Settings dropdown, the help guide's tables (`help/06-ai-local-models.html`), and pull commands all
   derive from this one file; add a model by adding a row.
 - **`server/ai.mjs`** — proxies the board's `/api/ai-*` to the worker with a 1-second status cache.
 

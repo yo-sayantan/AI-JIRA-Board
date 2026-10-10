@@ -1,0 +1,168 @@
+<!doctype html>
+<!-- Jira Board Help — Deploy with Docker. Plain HTML: open this file straight from disk, no server needed. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
+    <title>Jira Board Help — Deploy with Docker</title>
+    <link rel="stylesheet" href="help.css" />
+  </head>
+  <body>
+    <nav class="top" aria-label="Help pages">
+      <div class="inner">
+        <span class="brand"><a href="00-start-here.html">🎫 Jira Board Help</a></span>
+        <a class="nl" href="00-start-here.html">Start</a>
+        <a class="nl" href="01-requirements.html"><span class="n">1</span>Requirements</a>
+        <a class="nl" href="02-install-the-tools.html"><span class="n">2</span>Install</a>
+        <a class="nl" href="03-get-the-code-with-git.html"><span class="n">3</span>Git</a>
+        <a class="nl" href="04-configure-token-and-settings.html"><span class="n">4</span>Configure</a>
+        <a class="nl" href="05-deploy-with-docker.html" aria-current="page"><span class="n">5</span>Deploy</a>
+        <a class="nl" href="06-ai-local-models.html"><span class="n">6</span>Local AI</a>
+        <a class="nl" href="07-ai-cloud-models-and-prices.html"><span class="n">7</span>Cloud AI</a>
+        <a class="nl" href="08-other-ways-to-run.html"><span class="n">8</span>Other ways</a>
+        <a class="nl" href="09-troubleshooting-and-faq.html"><span class="n">9</span>Troubleshooting</a>
+        <a class="nl" href="10-developer-documentation.html">Docs</a>
+      </div>
+    </nav>
+
+    <header class="hero page">
+      <div class="logo">🐳</div>
+      <span class="step-of">Step 5 of 9</span><h1>Deploy with Docker</h1>
+      <p class="sub">The start script, the one command, managing the containers, environment knobs.</p>
+    </header>
+
+    <div class="layout">
+      <aside class="toc" aria-label="On this page">
+        <p class="toc-h">On this page</p>
+        <a href="#deploy">Deploy — the recommended way</a>
+        <a href="#by-hand">Build and run by hand</a>
+        <a href="#manage">Manage the containers</a>
+        <a href="#knobs">Environment knobs</a>
+        <a href="#launcher">Desktop launcher</a>
+        <p class="toc-h">Guide pages</p>
+        <a href="00-start-here.html">00 · Start here</a>
+        <a href="01-requirements.html">01 · Requirements — what to install</a>
+        <a href="02-install-the-tools.html">02 · Install the tools</a>
+        <a href="03-get-the-code-with-git.html">03 · Get the code with Git</a>
+        <a href="04-configure-token-and-settings.html">04 · Configure your token and settings</a>
+        <a href="05-deploy-with-docker.html" aria-current="page">05 · Deploy with Docker</a>
+        <a href="06-ai-local-models.html">06 · AI with local models</a>
+        <a href="07-ai-cloud-models-and-prices.html">07 · AI with cloud models and prices</a>
+        <a href="08-other-ways-to-run.html">08 · Other ways to run</a>
+        <a href="09-troubleshooting-and-faq.html">09 · Troubleshooting and FAQ</a>
+        <a href="10-developer-documentation.html">10 · Developer documentation</a>
+        <a href="legal-privacy-and-accessibility.html">Policies &amp; privacy</a>
+      </aside>
+
+      <main class="content">
+      <h2 id="deploy">Deploy — the recommended way</h2>
+      <div class="card">
+        <h3>The start script (macOS / Linux, and Git Bash on Windows)</h3>
+        <pre><button class="copy">Copy</button>bash scripts/start-jira-board.sh</pre>
+        <p>Then open <a href="http://localhost:4321/dist/index.html">http://localhost:4321/dist/index.html</a>
+          <span class="ok">✓</span></p>
+        <p class="small">It starts Docker if needed, builds the board on <b>your</b> machine (<code class="inl">npm run build</code>),
+          packages that build into the image (<code class="inl">DIST_SOURCE=prebuilt</code>), frees port 4321, redeploys,
+          waits until the board is healthy and opens it. Safe to run again and again — it never stacks containers or
+          drifts ports. It needs Node.js 22+ for the build step.</p>
+      </div>
+      <div class="card">
+        <h3>Without Node on the machine — plain Docker Compose</h3>
+        <pre><button class="copy">Copy</button>docker compose up -d --build</pre>
+        <p class="small">This builds the app inside the image instead. It works, but over a slow or flaky Docker network
+          <code class="inl">npm ci</code> can silently skip the TypeScript compiler's platform binary and the build dies —
+          see <a href="09-troubleshooting-and-faq.html#faq-typescript-binary">the FAQ</a>. Compose starts project
+          <code class="inl">JIRA-Project</code> with the <code class="inl">JIRA-Board</code> container, mounts your secrets
+          read-only, fetches once on boot, then on the schedule set in Settings.</p>
+      </div>
+
+      <h2 id="by-hand">Build and run by hand</h2>
+      <div class="card">
+        <h3>Build the image, then run it</h3>
+        <pre><button class="copy">Copy</button><span class="cmt"># build the board on this machine, then package it (what the start script does)</span>
+npm run build
+docker compose build --build-arg DIST_SOURCE=prebuilt
+docker compose up -d
+
+<span class="cmt"># or plain docker, without compose (the Dockerfile lives in docker/)</span>
+docker build -f docker/Dockerfile --build-arg DIST_SOURCE=prebuilt -t jira-board:latest .
+docker run -d --name JIRA-Board -p 127.0.0.1:4321:4321 \
+  -v "$HOME/.cursor:/home/node/.cursor:ro" \
+  -v "$HOME/.ai:/home/node/.ai:ro" \
+  -v "$(pwd)/jira-intern:/app/jira-intern" \
+  jira-board:latest</pre>
+        <p class="small">Mount the <b>folder</b> that holds <code class="inl">mcp-secrets.env</code>, not the file itself:
+          a single-file mount keeps pointing at the old file after an editor rewrites it. Windows PowerShell equivalents
+          for the volume flags: <code class="inl">-v "${HOME}\.cursor:/home/node/.cursor:ro"</code> and
+          <code class="inl">-v "${PWD}\jira-intern:/app/jira-intern"</code>.</p>
+        <div class="note warn"><b>Never add <code class="inl">--pull</code></b> to a build here: it re-downloads the base
+          image every time, and Docker Hub can crawl from the Docker VM.</div>
+      </div>
+
+      <h2 id="manage">Manage the containers</h2>
+      <div class="card">
+        <h3>Everyday commands</h3>
+        <pre><button class="copy">Copy</button>docker compose logs -f          <span class="cmt"># watch fetch + server logs</span>
+docker compose ps               <span class="cmt"># is it running?</span>
+docker compose restart          <span class="cmt"># restart without rebuilding</span>
+docker compose down             <span class="cmt"># stop and remove</span>
+bash scripts/start-jira-board.sh  <span class="cmt"># rebuild + redeploy after a code change</span></pre>
+        <pre><button class="copy">Copy</button>docker exec -it JIRA-Board sh   <span class="cmt"># shell inside the container</span>
+docker stats JIRA-Board         <span class="cmt"># resource usage</span>
+docker image prune -f           <span class="cmt"># clean old layers</span></pre>
+        <div class="note warn"><b>Changed anything in <code class="inl">src/</code>?</b> Redeploy with the start
+          script — the app is baked into the image. Changing only <i>data</i> needs no
+          rebuild; the container refetches on its own.</div>
+      </div>
+
+      <h2 id="knobs">Environment knobs</h2>
+      <div class="card">
+        <h3>Variables</h3>
+        <table>
+          <tr><th>Variable</th><th>Default</th><th>What it does</th></tr>
+          <tr><td><code class="inl">PORT</code></td><td>4321</td><td>Host port the board is published on.</td></tr>
+          <tr><td><code class="inl">REFRESH_ON_START</code></td><td>1</td><td>Fetch once when the container boots.</td></tr>
+                    <tr><td><code class="inl">SKIP_SUMMARY</code></td><td>1</td><td>No LLM in the <b>fetch</b> container. Report enrichment and briefs run in <code class="inl">AI-Intern</code>.</td></tr>
+          <tr><td><code class="inl">AI_INTERN_URL</code></td><td>http://jira-ai:4322</td><td>Where the board proxies intern health, jobs, and model pulls.</td></tr>
+        </table>
+        <pre><button class="copy">Copy</button>PORT=8080 bash scripts/start-jira-board.sh   <span class="cmt"># run on a different port</span></pre>
+      </div>
+
+      <h2 id="launcher">Desktop launcher</h2>
+      <div class="card">
+        <h3>One-click launcher (macOS / Linux)</h3>
+        <p class="small">Starts Docker if needed, frees the port, rebuilds, redeploys, waits for health, and opens
+          the board. Safe to run repeatedly — it never stacks containers or drifts ports.</p>
+        <pre><button class="copy">Copy</button>./scripts/start-jira-board.sh</pre>
+        <p class="small">For a Desktop shortcut, copy
+          <code class="inl">setup/Start Jira Board.command.template</code> to your Desktop, set
+          <code class="inl">REPO_DIR</code> inside it, then <code class="inl">chmod +x</code> it and double-click.</p>
+      </div>
+
+      
+      <div class="note">Board up? Next: <a href="06-ai-local-models.html">AI with local models</a> or
+        <a href="07-ai-cloud-models-and-prices.html">cloud models</a> (both optional). Something went wrong?
+        <a href="09-troubleshooting-and-faq.html">Troubleshooting and FAQ</a>.</div>
+      <nav class="pager" aria-label="Previous and next page">
+        <a class="prev" href="04-configure-token-and-settings.html"><small>← Previous · 04</small><b>Configure your token and settings</b></a>
+        <a class="next" href="06-ai-local-models.html"><small>Next · 06 →</small><b>AI with local models</b></a>
+      </nav>
+      <footer>
+        <div class="flinks">
+          <a href="legal-privacy-and-accessibility.html#privacy">Privacy Policy</a>
+          <a href="legal-privacy-and-accessibility.html#terms">Terms &amp; Conditions</a>
+          <a href="legal-privacy-and-accessibility.html#cookies">Cookie Policy</a>
+          <a href="legal-privacy-and-accessibility.html#data">Your data</a>
+          <a href="legal-privacy-and-accessibility.html#embeds">Third-party embeds</a>
+          <a href="legal-privacy-and-accessibility.html#a11y">Accessibility</a>
+          <a href="legal-privacy-and-accessibility.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking · works offline</div>
+      </footer>
+      </main>
+    </div>
+
+    <script src="help.js"></script>
+  </body>
+</html>

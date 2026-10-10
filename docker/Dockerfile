@@ -71,10 +71,11 @@ COPY --chown=node:node package.json ./
 COPY --chown=node:node server ./server
 COPY --chown=node:node jira-intern ./jira-intern
 COPY --chown=node:node config ./config
-# The Setup & Deployment guide, served at /docs/index.html — this is what the board's
-# help (?) button opens, so it must exist inside the image, not just in the repo.
+# The help guide, served at /help/ — this is what the board's help (?) button opens, so it must
+# exist inside the image, not just in the repo. Its developer-doc viewer renders docs/*.md.
+COPY --chown=node:node help ./help
 COPY --chown=node:node docs ./docs
-# The guide links to /setup/ and /docs; server/serve.mjs allows both.
+# The guide links to /setup/ and /docs; server/serve.mjs allows /help, /docs and /setup.
 COPY --chown=node:node setup ./setup
 COPY --chown=node:node ai-intern/models.json ai-intern/cursor-prices.json ai-intern/cloud-models.json ./ai-intern/
 COPY --chown=node:node docker/docker-entrypoint.sh ./docker-entrypoint.sh

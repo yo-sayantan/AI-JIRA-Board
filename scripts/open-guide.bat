@@ -2,7 +2,7 @@
 REM ===========================================================================
 REM  Open the Setup ^& Deployment guide  (Windows)
 REM ===========================================================================
-REM  Opens docs\index.html in your default browser. Needs NOTHING running - no
+REM  Opens help\00-start-here.html in your default browser. Needs NOTHING running - no
 REM  Docker, no Node, no server. This is the page to reach for when the board
 REM  itself won't start.
 REM
@@ -13,13 +13,13 @@ setlocal EnableDelayedExpansion
 REM %~dp0 = the folder this script lives in (with trailing backslash).
 REM Delayed expansion (!GUIDE!) keeps a path containing ) or & from breaking the
 REM parenthesised block below.
-set "GUIDE=%~dp0..\docs\index.html"
+set "GUIDE=%~dp0..\help\00-start-here.html"
 
 if not exist "!GUIDE!" (
   echo.
   echo   [X] Guide not found at:
   echo       !GUIDE!
-  echo   Run this from inside the repo ^(it expects .\docs\index.html^).
+  echo   Run this from inside the repo ^(it expects .\help\00-start-here.html^).
   echo.
   pause
   exit /b 1

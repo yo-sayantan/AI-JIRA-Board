@@ -1081,7 +1081,7 @@ function CloudModelPicker({
         {/* A pricey model has no effort choice; keep its width so the model dropdown does not jump. */}
         {selected && effortChoices.length === 0 && <span aria-hidden className="w-[5.75rem] shrink-0" />}
         <a
-          href={guideUrl('ai-cloud-prices')}
+          href={guideUrl('cloudPrices')}
           target="_blank"
           rel="noopener noreferrer"
           aria-label="Cloud model prices and notes — opens the guide"
@@ -1294,7 +1294,7 @@ function LocalModelPicker({
           </button>
         )}
         <a
-          href={guideUrl('ai-model-files')}
+          href={guideUrl('modelFiles')}
           target="_blank"
           rel="noopener noreferrer"
           aria-label="GGUF models — download a model file, place it and register it (opens the guide)"

@@ -1,0 +1,210 @@
+<!doctype html>
+<!-- Jira Board Help — Troubleshooting and FAQ. Plain HTML: open this file straight from disk, no server needed. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
+    <title>Jira Board Help — Troubleshooting and FAQ</title>
+    <link rel="stylesheet" href="help.css" />
+  </head>
+  <body>
+    <nav class="top" aria-label="Help pages">
+      <div class="inner">
+        <span class="brand"><a href="00-start-here.html">🎫 Jira Board Help</a></span>
+        <a class="nl" href="00-start-here.html">Start</a>
+        <a class="nl" href="01-requirements.html"><span class="n">1</span>Requirements</a>
+        <a class="nl" href="02-install-the-tools.html"><span class="n">2</span>Install</a>
+        <a class="nl" href="03-get-the-code-with-git.html"><span class="n">3</span>Git</a>
+        <a class="nl" href="04-configure-token-and-settings.html"><span class="n">4</span>Configure</a>
+        <a class="nl" href="05-deploy-with-docker.html"><span class="n">5</span>Deploy</a>
+        <a class="nl" href="06-ai-local-models.html"><span class="n">6</span>Local AI</a>
+        <a class="nl" href="07-ai-cloud-models-and-prices.html"><span class="n">7</span>Cloud AI</a>
+        <a class="nl" href="08-other-ways-to-run.html"><span class="n">8</span>Other ways</a>
+        <a class="nl" href="09-troubleshooting-and-faq.html" aria-current="page"><span class="n">9</span>Troubleshooting</a>
+        <a class="nl" href="10-developer-documentation.html">Docs</a>
+      </div>
+    </nav>
+
+    <header class="hero page">
+      <div class="logo">🩺</div>
+      <span class="step-of">Step 9 of 9 · when something goes wrong</span><h1>Troubleshooting and FAQ</h1>
+      <p class="sub">Symptoms and fixes, and every real problem met while building and running the board.</p>
+    </header>
+
+    <div class="layout">
+      <aside class="toc" aria-label="On this page">
+        <p class="toc-h">On this page</p>
+        <a href="#trouble">Symptoms and fixes</a>
+        <a href="#faq">FAQ — real problems, real fixes</a>
+        <p class="toc-h">Guide pages</p>
+        <a href="00-start-here.html">00 · Start here</a>
+        <a href="01-requirements.html">01 · Requirements — what to install</a>
+        <a href="02-install-the-tools.html">02 · Install the tools</a>
+        <a href="03-get-the-code-with-git.html">03 · Get the code with Git</a>
+        <a href="04-configure-token-and-settings.html">04 · Configure your token and settings</a>
+        <a href="05-deploy-with-docker.html">05 · Deploy with Docker</a>
+        <a href="06-ai-local-models.html">06 · AI with local models</a>
+        <a href="07-ai-cloud-models-and-prices.html">07 · AI with cloud models and prices</a>
+        <a href="08-other-ways-to-run.html">08 · Other ways to run</a>
+        <a href="09-troubleshooting-and-faq.html" aria-current="page">09 · Troubleshooting and FAQ</a>
+        <a href="10-developer-documentation.html">10 · Developer documentation</a>
+        <a href="legal-privacy-and-accessibility.html">Policies &amp; privacy</a>
+      </aside>
+
+      <main class="content">
+<h2 id="trouble">Symptoms and fixes</h2>
+      <div class="card">
+        <table>
+          <tr><th>Symptom</th><th>Fix</th></tr>
+          <tr><td>Board loads but is empty</td><td>No data yet. Wait for the boot fetch, check <code class="inl">docker compose logs -f</code>, or run the fetch by hand.</td></tr>
+          <tr><td>"no JIRA_PERSONAL_TOKEN found — skipping fetch"</td><td>Your secrets file isn't mounted or readable. Confirm <code class="inl">~/.cursor/mcp-secrets.env</code> exists and contains the token.</td></tr>
+          <tr><td><code class="inl">docker: cannot connect to the Docker daemon</code></td><td>Docker Desktop isn't running. Launch it and wait for "Engine running".</td></tr>
+          <tr><td>Port 4321 already in use</td><td><code class="inl">bash scripts/start-jira-board.sh</code> frees it; or <code class="inl">docker compose down</code>, or another port: <code class="inl">PORT=8080 bash scripts/start-jira-board.sh</code>.</td></tr>
+          <tr><td><code class="inl">Name or service not known</code> for your Jira host</td><td>Docker DNS, common on VPN. Uncomment the <code class="inl">dns:</code> block in <code class="inl">docker-compose.yml</code> and recreate.</td></tr>
+          <tr><td>Container exits immediately</td><td><code class="inl">docker logs JIRA-Board</code> — usually a bad token or an unreachable host.</td></tr>
+          <tr><td>Changed <code class="inl">src/</code> but the UI looks old</td><td>Redeploy: <code class="inl">bash scripts/start-jira-board.sh</code>.</td></tr>
+          <tr><td>Permission denied running <code class="inl">docker</code> on Linux</td><td><code class="inl">sudo usermod -aG docker "$USER"</code>, then log out and back in.</td></tr>
+          <tr><td><code class="inl">./scripts/start-jira-board.sh: Permission denied</code></td><td><code class="inl">chmod +x scripts/start-jira-board.sh</code></td></tr>
+          <tr><td>The guide's model or price tables say "Loading…"</td><td>JavaScript is off in this browser. The lists themselves are <code class="inl">ai-intern/models.json</code>, <code class="inl">ai-intern/cloud-models.json</code> and <code class="inl">ai-intern/cursor-prices.json</code> — open them in any text editor.</td></tr>
+        </table>
+      </div>
+<h2 id="faq">FAQ — real problems, real fixes</h2>
+      <p class="small" style="margin: -4px 0 12px">Every one of these actually happened while building and running
+        this board — so a new user will likely meet some of them too. Click a question to open it.</p>
+
+      <details class="faq">
+        <summary id="faq-typescript-binary"><span class="qi">+</span> Docker build dies at <code class="inl">RUN npm run build</code> — “Unable to resolve @typescript/typescript-linux-arm64” <span class="ftag docker">docker</span></summary>
+        <div class="a">
+          <p>TypeScript 7 ships its native compiler as per-platform <b>optional</b> npm packages. When
+            <code class="inl">npm ci</code> runs <i>inside</i> the image over a slow/flaky Docker-VM network, npm
+            silently skips optional packages — then <code class="inl">tsc</code> can’t find its Linux binary.</p>
+          <p><b>Fix:</b> deploy with <code class="inl">./scripts/start-jira-board.sh</code> — it builds
+            <code class="inl">dist/</code> on your machine first and tells Docker to just package it
+            (<code class="inl">DIST_SOURCE=prebuilt</code>). Building by hand:</p>
+          <pre><button class="copy">Copy</button>npm run build
+docker compose build --build-arg DIST_SOURCE=prebuilt</pre>
+          <p class="small">BuildKit collapses the real error — rerun with
+            <code class="inl">docker build --progress=plain .</code> to actually see it.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> The deploy “hangs” for 10+ minutes with no output <span class="ftag docker">docker</span></summary>
+        <div class="a">
+          <p>Docker Hub pulls can crawl from the Docker VM (~80&nbsp;KB/s seen here), and
+            <code class="inl">--pull</code> re-fetches the base image on every build. The start script
+            deliberately does <b>not</b> use <code class="inl">--pull</code> — keep it that way, keep the
+            <code class="inl">node</code> base image cached, and never Ctrl-C mid-pull (the download is discarded).</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> I redeployed and the board came up <b>empty</b> <span class="ftag data">data</span></summary>
+        <div class="a">
+          <p>Compose bind-mounts <code class="inl">./jira-intern</code> <b>from the folder you deploy from</b> —
+            your ticket data lives wherever you last deployed. Deploying from a fresh clone/folder points the
+            container at an empty directory.</p>
+          <p><b>Fix:</b> find the old data and copy it over before deploying from the new folder:</p>
+          <pre><button class="copy">Copy</button>docker inspect JIRA-Board --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}'
+<span class="cmt"># then copy data.json, data.js, .state.json, cache/, reports/ from that
+# jira-intern/ into the new folder's jira-intern/ and redeploy</span></pre>
+          <p class="small">Or simply press <b>Refresh board</b> and rebuild the Completed archive — everything is
+            re-fetchable from Jira, it just takes longer.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> <code class="inl">npm ci</code> fails: “Your cache folder contains root-owned files” <span class="ftag docker">docker</span></summary>
+        <div class="a">
+          <p>An old npm bug left root-owned files in <code class="inl">~/.npm</code>. Either fix the ownership
+            (the command npm prints) or sidestep with a throwaway cache:</p>
+          <pre><button class="copy">Copy</button>npm ci --cache "$TMPDIR/npm-cache"</pre>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> The <b>Raised</b> chip is missing (or shows nothing) <span class="ftag board">board</span></summary>
+        <div class="a">
+          <p>The raised-by-me list is fetched by the board refresh — a brand-new deployment has none yet.
+            Click <b>Refresh board</b> once (or the <b>Hard refresh</b> button inside the Raised view). The chip
+            hides itself while the list is empty, and the whole feature can be toggled in
+            Settings&nbsp;→&nbsp;<b>Raised by me</b>.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> AI briefs aren’t appearing on tickets <span class="ftag board">board</span></summary>
+        <div class="a">
+          <p>Three usual causes, in order: Settings → <b>AI usage</b> is set to <b>None</b> (deterministic mode —
+            no briefs by design); the <code class="inl">AI-Intern</code> container is down (Settings shows its
+            health); or it simply hasn’t gotten there yet — the summarize pass writes up to <b>8 briefs per
+            run</b>, so a full board fills in over a few scheduled passes. Raised tickets queue after active ones.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> “Jira MCP unavailable — showing last known state” / fetch keeps failing <span class="ftag net">network</span></summary>
+        <div class="a">
+          <p>Either the VPN is down (on-prem Jira is only reachable on it) or the token expired (Jira returns
+            401). Check the token file and test it directly:</p>
+          <pre><button class="copy">Copy</button>curl -sk -H "Authorization: Bearer $JIRA_PERSONAL_TOKEN" \
+  "$JIRA_URL/rest/api/2/myself" | head -c 200</pre>
+          <p class="small">A JSON blob with your name = token fine, look at the VPN. HTML or 401 = make a new
+            Personal Access Token and update <code class="inl">~/.cursor/mcp-secrets.env</code>.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> “Skipped — another refresh/archive was already running” <span class="ftag data">data</span></summary>
+        <div class="a">
+          <p>Only one job may write <code class="inl">data.json</code> at a time (lock files keep the daily
+            fetch, the archive rebuild, per-ticket refreshes and the raised refresh apart). Wait for the running
+            job — the header button shows its live progress. A stale lock from a killed run clears itself once
+            its owner process is gone.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> A ticket’s PR badge looks stale (merged PR still shows open) <span class="ftag data">data</span></summary>
+        <div class="a">
+          <p>Review activity happens in Bitbucket and never bumps the Jira ticket’s “updated” time, so the fast
+            path can carry an old badge. Use the <b>per-ticket refresh</b> button on the card (or in its drawer).
+            If Bitbucket itself is unreachable, PR data is deliberately carried forward rather than wiped — the
+            run note in the footer says so.</p>
+        </div>
+      </details>
+
+      <details class="faq">
+        <summary><span class="qi">+</span> Port 4321 is already in use <span class="ftag net">network</span></summary>
+        <div class="a">
+          <p><code class="inl">./scripts/start-jira-board.sh</code> reclaims the port automatically (it stops whatever
+            holds it, including stale containers from older compose projects). Manual alternatives:</p>
+          <pre><button class="copy">Copy</button>docker compose down
+PORT=8080 bash scripts/start-jira-board.sh   <span class="cmt"># or run on another port</span></pre>
+        </div>
+      </details>
+
+      
+      <nav class="pager" aria-label="Previous and next page">
+        <a class="prev" href="08-other-ways-to-run.html"><small>← Previous · 08</small><b>Other ways to run</b></a>
+        <a class="next" href="10-developer-documentation.html"><small>Next · 10 →</small><b>Developer documentation</b></a>
+      </nav>
+      <footer>
+        <div class="flinks">
+          <a href="legal-privacy-and-accessibility.html#privacy">Privacy Policy</a>
+          <a href="legal-privacy-and-accessibility.html#terms">Terms &amp; Conditions</a>
+          <a href="legal-privacy-and-accessibility.html#cookies">Cookie Policy</a>
+          <a href="legal-privacy-and-accessibility.html#data">Your data</a>
+          <a href="legal-privacy-and-accessibility.html#embeds">Third-party embeds</a>
+          <a href="legal-privacy-and-accessibility.html#a11y">Accessibility</a>
+          <a href="legal-privacy-and-accessibility.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking · works offline</div>
+      </footer>
+      </main>
+    </div>
+
+    <script src="help.js"></script>
+  </body>
+</html>

@@ -38,7 +38,8 @@ params unless marked `body:`.
 | Route | Notes |
 |---|---|
 | `GET /` | 302 → `/dist/index.html` |
-| `GET /dist/*` · `/docs/*` · `/setup/*` | file; ETag / 304, gzip, `Cache-Control: no-cache` |
+| `GET /dist/*` · `/help/*` · `/docs/*` · `/setup/*` | file; ETag / 304, gzip, `Cache-Control: no-cache` |
+| `GET /help` · `/help/` | 302 → `/help/00-start-here.html` (the help guide) |
 | `GET /ai-intern/models.json` | file (the local model catalogue) |
 | `GET /jira-intern/data.json` · `/jira-intern/data.js` | file, `Cache-Control: no-store` — Jira data never hits the disk cache |
 | `GET /jira-intern/reports/index.js` | file, `Cache-Control: no-store` |

@@ -22,7 +22,7 @@ React 19 · Vite 6 · Tailwind v4 · Motion · a Python fetch pipeline · one se
 > |---|---|
 > | **macOS / Linux** | `./scripts/open-guide.sh` |
 > | **Windows** | double-click `scripts/open-guide.bat` |
-> | **Any OS** | open [`index.html`](index.html) directly |
+> | **Any OS** | open [`help/00-start-here.html`](../help/00-start-here.html) directly — every page in `help/` is a plain file |
 > | **Board running?** | click the **?** button in the header |
 >
 > It needs nothing installed — it's the page to reach for when the board *won't* start.
@@ -71,10 +71,13 @@ AI-JIRA-Board/
 ├── README.md                ← short landing page — ALL documentation lives in docs/
 ├── LICENSE                  ← MIT
 ├── .github/                 ← CI (typecheck + build), Dependabot, issue & PR templates
-├── docs/                    ← 📚 documentation
-│   ├── index.html           ←   Setup & Deployment guide (per-OS install, git/Docker commands)
-│   ├── doc.html             ←   styled in-browser viewer for all the .md files below
-│   ├── legal.html           ←   privacy, data, cookies, terms, accessibility, contact
+├── help/                    ← 🆘 the help guide — plain HTML, opens straight from disk (no server)
+│   ├── 00-start-here.html   ←   start page: what this is, the journey, every page
+│   ├── 01-requirements.html … 10-developer-documentation.html  ← numbered in the order you need them
+│   ├── developer-doc-viewer.html            ← reads any docs/*.md, offline too
+│   ├── legal-privacy-and-accessibility.html ← privacy, data, cookies, terms, accessibility, contact
+│   └── help.css · help.js · help-data.js    ← the one stylesheet, the one script, the bundled data (generated)
+├── docs/                    ← 📚 developer documentation (markdown)
 │   ├── AGENTS.md            ←   onboarding for engineers & AI agents: map, rules, gotchas
 │   ├── FEATURES.md          ←   every feature + where its code lives
 │   ├── DATA-FLOW.md         ←   every file, writer, lock and lifecycle

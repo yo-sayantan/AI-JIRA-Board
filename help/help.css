@@ -1,0 +1,334 @@
+/*
+ * The one stylesheet for every page in help/. Plain CSS, no build step, no web fonts, no CDN — the
+ * pages are meant to be opened straight from disk (double-click) when nothing is deployed yet.
+ *
+ * Sections: tokens · page shell · top nav · hero · type · cards & steps · code · notes · tables ·
+ * grids & doc cards · OS tabs · stepper · diagram · FAQ · page list & pager · footer · developer-doc
+ * viewer · policies page · motion.
+ */
+
+/* ── tokens ─────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light dark;
+  --bg: #eef1f7; --bg2: #e6eaf3; --card: #ffffff; --ink: #131722; --soft: #43506a; --muted: #74809a;
+  --line: rgba(20, 28, 48, 0.12); --line2: rgba(20, 28, 48, 0.07);
+  --brand: #6d5bd0; --brand2: #3b82f6; --accent: #ec4899;
+  --code-bg: #0f1524; --code-ink: #e6ebf5; --code-cmt: #8b9bc0;
+  --ok: #16a34a; --warn: #b45309; --danger: #dc2626;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11141a; --bg2: #161a21; --card: #1b1f27; --ink: #f3f6fb; --soft: #d4dbe8; --muted: #9da7b8;
+    --line: rgba(255, 255, 255, 0.14); --line2: rgba(255, 255, 255, 0.07);
+    --code-bg: #0b0f1a; --ok: #4ade80; --warn: #fbbf24; --danger: #f87171;
+  }
+}
+
+/* ── page shell ─────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+/* --nav-h is the sticky nav's measured height (set by help.js, which also lands every in-page link
+   exactly); headings land 16px below it. */
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h, 50px) + 16px); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); line-height: 1.65;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+/* Full-bleed: a sticky sidebar column on wide screens, the content takes the rest. Below 1080px the
+   sidebar hides and the content takes the full width. */
+.layout { margin: 0; padding: 0 32px 110px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 40px; align-items: start; }
+main.content { min-width: 0; }
+aside.toc { display: none; }
+@media (min-width: 1080px) {
+  .layout { grid-template-columns: 240px minmax(0, 1fr); }
+  aside.toc {
+    display: block; position: sticky; top: calc(var(--nav-h, 50px) + 22px); align-self: start;
+    max-height: calc(100vh - var(--nav-h, 50px) - 42px); overflow-y: auto; padding: 22px 0 24px;
+  }
+}
+.toc .toc-h { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 0 0 8px 13px; }
+.toc .toc-h + .toc-h, .toc a + .toc-h, .toc div + .toc-h { margin-top: 22px; }
+.toc a {
+  display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); text-decoration: none;
+  padding: 5px 12px; border-left: 2px solid var(--line2); transition: color 0.15s, border-color 0.15s;
+}
+.toc a.h3 { padding-left: 24px; font-weight: 500; font-size: 12px; }
+.toc a:hover { color: var(--ink); border-left-color: var(--line); }
+.toc a.on { color: var(--brand2); border-left-color: var(--brand2); background: color-mix(in srgb, var(--brand2) 7%, transparent); }
+.toc a[aria-current="page"] { color: var(--ink); border-left-color: var(--brand); }
+
+/* ── top nav (the same on every page; the current page is marked) ──── */
+nav.top {
+  position: sticky; top: 0; z-index: 50; backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  border-bottom: 1px solid var(--line); padding: 10px 20px;
+}
+nav.top .inner { margin: 0 auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+nav.top .brand { font-weight: 800; font-size: 14px; margin-right: 6px; letter-spacing: -0.01em; white-space: nowrap; }
+nav.top .brand a { color: inherit; text-decoration: none; }
+nav.top a.nl {
+  font-size: 12.5px; font-weight: 600; color: var(--soft); text-decoration: none; white-space: nowrap;
+  padding: 5px 10px; border-radius: 999px; border: 1px solid transparent;
+}
+nav.top a.nl:hover { border-color: var(--line); background: var(--card); color: var(--ink); }
+nav.top a.nl[aria-current="page"] { background: var(--ink); color: var(--bg); border-color: transparent; }
+nav.top a.nl .n { font-variant-numeric: tabular-nums; opacity: 0.6; margin-right: 4px; }
+
+/* ── hero ───────────────────────────────────────────────────────────── */
+header.hero {
+  text-align: center; padding: 58px 20px 34px;
+  background: radial-gradient(1100px 380px at 50% -130px, rgba(109, 91, 208, 0.3), transparent 70%);
+}
+header.hero.page { padding: 40px 20px 22px; }
+.logo {
+  width: 60px; height: 60px; border-radius: 16px; display: inline-grid; place-items: center;
+  background: linear-gradient(135deg, var(--brand), var(--brand2)); font-size: 29px; color: #fff; font-weight: 800;
+  box-shadow: 0 12px 30px -10px rgba(109, 91, 208, 0.6); margin-bottom: 16px;
+}
+header.hero.page .logo { width: 48px; height: 48px; font-size: 22px; border-radius: 14px; margin-bottom: 12px; }
+.step-of { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); margin-bottom: 6px; }
+h1 { font-size: 33px; margin: 0 0 8px; letter-spacing: -0.025em; }
+header.hero.page h1 { font-size: 28px; }
+.sub { color: var(--muted); font-size: 15.5px; max-width: 900px; margin: 0 auto; }
+.hero-pill, .stamp {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--soft);
+  border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 72%, transparent);
+  border-radius: 999px; padding: 5px 13px; margin-top: 14px; backdrop-filter: blur(6px);
+}
+.hero-pill .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--ok); }
+
+/* ── type ───────────────────────────────────────────────────────────── */
+h2 {
+  font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);
+  margin: 50px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line2);
+}
+main.content > h2:first-child, main.content > .note:first-child + h2 { margin-top: 26px; }
+h3 { font-size: 16.5px; margin: 0; }
+.card h3 + h3, .card p + h3, .card ul + h3, .card table + h3 { margin-top: 18px; }
+p { margin: 8px 0; color: var(--soft); }
+p.small, .small { font-size: 13.5px; color: var(--muted); }
+ul, ol { color: var(--soft); padding-left: 20px; margin: 8px 0; }
+li { margin: 4px 0; }
+a { color: var(--brand2); }
+b { color: var(--ink); }
+.ok { color: var(--ok); font-weight: 700; }
+a.dl { font-weight: 700; white-space: nowrap; }
+code.inl {
+  background: var(--line2); padding: 1.5px 6px; border-radius: 6px; font-size: 0.88em;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+kbd {
+  background: var(--card); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px;
+  padding: 1px 6px; font-size: 11.5px; font-family: ui-monospace, Menlo, monospace; color: var(--soft);
+}
+
+/* ── cards & steps ──────────────────────────────────────────────────── */
+.card, .step {
+  background: var(--card); border: 1px solid var(--line); border-radius: 15px;
+  padding: 18px 20px; margin: 12px 0;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 32px -24px rgba(16, 24, 40, 0.4);
+}
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+.step-h { display: flex; align-items: center; gap: 11px; margin-bottom: 4px; }
+.num {
+  flex: none; width: 29px; height: 29px; border-radius: 9px; display: grid; place-items: center;
+  font-weight: 800; font-size: 13.5px; color: #fff; background: linear-gradient(135deg, var(--brand), var(--brand2));
+}
+.tool { display: flex; gap: 12px; align-items: flex-start; }
+.tool .ic { font-size: 22px; line-height: 1.2; }
+.req { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+.req.must { color: #fff; background: var(--danger); }
+.req.opt { color: var(--muted); border: 1px solid var(--line); }
+
+/* ── code ───────────────────────────────────────────────────────────── */
+pre {
+  position: relative; background: var(--code-bg); color: var(--code-ink); border-radius: 11px;
+  padding: 14px 54px 14px 16px; overflow-x: auto; font-size: 12.8px; line-height: 1.6;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; margin: 10px 0 4px;
+}
+pre .cmt { color: var(--code-cmt); }
+.copy {
+  position: absolute; top: 8px; right: 8px; font: inherit; font-size: 10.5px; font-weight: 700;
+  color: var(--code-ink); background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px; padding: 3px 9px; cursor: pointer;
+}
+.copy:hover { background: rgba(255, 255, 255, 0.22); }
+/* Copy buttons need JavaScript; without it the code is still selectable, the button just isn't shown. */
+body:not(.js-on) .copy { display: none; }
+
+/* ── notes ──────────────────────────────────────────────────────────── */
+.note {
+  border-left: 3px solid var(--brand2); background: color-mix(in srgb, var(--brand2) 8%, transparent);
+  border-radius: 0 10px 10px 0; padding: 11px 15px; margin: 12px 0; font-size: 14px; color: var(--soft);
+}
+.note.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 11%, transparent); }
+.note.ok { border-left-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.note.pink { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+
+/* ── tables ─────────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 10px 0; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+td { color: var(--soft); }
+.costly { color: var(--danger); font-weight: 700; }
+.data-src { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* ── grids & doc cards ──────────────────────────────────────────────── */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+@media (max-width: 700px) { .grid, .grid3 { grid-template-columns: 1fr; } h1 { font-size: 27px; } .layout { padding: 0 16px 90px; } }
+.doc { display: block; text-decoration: none; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 13px; padding: 15px 17px; }
+.doc:hover { border-color: var(--brand); }
+.doc b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+.doc span { font-size: 13px; color: var(--muted); }
+.doc .file { display: block; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+
+/* ── OS tabs ────────────────────────────────────────────────────────── */
+.tabs { display: flex; gap: 6px; margin: 6px 0 12px; flex-wrap: wrap; }
+.tabs button {
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 7px 15px;
+  border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--soft);
+}
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: transparent; }
+/* Without JavaScript the tabs hide and every OS pane shows, each with its own label. */
+body:not(.js-on) .tabs { display: none; }
+.os-pane > h3 { margin-bottom: 6px; }
+.js-on .os-pane[hidden] { display: none; }
+.os-pane .os-label { display: none; }
+body:not(.js-on) .os-pane .os-label { display: block; font-weight: 800; margin-bottom: 6px; }
+
+/* ── stepper (the whole journey; every pill opens its page) ─────────── */
+.stepper { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 14px 0 4px; }
+.stepper a {
+  display: block; text-decoration: none; color: inherit; background: var(--card);
+  border: 1px solid var(--line); border-radius: 13px; padding: 13px 14px 11px;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.stepper a:hover { transform: translateY(-2px); border-color: var(--brand); box-shadow: 0 16px 32px -22px rgba(109, 91, 208, 0.7); }
+.stepper .qn {
+  display: inline-grid; place-items: center; width: 24px; height: 24px;
+  border-radius: 8px; font-weight: 800; font-size: 12px; color: #fff;
+  background: linear-gradient(135deg, var(--brand), var(--brand2)); margin-bottom: 7px;
+}
+.stepper b { display: block; font-size: 13px; letter-spacing: -0.01em; }
+.stepper span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+@media (max-width: 900px) { .stepper { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── the how-it-fits diagram (inline SVG, themed via CSS vars) ──────── */
+.flow { width: 100%; height: auto; display: block; margin: 8px 0 0; }
+.flow .bx { fill: var(--bg2); stroke: var(--line); }
+.flow .bx.hot { fill: color-mix(in srgb, var(--brand) 10%, var(--bg2)); stroke: color-mix(in srgb, var(--brand) 45%, var(--line)); }
+.flow .t1 { fill: var(--ink); font-size: 14.5px; font-weight: 700; }
+.flow .t2 { fill: var(--muted); font-size: 11px; }
+.flow .lbl { fill: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; }
+.flow .ar { stroke: var(--muted); stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+.flow .ar.dash { stroke-dasharray: 3 4; stroke: var(--warn); marker-end: url(#arrw); }
+
+/* ── FAQ accordions ─────────────────────────────────────────────────── */
+details.faq { border: 1px solid var(--line); border-radius: 13px; background: var(--card); margin: 10px 0; overflow: hidden; transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+details.faq:hover { box-shadow: 0 12px 30px -24px rgba(16, 24, 40, 0.5); }
+details.faq[open] { border-color: color-mix(in srgb, var(--brand2) 40%, var(--line)); }
+details.faq summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 11px; padding: 13px 16px; font-weight: 700; font-size: 14px; color: var(--ink); }
+details.faq summary::-webkit-details-marker { display: none; }
+details.faq summary .qi {
+  flex: none; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center;
+  font-size: 14px; font-weight: 800; color: var(--brand2);
+  background: color-mix(in srgb, var(--brand2) 12%, transparent); transition: transform 0.2s ease;
+}
+details.faq[open] summary .qi { transform: rotate(45deg); }
+details.faq .a { padding: 0 16px 14px 51px; color: var(--soft); font-size: 13.8px; }
+details.faq .a > :first-child { margin-top: 0; }
+details.faq .a pre { font-size: 12px; }
+@media (prefers-reduced-motion: no-preference) {
+  details.faq[open] .a { animation: faq-in 0.22s ease; }
+}
+@keyframes faq-in { from { opacity: 0; transform: translateY(-4px); } }
+.ftag { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-left: auto; flex: none; }
+.ftag.docker { color: var(--brand2); background: color-mix(in srgb, var(--brand2) 12%, transparent); }
+.ftag.data { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+.ftag.board { color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.ftag.net { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+
+/* ── page list (start page) & pager (every numbered page) ──────────── */
+ol.pages { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 8px; }
+ol.pages a {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 2px 12px; align-items: center; text-decoration: none; color: inherit;
+  background: var(--card); border: 1px solid var(--line); border-radius: 13px; padding: 11px 15px;
+}
+ol.pages a:hover { border-color: var(--brand); }
+ol.pages .pn {
+  grid-row: span 2; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+  font-weight: 800; font-size: 12.5px; color: #fff; background: linear-gradient(135deg, var(--brand), var(--brand2));
+}
+ol.pages b { font-size: 14.5px; }
+ol.pages span.d { font-size: 13px; color: var(--muted); }
+ol.pages code { font-size: 11.5px; color: var(--muted); }
+nav.pager { display: flex; justify-content: space-between; gap: 12px; margin: 46px 0 0; flex-wrap: wrap; }
+nav.pager a {
+  flex: 1 1 260px; text-decoration: none; color: inherit; background: var(--card); border: 1px solid var(--line);
+  border-radius: 13px; padding: 13px 16px;
+}
+nav.pager a:hover { border-color: var(--brand); }
+nav.pager a.next { text-align: right; }
+nav.pager small { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+nav.pager b { font-size: 14.5px; }
+
+/* ── footer (quiet policy links first, tagline under them) ──────────── */
+footer { margin-top: 54px; border-top: 1px solid var(--line2); padding-top: 22px; text-align: center; }
+footer .flinks { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-bottom: 10px; }
+footer .flinks a { font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: none; transition: color 0.15s ease; }
+footer .flinks a:hover { color: var(--ink); }
+footer .tag { color: var(--muted); font-size: 13px; }
+
+/* ── developer-doc viewer (renders docs/*.md) ───────────────────────── */
+.doc-switch { display: flex; flex-wrap: wrap; gap: 6px; margin: 20px 0 14px; }
+.doc-switch a {
+  font-size: 12px; font-weight: 600; color: var(--soft); text-decoration: none; white-space: nowrap;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card);
+}
+.doc-switch a:hover { color: var(--ink); border-color: var(--muted); }
+.doc-switch a.on { background: var(--ink); color: var(--bg); border-color: transparent; }
+.doc-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  padding: 30px 38px 36px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 16px 40px -28px rgba(16, 24, 40, 0.45);
+}
+@media (max-width: 700px) { .doc-card { padding: 20px 18px 26px; } }
+.md { line-height: 1.68; }
+.md h1 { font-size: 27px; letter-spacing: -0.02em; margin: 0 0 14px; line-height: 1.25; }
+.md h2 { font-size: 20px; letter-spacing: -0.01em; text-transform: none; color: var(--ink); margin: 34px 0 10px; padding-bottom: 7px; border-bottom: 1px solid var(--line2); }
+.md h3 { font-size: 16px; margin: 24px 0 6px; }
+.md h4 { font-size: 14px; margin: 18px 0 4px; }
+.md p { margin: 9px 0; }
+.md ul, .md ol { padding-left: 22px; margin: 9px 0; }
+.md li { margin: 4.5px 0; }
+.md code { background: var(--line2); padding: 1.5px 6px; border-radius: 6px; font-size: 0.86em; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+.md pre { padding: 15px 17px; font-size: 12.6px; line-height: 1.62; margin: 12px 0; }
+.md pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+.md blockquote {
+  margin: 12px 0; padding: 10px 16px; border-left: 3px solid var(--brand2);
+  background: color-mix(in srgb, var(--brand2) 7%, transparent); border-radius: 0 10px 10px 0;
+}
+.md blockquote p { margin: 4px 0; }
+.md hr { border: 0; border-top: 1px solid var(--line2); margin: 26px 0; }
+.md table { font-size: 13.3px; margin: 12px 0; }
+.md thead th { font-size: 11px; letter-spacing: 0.07em; }
+.md th, .md td { padding: 8px 10px; min-width: 90px; }
+.md tbody tr:hover { background: color-mix(in srgb, var(--brand2) 4%, transparent); }
+.err { text-align: center; padding: 60px 20px; color: var(--muted); }
+
+/* ── policies page ──────────────────────────────────────────────────── */
+.badge { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+.badge.no { color: var(--muted); background: var(--line2); }
+body.policies .card h3 { margin: 18px 0 4px; font-size: 16px; }
+body.policies .card > h3:first-child { margin-top: 0; }
+
+/* ── motion (calm, and off when the OS asks) ────────────────────────── */
+.card, .step, .doc { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
+.card:hover, .step:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 18px 42px -26px rgba(16, 24, 40, 0.5); }
+.doc:hover, ol.pages a:hover, nav.pager a:hover { transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) {
+  .card, .step, .doc, .stepper a, details.faq, details.faq summary .qi { transition: none; }
+  .card:hover, .step:hover, .doc:hover, .stepper a:hover, ol.pages a:hover, nav.pager a:hover { transform: none; }
+}

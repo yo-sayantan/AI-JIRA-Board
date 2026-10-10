@@ -11,6 +11,17 @@ code does now, so a reader can check them against the tree.
   Done. In Review needs a PR (or, for a sub-ticket, an open PR on its parent); Done needs every PR
   merged or declined and a QA ticket raised — no longer a finished one. The old "no PR" warning for
   In Review is now a refusal.
+- **The help guide moved to `help/` and works with nothing deployed.** The single `docs/index.html` became numbered,
+  plainly named pages — `00-start-here.html`, `01-requirements.html`, `02-install-the-tools.html`,
+  `03-get-the-code-with-git.html`, `04-configure-token-and-settings.html`, `05-deploy-with-docker.html`,
+  `06-ai-local-models.html`, `07-ai-cloud-models-and-prices.html`, `08-other-ways-to-run.html`,
+  `09-troubleshooting-and-faq.html`, `10-developer-documentation.html` — plus `developer-doc-viewer.html` and
+  `legal-privacy-and-accessibility.html`, sharing one `help.css` and one `help.js`. The model and price tables and the
+  developer-doc viewer used to need the server (they fetched JSON / markdown); they now read `help/help-data.js`, a
+  copy every build makes (`scripts/build-help-data.mjs`), and still read the live files when served. The board's ?
+  and ⓘ buttons, `/help` on the server, the Docker image and `scripts/open-guide.*` all point at `help/`. Also fixed
+  in the move: the guide's `docker compose build --pull` (never `--pull` here) and `docker build .` (the Dockerfile is
+  in `docker/`).
 - **One file lists the cloud models: `ai-intern/cloud-models.json`.** Models, per-model efforts (Low · Medium · High ·
   **Auto**), prices and a **costly** line (`costlyOutputUsd`, default 10, output at or above it) live there; add or delete
   a row and Settings follows within a minute — no rebuild. It replaces the price-based selection (`maxOutputUsd`,

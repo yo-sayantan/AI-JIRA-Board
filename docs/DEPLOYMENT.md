@@ -122,7 +122,7 @@ Both rewrite `jira-intern/data.json` + `data.js`; reload the board to see the re
 Generated automatically in the background after each fetch (see `config/jira-board.config.json → reports`). By hand:
 
 ```bash
-bash jira-intern/local-runner/pr-report.sh FRAUDBUSTE-290           # one ticket (base + AI enrichment)
+bash jira-intern/local-runner/pr-report.sh PROJ-290           # one ticket (base + AI enrichment)
 bash jira-intern/local-runner/pr-reports-backfill.sh --year 2026    # every 2026 ticket that has a PR
 bash jira-intern/local-runner/pr-reports-backfill.sh --no-ai        # deterministic only — fast, no agent
 bash jira-intern/local-runner/pr-reports-backfill.sh --force        # rebuild even if current

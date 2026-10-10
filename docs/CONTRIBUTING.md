@@ -89,7 +89,7 @@ Update the reference spec `jira-intern/prompts/pr-readiness-prompt.md` so the th
 **Add a local model.** Append an object to `ai-intern/models.json` (see its `howto` field: `id`
 must equal the Ollama tag you will pull or create; `level` low/moderate/full; `fits` container/host;
 `ramGb`; links). The file is bind-mounted into AI-Intern, so `docker compose restart jira-ai` is
-enough; the Settings dropdown and the offline guide read it. For a **cloud** model there is nothing to add in code: the list in Settings IS
+enough; the Settings dropdown and the help guide (`help/06-ai-local-models.html`) read it. For a **cloud** model there is nothing to add in code: the list in Settings IS
 `ai-intern/cloud-models.json`. Add an entry (`provider` cursor | claude | gemini, `name`, `id` — required for claude
 and gemini, optional for cursor, whose id is looked up by name in your key's Cursor catalog — `maker`, `outputUsd`,
 `efforts`) and it appears in Settings; delete the entry and it is gone. The file is bind-mounted into AI-Intern and
@@ -113,7 +113,7 @@ through `runner-env.sh` (`refuse_if_locked` / `acquire_lock_or_exit`) and `dataf
 
 **Change behaviour at all.** Find the sentence in `docs/` that describes the old behaviour and
 change it in the same PR (`DEPLOYMENT.md`, `USAGE.md`, `ARCHITECTURE.md`, `API.md`,
-`RUNTIME-FILES.md`, `SECURITY.md`, the offline guide `docs/index.html`, `jira-intern/CONFIG.md`
+`RUNTIME-FILES.md`, `SECURITY.md`, the help guide in `help/` (the page whose name matches the topic), `jira-intern/CONFIG.md`
 for config keys). Add a line to `docs/CHANGELOG.md`.
 
 ## Style

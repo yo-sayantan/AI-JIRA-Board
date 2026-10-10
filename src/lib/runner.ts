@@ -41,18 +41,24 @@ export function isServed(): boolean {
   return typeof location !== 'undefined' && /^https?:$/.test(location.protocol)
 }
 
+/** The help guide's pages (the `help/` folder) the board links to, by topic. */
+export const GUIDE_PAGES = {
+  start: '00-start-here.html',
+  modelFiles: '06-ai-local-models.html#ai-model-files',
+  cloudPrices: '07-ai-cloud-models-and-prices.html#ai-cloud-prices',
+} as const
+export type GuideTopic = keyof typeof GUIDE_PAGES
+
 /**
- * Where the Setup & Deployment guide lives, from wherever the board was opened.
- *  • served (Docker / `npm run serve`) → `/docs/index.html` off the server root.
- *    The Dockerfile copies `docs/` into the image so this resolves in the container too.
- *  • file:// (double-clicked `dist/index.html`) → the sibling `../docs/index.html`.
+ * Where a help page lives, from wherever the board was opened.
+ *  • served (Docker / `npm run serve`) → `/help/<page>` off the server root.
+ *    The Dockerfile copies `help/` into the image so this resolves in the container too.
+ *  • file:// (double-clicked `dist/index.html`) → the sibling `../help/<page>`.
  * Deliberately a plain relative path so it works with no server at all — the guide is the
- * thing you reach for WHEN the server is broken.
+ * thing you reach for WHEN the server is broken. Every page is plain HTML that opens from disk.
  */
-export function guideUrl(hash?: string): string {
-  const base = isServed() ? '/docs/index.html' : '../docs/index.html'
-  if (!hash) return base
-  return `${base}#${hash.replace(/^#/, '')}`
+export function guideUrl(topic: GuideTopic = 'start'): string {
+  return `${isServed() ? '/help/' : '../help/'}${GUIDE_PAGES[topic]}`
 }
 
 export interface InternProgress {

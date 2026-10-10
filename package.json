@@ -10,7 +10,9 @@
   "scripts": {
     "dev": "vite --config tooling/vite.config.ts",
     "typecheck": "tsc --noEmit -p src",
+    "prebuild": "node scripts/build-help-data.mjs",
     "build": "tsc --noEmit -p src && vite build --config tooling/vite.config.ts",
+    "help:data": "node scripts/build-help-data.mjs",
     "test": "npm run test:py && npm run test:js",
     "test:py": "python3 -m unittest discover -s tests -p 'test_*.py'",
     "test:js": "vitest run --config tooling/vitest.config.ts",
@@ -19,7 +21,8 @@
     "config:validate": "node jira-intern/local-runner/config.mjs validate",
     "preview": "vite preview --config tooling/vite.config.ts",
     "serve": "node server/serve.mjs",
-    "open": "open dist/index.html"
+    "open": "open dist/index.html",
+    "help": "open help/00-start-here.html"
   },
   "dependencies": {
     "motion": "^14.0.0",
