@@ -11,6 +11,13 @@ code does now, so a reader can check them against the tree.
   Done. In Review needs a PR (or, for a sub-ticket, an open PR on its parent); Done needs every PR
   merged or declined and a QA ticket raised — no longer a finished one. The old "no PR" warning for
   In Review is now a refusal.
+- **One file lists the cloud models: `ai-intern/cloud-models.json`.** Models, per-model efforts (Low · Medium · High ·
+  **Auto**), prices and a **costly** line (`costlyOutputUsd`, default 10, output at or above it) live there; add or delete
+  a row and Settings follows within a minute — no rebuild. It replaces the price-based selection (`maxOutputUsd`,
+  `exclude`, `include`, `pin` in `cursor-prices.json`) and the name filters for Claude and Gemini; the Cursor
+  catalog now only resolves each model's id and effort variants. The effort dropdown shows for every provider;
+  a costly model has none (`costlyShowEffort` changes that). Auto = the model's own default.
+- **PR reports can be built up to 10 at once** (Settings → At once; was 6).
 - **Report progress bar covers the AI pass.** The generating list the bar watched empties as soon as the quick base
   reports are built, so a large run read "done" while the AI intern was still working through them. The bar now
   counts a report until its AI pass finishes too (`useReports.working`), and its batch size resets only after a few

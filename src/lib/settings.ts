@@ -15,7 +15,7 @@ export type AiLevel = 'none' | 'low' | 'moderate' | 'full'
 export type AiBackend = 'local' | 'cloud'
 export type AiCloudProvider = 'claude' | 'cursor' | 'gemini'
 /** Cursor reasoning effort. Low is the default; medium is the only step up. */
-export type AiCloudEffort = 'low' | 'medium' | 'high'
+export type AiCloudEffort = 'low' | 'medium' | 'high' | 'auto'
 
 export interface Settings {
   /** auto = follow the OS · fixed = always `theme` · schedule = light between the day hours. */
@@ -65,7 +65,7 @@ export interface Settings {
 
 /** Inclusive bounds for the number boxes. The server clamps to the same ranges. */
 export const LIMITS = {
-  reportParallel: { min: 1, max: 6 },
+  reportParallel: { min: 1, max: 10 },
   archiveParallel: { min: 1, max: 16 },
   refreshParallel: { min: 1, max: 16 },
   toastSeconds: { min: 2, max: 10 },
@@ -252,7 +252,7 @@ const SERVER_FIELDS = {
   aiLocalModel: modelId(MODEL_ID_MAX.aiLocalModel),
   aiCloudModel: modelId(MODEL_ID_MAX.aiCloudModel),
   aiCloudProvider: oneOf<AiCloudProvider>(['claude', 'cursor', 'gemini']),
-  aiCloudEffort: oneOf<AiCloudEffort>(['low', 'medium', 'high']),
+  aiCloudEffort: oneOf<AiCloudEffort>(['low', 'medium', 'high', 'auto']),
   aiUseHostOllama: bool,
   ollamaEnabled: bool,
   reportParallel: bounded('reportParallel'),

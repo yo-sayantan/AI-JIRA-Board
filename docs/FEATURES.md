@@ -190,7 +190,7 @@ Overlay with three areas (`src/components/settings/Settings.tsx`):
   shortcuts, refresh on open, auto-refresh, motion & animations, the AI-Ollama container), generated from
   `src/lib/settings.ts::FEATURES` (entry + colour/icon in `FEATURE_STYLE`; TypeScript enforces both).
 - **AI usage** — level None/Low/Moderate/Max, backend local (Ollama tag dropdown, host-Ollama
-  checkbox, model pulls with live progress) or cloud (provider/model/effort), parallelism knobs,
+  checkbox, model pulls with live progress) or cloud (provider / model / effort — the models, their efforts Low · Medium · High · Auto and the ⚠ costly line all come from `ai-intern/cloud-models.json`), parallelism knobs (PR reports 1–10 at once),
   server cadences. Server-relevant keys mirror to `jira-intern/.settings.json`.
 
 ## Live jobs & notifications

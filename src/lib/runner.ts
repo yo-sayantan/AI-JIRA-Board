@@ -325,7 +325,7 @@ export async function startTicketRefresh(key: string): Promise<TicketRefreshStar
   }
 }
 
-/** USD per 1M tokens, from ai-intern/cursor-prices.json. null = Cursor lists no such charge. */
+/** USD per 1M tokens: the model's outputUsd in ai-intern/cloud-models.json, else ai-intern/cursor-prices.json. null = no such charge listed. */
 export interface CloudPrice {
   input: number | null
   cacheWrite: number | null
@@ -336,36 +336,31 @@ export interface CloudPrice {
 export interface CloudModelChoice {
   id: string
   label: string
-  /** Cursor effort values this model accepts (low / medium / high). Empty for Claude. */
+  /** The efforts the dropdown offers for this model, from cloud-models.json (low / medium / high / auto). Empty = no dropdown. */
   efforts?: string[]
-  /** Cursor models only: who makes it, and what it costs. */
+  /** Who makes it (the dropdown's groups). */
   provider?: string
-  price?: CloudPrice
+  price?: CloudPrice | null
   /** A pricing caveat worth showing (e.g. a surcharge above 100k input tokens). */
   note?: string | null
-  /** Offered although it costs more than the cap (your `include` list). */
-  exception?: boolean
-  /** False for a pinned model your key's Cursor catalog does not list — Cursor may reject it. */
-  inCatalog?: boolean
+  /** Costly: output price at or above the file's `costlyOutputUsd`, or the entry's own `costly`. */
+  costly?: boolean
+  /** Cursor only: false for a model your key's Cursor catalog does not list — Cursor may reject it. */
+  inCatalog?: boolean | null
 }
 
-/** What the worker did with the key's Cursor catalog — why the list is as long as it is. */
-export interface CursorCatalogInfo {
-  total: number
+/** What the worker made of cloud-models.json for one provider. */
+export interface CloudListInfo {
   shown: number
-  overCap: number
-  /** The over-cap models on this key, so a wanted one can be found and priced. */
-  over?: { id: string; name: string; output: number | null }[]
-  /** Models on this key that you chose not to offer (the `exclude` list in cursor-prices.json). */
-  hidden?: number
-  /** Pinned models (your `pin` list) that this key's catalog does not list. */
-  pinned?: string[]
-  exceptions?: number
-  fast: number
-  /** Cursor's automatic pickers (default, auto-*) — no fixed price, never offered. */
-  routed?: number
-  unpriced: { id: string; name: string }[]
-  capUsd: number
+  costly: number
+  /** The `costlyOutputUsd` threshold in use. */
+  costlyUsd: number
+  /** Cursor: listed models your key's catalog does not have. */
+  unresolved: string[]
+  /** Cursor: how many models your key's catalog holds; null when it could not be read (or not Cursor). */
+  catalogTotal: number | null
+  /** Rows of cloud-models.json that were skipped, and why. */
+  problems: string[]
   pricesChecked?: string | null
 }
 
@@ -373,7 +368,7 @@ export interface CloudProviderModels {
   configured: boolean
   models: CloudModelChoice[]
   error?: string | null
-  catalog?: CursorCatalogInfo
+  info?: CloudListInfo
 }
 
 export async function getCloudModels(): Promise<{

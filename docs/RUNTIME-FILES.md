@@ -121,7 +121,7 @@ validated against `^[A-Z][A-Z0-9]+-\d+$` and model tags against
 rename to `*.json.running` (claimed) → deleted (done or failed). A `.running` file older than
 30 min is treated by the board as a crashed claim; the worker renames every `.running` back to
 pending on start. `summarize-active` and `pull-model` run one at a time; enrich jobs run up to
-`reportParallel` wide.
+`reportParallel` wide (1–10).
 
 ## How to debug a failed fetch
 

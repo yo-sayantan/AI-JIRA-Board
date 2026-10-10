@@ -89,18 +89,18 @@ Update the reference spec `jira-intern/prompts/pr-readiness-prompt.md` so the th
 **Add a local model.** Append an object to `ai-intern/models.json` (see its `howto` field: `id`
 must equal the Ollama tag you will pull or create; `level` low/moderate/full; `fits` container/host;
 `ramGb`; links). The file is bind-mounted into AI-Intern, so `docker compose restart jira-ai` is
-enough; the Settings dropdown and the offline guide read it. For a **cloud** model on Cursor there is
-nothing to add in code: a model is offered when it is in the API key's Cursor catalog and priced at
-or under $10 per 1M output tokens in `ai-intern/cursor-prices.json` (the whole
-`cursor.com/docs/models-and-pricing` table). To add or re-price one, edit that file — one row with
-`name`, `provider`, the four rates and `fast`; the worker picks it up on the next catalog fetch, and
-the Settings list, the cache-read tile and the guide's price table all follow. Two name lists shape
-the result: `exclude` hides a model you never want offered, and `include` offers one above the cap
-(an exception). Models priced at $10 or more output get a ⚠ in the dropdown, the tile and the guide. Matching ignores
-punctuation and case (`claude-sonnet-5-5` = `claude-sonnet-5.5` = "Claude Sonnet 5.5"), see
-`ai-intern/cursor_prices.py`. If a model you expect is missing, hover the key strip in Settings: it
-says how many were hidden as over the cap and lists catalog ids with no price on file. Claude and
-Gemini lists are filtered by name (`_cheap_rank`, `_gemini_keep`).
+enough; the Settings dropdown and the offline guide read it. For a **cloud** model there is nothing to add in code: the list in Settings IS
+`ai-intern/cloud-models.json`. Add an entry (`provider` cursor | claude | gemini, `name`, `id` — required for claude
+and gemini, optional for cursor, whose id is looked up by name in your key's Cursor catalog — `maker`, `outputUsd`,
+`efforts`) and it appears in Settings; delete the entry and it is gone. The file is bind-mounted into AI-Intern and
+re-read within a minute: no rebuild, no restart (the guide's price page, served by the board, picks it up on the next
+deploy). `efforts` is any of `low`, `medium`, `high`, `auto` — the effort dropdown offers exactly those. A model is
+**costly** when `outputUsd` is at or above `costlyOutputUsd` (default 10, set at the top of the file) or its own
+`costly` says so; a costly model gets the ⚠ and no effort choice unless `costlyShowEffort` is true. A missing
+`outputUsd` is filled from `ai-intern/cursor-prices.json` (Cursor's published table, also the guide's price page);
+matching ignores punctuation and case (`claude-sonnet-5-5` = `claude-sonnet-5.5` = "Claude Sonnet 5.5"), see
+`ai-intern/cursor_prices.py` and `cloud_config.py`. If a row is wrong it is skipped and named in the key strip's hover
+in Settings; a Cursor model your key's catalog lacks is still listed, marked, and may be rejected by Cursor.
 
 **Add a server route.** Add the handler to `routes` in `server/serve.mjs` (or the prefix branch for
 path parameters), validate inputs with the regexes in `server/config.mjs`, add it to

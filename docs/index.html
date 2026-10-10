@@ -755,12 +755,13 @@ ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
       <div class="card">
         <h3>What a report costs, per model</h3>
         <p class="small">The <b>i</b> button beside the cloud model list in Settings opens this table. Rates are
-          <b>USD per 1 million tokens</b> at standard speed. The board offers a Cursor model when it is in
-          <b>your API key's Cursor catalog</b> and costs <b>$10 or less per 1M output tokens</b> — the whole
-          <a href="https://cursor.com/docs/models-and-pricing">Cursor models &amp; pricing</a> table is on file in
-          <code class="inl">ai-intern/cursor-prices.json</code> (<span id="cursor-checked">checked …</span>), so this table, the
-          Settings list and the worker's filter always agree. Edit that file to update a price; the worker reads it on the next
-          catalog fetch. <b>Effort</b> (Low · Medium · High) is offered per model, wherever Cursor's catalog allows it.</p>
+          <b>USD per 1 million tokens</b> at standard speed. <b>Which models Settings offers</b> — and each one's efforts
+          (Low · Medium · High · Auto) and what counts as <b>costly</b> — is one file,
+          <code class="inl">ai-intern/cloud-models.json</code>: add a model there and it appears in Settings, delete it and it is gone,
+          no code change. The prices below are Cursor's published
+          <a href="https://cursor.com/docs/models-and-pricing">models &amp; pricing</a> table, on file in
+          <code class="inl">ai-intern/cursor-prices.json</code> (<span id="cursor-checked">checked …</span>); it fills in a price that an entry in
+          <code class="inl">cloud-models.json</code> leaves out. Edit either file; the worker re-reads it within a minute.</p>
         <table>
           <thead>
             <tr><th>Model</th><th>Maker</th><th>Input</th><th>Cache write</th><th>Cache read</th><th>Output</th></tr>
@@ -771,12 +772,12 @@ ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
         </table>
         <p class="small"><b>Cache write</b> is what storing a prompt prefix for reuse costs; <b>cache read</b> is what
           reusing it costs instead of full input. <b>—</b> means Cursor lists no cache-write price for that model.
-          A model only appears in <i>Settings</i> if your key's catalog includes it — Cursor's catalog is per account and
-          team — and <i>Fast</i> variants are left out (they cost more). Two lists in that file shape it:
-          <code class="inl">include</code> offers a model above the cap (an exception), and <code class="inl">exclude</code> hides one
-          you do not want offered. <span style="color:#dc2626">⚠</span> (red, at the right) marks a model whose output costs <b>more than</b> $10 per 1M tokens.</p>
+          A Cursor model must also be in <i>your key's</i> catalog to be found by name (Cursor's catalog is per account and
+          team). <span style="color:#dc2626">⚠</span> (red, at the right) marks a <b>costly</b> model: output at or above
+          <code class="inl">costlyOutputUsd</code> per 1M tokens (<span id="costly-line">$10</span> now, set in <code class="inl">cloud-models.json</code>).
+          A costly model offers no effort choice unless <code class="inl">costlyShowEffort</code> is on.</p>
         <details class="faq">
-          <summary>Not offered — over $10, Fast, or hidden (<span id="cursor-over-count">…</span>)</summary>
+          <summary>On Cursor's table but not in cloud-models.json (<span id="cursor-over-count">…</span>)</summary>
           <div class="a">
             <table>
               <thead><tr><th>Model</th><th>Maker</th><th>Input</th><th>Output</th></tr></thead>
@@ -1071,26 +1072,28 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
           }).join('') || '<tr><td colspan="4">No models in catalog.</td></tr>';
         }
       }
-      // Cursor price table → the Cloud prices section. Same source as the worker and Settings.
+      // Cursor price table + cloud-models.json → the Cloud prices section. Same sources as the worker and Settings.
       function usd(n) {
         if (n == null) return '\u2014';
         if (Math.floor(n) === n) return '$' + n;
         return '$' + n.toFixed(3).replace(/0$/, '');
       }
-      function fillPrices(data) {
-        var cap = data.maxOutputUsd == null ? 10 : data.maxOutputUsd;
+      function fillPrices(data, cfg) {
+        // cfg = cloud-models.json: the models Settings offers and the costly line. Without it, show the whole table.
+        var line = cfg && cfg.costlyOutputUsd != null ? cfg.costlyOutputUsd : 10;
+        var listed = null;
+        if (cfg) {
+          listed = {};
+          (cfg.models || []).forEach(function (e) { if (e.name) listed[String(e.name).toLowerCase()] = e; });
+        }
+        var costlyEl = document.getElementById('costly-line');
+        if (costlyEl) costlyEl.textContent = '$' + line;
         var rank = { Cursor: 0, Anthropic: 1, OpenAI: 2, Google: 3, 'Z.ai': 4, Moonshot: 5, Meta: 6 };
         var all = (data.models || []).slice().sort(function (a, b) {
           var ra = rank[a.provider] == null ? 9 : rank[a.provider], rb = rank[b.provider] == null ? 9 : rank[b.provider];
           return ra - rb || (a.output || 0) - (b.output || 0) || a.name.localeCompare(b.name);
         });
-        var hide = (data.exclude || []).map(function (n) { return n.toLowerCase(); });
-        var inc = (data.include || []).map(function (n) { return n.toLowerCase(); });
-        var shown = all.filter(function (m) {
-          var n = m.name.toLowerCase();
-          if (hide.indexOf(n) >= 0) return false;
-          return inc.indexOf(n) >= 0 || (!m.fast && m.output != null && m.output <= cap);
-        });
+        var shown = all.filter(function (m) { return !listed || listed[m.name.toLowerCase()]; });
         var rest = all.filter(function (m) { return shown.indexOf(m) < 0; });
         var dash = '<span title="Cursor lists no cache-write price for this model">\u2014</span>';
         var checked = document.getElementById('cursor-checked');
@@ -1099,44 +1102,49 @@ PORT=8080 docker compose up -d --build   <span class="cmt"># or run on another p
         if (body) {
           body.innerHTML = shown.map(function (m) {
             var note = m.note ? ' <span class="small" title="' + esc(m.note) + '">\u24d8</span>' : '';
-            if (m.output > cap) note += ' <i title="Offered although it costs more than $' + cap + '">(over the cap)</i>';
-       
+            var e = listed && listed[m.name.toLowerCase()];
+            var costly = e && typeof e.costly === 'boolean' ? e.costly : (e && e.outputUsd != null ? e.outputUsd : m.output) >= line;
             return '<tr><td><b>' + esc(m.name) + '</b>' + note + '</td><td>' + esc(m.provider) + '</td><td>' + usd(m.input) +
-              '</td><td>' + (m.cacheWrite == null ? dash : usd(m.cacheWrite)) + '</td><td>' + usd(m.cacheRead) + '</td><td>' + usd(m.output) + (m.output > 10 ? ' <span title="Output costs more than $10 per 1M tokens" style="color:#dc2626;float:right">\u26a0</span>' : '') + '</td></tr>';
-          }).join('') || '<tr><td colspan="6">No models at or under $' + cap + '.</td></tr>';
+              '</td><td>' + (m.cacheWrite == null ? dash : usd(m.cacheWrite)) + '</td><td>' + usd(m.cacheRead) + '</td><td>' + usd(e && e.outputUsd != null ? e.outputUsd : m.output) + (costly ? ' <span title="Costly: output at or above $' + line + ' per 1M tokens" style="color:#dc2626;font-weight:700">\u26a0</span>' : '') + '</td></tr>';
+          }).join('') || '<tr><td colspan="6">No Cursor models in cloud-models.json match this table.</td></tr>';
         }
         var over = document.getElementById('cursor-over-rows');
         var count = document.getElementById('cursor-over-count');
         if (count) count.textContent = rest.length + ' models';
         if (over) {
           over.innerHTML = rest.map(function (m) {
-            return '<tr><td>' + esc(m.name) + (m.fast ? ' <i>(fast)</i>' : '') + (hide.indexOf(m.name.toLowerCase()) >= 0 ? ' <i>(hidden by exclude list)</i>' : '') + '</td><td>' + esc(m.provider) + '</td><td>' + usd(m.input) + '</td><td>' + usd(m.output) + '</td></tr>';
+            return '<tr><td>' + esc(m.name) + (m.fast ? ' <i>(fast)</i>' : '') + '</td><td>' + esc(m.provider) + '</td><td>' + usd(m.input) + '</td><td>' + usd(m.output) + '</td></tr>';
           }).join('');
         }
       }
-      function loadPrices() {
+      function fetchJson(name) {
         var urls = [];
-        try { urls.push(new URL('../ai-intern/cursor-prices.json', location.href).href); } catch (e) { /* ignore */ }
+        try { urls.push(new URL('../ai-intern/' + name, location.href).href); } catch (e) { /* ignore */ }
         try {
-          if (location.origin && location.origin !== 'null') urls.push(location.origin + '/ai-intern/cursor-prices.json');
+          if (location.origin && location.origin !== 'null') urls.push(location.origin + '/ai-intern/' + name);
         } catch (e) { /* ignore */ }
         var i = 0;
-        function next() {
-          if (i >= urls.length) {
-            var body = document.getElementById('cursor-price-rows');
-            if (body) body.innerHTML = '<tr><td colspan="6">Could not load <code class="inl">ai-intern/cursor-prices.json</code>. Open this guide from the board.</td></tr>';
-            if (window.JBAnchors) window.JBAnchors.refresh();
-            return;
+        return new Promise(function (resolve, reject) {
+          function next() {
+            if (i >= urls.length) return reject(new Error('unreachable'));
+            fetch(urls[i++]).then(function (r) {
+              if (!r.ok) throw new Error(String(r.status));
+              return r.json();
+            }).then(resolve).catch(next);
           }
-          fetch(urls[i++]).then(function (r) {
-            if (!r.ok) throw new Error(String(r.status));
-            return r.json();
-          }).then(function (data) {
-            fillPrices(data);
-            if (window.JBAnchors) window.JBAnchors.refresh();
-          }).catch(next);
-        }
-        next();
+          next();
+        });
+      }
+      function loadPrices() {
+        // The config is optional here (an old install, or opened from disk): the whole table still renders.
+        Promise.all([fetchJson('cursor-prices.json'), fetchJson('cloud-models.json').catch(function () { return null; })]).then(function (r) {
+          fillPrices(r[0], r[1]);
+          if (window.JBAnchors) window.JBAnchors.refresh();
+        }).catch(function () {
+          var body = document.getElementById('cursor-price-rows');
+          if (body) body.innerHTML = '<tr><td colspan="6">Could not load <code class="inl">ai-intern/cursor-prices.json</code>. Open this guide from the board.</td></tr>';
+          if (window.JBAnchors) window.JBAnchors.refresh();
+        });
       }
       function loadCatalog() {
         var urls = [];

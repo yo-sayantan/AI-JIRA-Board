@@ -38,7 +38,7 @@ AI agent to make a correct change without re-deriving the architecture.
 | `docker/` | `Dockerfile` (build context is the repo root — `docker-compose.yml` sets `dockerfile: docker/Dockerfile`) and `docker-entrypoint.sh`. `docker-compose.yml` stays at the root on purpose. |
 | `scripts/` | `start-jira-board.sh` (host build + Docker deploy), `open-guide.sh` / `open-guide.bat` (open `docs/index.html`, no server) and `Open Board.html`. |
 | `tooling/` | `vite.config.ts`, `vitest.config.ts` — selected by `--config` in the npm scripts. `src/tsconfig.json` is the TypeScript config; `.claude/CLAUDE.md` is the agent entry point. |
-| `ai-intern/` | The AI worker container: `worker.py` (job queue + HTTP; Ollama local or Claude/Cursor/Gemini cloud), `models.json` (local model catalog). |
+| `ai-intern/` | The AI worker container: `worker.py` (job queue + HTTP; Ollama local or Claude/Cursor/Gemini cloud), `models.json` (local model catalog), `cloud-models.json` (THE cloud model list: models, efforts, costly line) + `cloud_config.py`, `cursor-prices.json` (Cursor's price table — reference data). |
 | `config/` | `jira-board.config.json` — tracked, **generic** project defaults (+ JSON schema). Personal values live OUTSIDE the repo in `~/.ai/config.json`. |
 | `setup/` | Templates ONLY (secrets, personal config, MCP, Desktop launcher) — the guide for them is `docs/SETUP.md`. Shipped into the Docker image. |
 | `docs/` | **All** documentation lives here (see index at the bottom): the suite, `index.html` (served Setup Guide), `doc.html` (styled viewer for the .md files), `legal.html` (policies). The only `.md` files outside are runtime inputs, not docs: `jira-intern/prompts/*.md` (LLM prompts read by scripts) and `.github/pull_request_template.md` (GitHub requires its location). |
@@ -181,6 +181,9 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
   API, the board decides membership with `isNextSprint` (a dated future sprint or READY / REFINEMENT; the
   optimistic `Ticket.queued` flag overrides it between a drop and the refresh), and `moveRules.laneBlocker` /
   `lane_blocker` keep it one-way (4 entrances, only To Do out). Mirror both sides.
+- The cloud model list is `ai-intern/cloud-models.json` (read by `cloud_config.py`, re-read on edit). Don't add model
+  ids or price filters to `worker.py`; `cursor-prices.json` is reference data only. A model the worker may run is one
+  Settings offers (`_cloud_allowed`), at an effort the file lists for it (`_effort_for`).
 - Native drag with ⌥ held asks the browser for a COPY: cards set `effectAllowed = 'copyMove'` and zones set
   `dropEffect = 'move'`, or an Option-drop is refused before the board sees it.
 - localStorage keys in use: `jb-settings`, `jb-archived`, `jb-completed-show-context`,

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ACTIVE_CADENCE, AI_LEVELS, BOARD_CADENCE, FEATURES, LIMITS, clampSetting, type AiCloudProvider, type FeatureKey, type Settings } from '../../lib/settings'
-import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice, type CloudPrice, type CursorCatalogInfo, type OllamaContainerInfo } from '../../lib/runner'
-import { effortChoicesFor, groupByProvider, isPricey, usd } from '../../lib/cloudModels'
+import { getAiModels, getCloudModels, pullAiModel, guideUrl, type AiCatalogModel, type AiInternStatus, type AiPullProgress, type CloudModelChoice, type CloudListInfo, type CloudPrice, type OllamaContainerInfo } from '../../lib/runner'
+import { DEFAULT_COSTLY_USD, effortChoicesFor, groupByProvider, isPricey, usd } from '../../lib/cloudModels'
 import fallbackCatalog from '../../../ai-intern/models.json'
 import { hexToRgba } from '../../lib/format'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
@@ -908,10 +908,10 @@ const CLOUD_EFFORTS: { id: Settings['aiCloudEffort']; label: string }[] = [
   { id: 'low', label: 'Low' },
   { id: 'medium', label: 'Medium' },
   { id: 'high', label: 'High' },
+  { id: 'auto', label: 'Auto' },
 ]
 
-/** Standard (non-fast) list rates, USD per 1M tokens. Medium bills at these rates.
- *  Source: cursor.com/docs/models-and-pricing. Only models at or under $10 output. */
+/** The models themselves come from ai-intern/cloud-models.json; these are per-provider texts. */
 const CLOUD_PROVIDER_INFO: Record<
   AiCloudProvider,
   { label: string; missingKey: string; about: string; prefer: (models: CloudModelChoice[]) => CloudModelChoice }
@@ -919,20 +919,20 @@ const CLOUD_PROVIDER_INFO: Record<
   cursor: {
     label: 'Cursor',
     missingKey: 'CURSOR_API_KEY is read from ~/.cursor/mcp-secrets.env (Cursor Dashboard → API Keys).',
-    about: 'Value picks: Capable models at or under $10 per 1M output tokens (standard speed).',
+    about: 'The Cursor models listed in cloud-models.json. ⚠ marks the costly ones.',
     // GPT-5.6 Luna: cheapest of the capable models, and what most installs already use.
     prefer: (models) => models.find((m) => /luna/i.test(m.id)) || models[0],
   },
   claude: {
     label: 'Claude',
     missingKey: 'Add ANTHROPIC_API_KEY to ~/.cursor/mcp-secrets.env (console.anthropic.com → API keys).',
-    about: 'Haiku only. Opus and Sonnet are left off this list.',
+    about: 'The Claude models listed in cloud-models.json. ⚠ marks the costly ones.',
     prefer: (models) => models.find((m) => /haiku/i.test(m.id)) || models[0],
   },
   gemini: {
     label: 'Gemini',
     missingKey: 'Add GEMINI_API_KEY to ~/.cursor/mcp-secrets.env (aistudio.google.com → API keys).',
-    about: 'Gemini Flash models from your Google API key. Pro and Ultra are left off.',
+    about: 'The Gemini models listed in cloud-models.json. ⚠ marks the costly ones.',
     prefer: (models) => models[0],
   },
 }
@@ -942,8 +942,8 @@ interface CloudModels {
   models: CloudModelChoice[]
   error: string | null
   hasKey: boolean
-  /** Cursor only: how the key's catalog was narrowed by price. */
-  catalog?: CursorCatalogInfo
+  /** What the worker made of cloud-models.json for this provider. */
+  info?: CloudListInfo
 }
 
 /** The provider's model list and key status, loaded once per provider switch (null while loading). */
@@ -956,7 +956,7 @@ function useCloudModels(provider: AiCloudProvider | null): CloudModels | null {
     void getCloudModels().then((res) => {
       if (cancelled || !res) return
       const entry = res[provider]
-      setLoaded({ provider, models: entry?.models ?? [], error: entry?.error ?? res.error ?? null, hasKey: !!entry?.configured, catalog: provider === 'cursor' ? res.cursor?.catalog : undefined })
+      setLoaded({ provider, models: entry?.models ?? [], error: entry?.error ?? res.error ?? null, hasKey: !!entry?.configured, info: entry?.info })
     })
     return () => {
       cancelled = true
@@ -972,15 +972,13 @@ const CLOUD_KEYS: Record<AiCloudProvider, { env: string; biller: string }> = {
   gemini: { env: 'GEMINI_API_KEY', biller: 'Google' },
 }
 
-/** Cloud counterpart of the Ollama strip: is the key there, and how many models it unlocks. */
+/** Cloud counterpart of the Ollama strip: is the key there, and how many models cloud-models.json offers. */
 function CloudKeyRow({ provider, cloud }: { provider: AiCloudProvider; cloud: CloudModels | null }) {
   const k = CLOUD_KEYS[provider]
   const n = cloud?.models.length ?? 0
-  const cat = cloud?.catalog
-  // Cursor: say how the list was narrowed, so a short list is explained rather than mysterious.
-  const detail = cat
-    ? `${n} shown · ${cat.overCap} over $${cat.capUsd}${cat.hidden ? ` · ${cat.hidden} hidden` : ''}${cat.unpriced.length ? ` · ${cat.unpriced.length} unpriced` : ''}`
-    : `${n} model${n === 1 ? '' : 's'} on this key`
+  const info = cloud?.info
+  // The list is cloud-models.json: say how long it is and how many are costly, so a short list is explained.
+  const detail = `${n} model${n === 1 ? '' : 's'}${info?.costly ? ` · ${info.costly} costly (≥ $${info.costlyUsd})` : ''}`
   const state = !cloud
     ? { text: `Checking ${k.env}…`, color: '#94a3b8' }
     : !cloud.hasKey
@@ -988,12 +986,12 @@ function CloudKeyRow({ provider, cloud }: { provider: AiCloudProvider; cloud: Cl
       : cloud.error
         ? { text: cloud.error, color: '#f59e0b' }
         : { text: `${k.env} found · ${detail}`, color: '#22c55e' }
-  const unpriced = cat?.unpriced.length ? `\nNo price on file for: ${cat.unpriced.map((u) => u.id).join(', ')}.` : ''
-  const over = cat?.over?.length ? `\nOver $${cat.capUsd}: ${cat.over.map((o) => `${o.name} ($${o.output})`).join(', ')}.` : ''
+  const problems = info?.problems?.length ? `\nIn cloud-models.json: ${info.problems.join('; ')}.` : ''
+  const unresolved = info?.unresolved?.length ? `\nNot in your key's Cursor catalog (Cursor may reject them): ${info.unresolved.join(', ')}.` : ''
   return (
     <div
       className={STRIP}
-      title={`${state.text}.${cat ? `\nYour key's Cursor catalog has ${cat.total} models; ${cat.shown} cost $${cat.capUsd} or less per 1M output tokens${cat.fast ? `, ${cat.fast} are Fast variants (left out)` : ''}${cat.hidden ? `, ${cat.hidden} are hidden by your exclude list` : ''}${cat.exceptions ? `; ${cat.exceptions} offered above the cap` : ''}.${cat.pinned?.length ? `\nPinned but not in your key's catalog (Cursor may reject them): ${cat.pinned.join(', ')}.` : ''}${over}${unpriced}` : ''}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
+      title={`${state.text}.\nThe list — which models, their efforts, what counts as costly — is ai-intern/cloud-models.json: add or delete a model there and it appears here within a minute.${info?.catalogTotal != null ? `\nYour key's Cursor catalog has ${info.catalogTotal} models.` : ''}${unresolved}${problems}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />
       <span className="min-w-0 truncate font-medium">{state.text}</span>
@@ -1017,7 +1015,7 @@ function CloudModelPicker({
   const models = useMemo(() => cloud?.models ?? [], [cloud])
   const hasKey = !!cloud?.hasKey
   const selected = models.find((m) => m.id === settings.aiCloudModel) ?? null
-  // Every model offers an effort except a pricey one (see effortChoicesFor).
+  // The efforts cloud-models.json lists for this model (none for a costly one, unless the file says otherwise).
   const effortChoices = CLOUD_EFFORTS.filter((e) => effortChoicesFor(selected).includes(e.id))
 
   // Only pre-fill an EMPTY draft (nothing ever saved, or the provider was just switched — both
@@ -1028,14 +1026,15 @@ function CloudModelPicker({
     onChange({ ...settings, aiCloudModel: info.prefer(models).id })
   }, [models, info, settings, onChange])
 
-  // Above $10 output: the red ⚠ at the right of the row, and this line, say so where it is chosen.
+  // Costly (cloud-models.json: output at or above its costlyOutputUsd): the red ⚠ at the right of the row, and this line, say so where it is chosen.
   const pricey = isPricey(selected)
+  const costlyLine = cloud?.info?.costlyUsd ?? DEFAULT_COSTLY_USD
   const hint = !ready
     ? 'Loading the model list…'
     : !hasKey
       ? info.missingKey
       : pricey
-        ? `${selected?.label} costs ${usd(selected?.price?.output)} per 1M output tokens, so it has no effort choice — pick a cheaper model to set one.`
+        ? `${selected?.label} is costly: ${usd(selected?.price?.output)} per 1M output tokens (the line is $${costlyLine}).${effortChoices.length ? '' : ' It has no effort choice — pick a cheaper model to set one.'}`
         : (cloud.error ?? info.about)
 
   return (
@@ -1048,7 +1047,7 @@ function CloudModelPicker({
           disabled={!models.length}
           className="jb-field h-8 min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] disabled:opacity-60"
         >
-          {!models.length && <option value="">{!ready ? 'Loading models…' : hasKey ? 'No cheaper models on this key' : 'No key yet'}</option>}
+          {!models.length && <option value="">{!ready ? 'Loading models…' : hasKey ? 'No models in cloud-models.json' : 'No key yet'}</option>}
           {groupByProvider(models).map(([group, rows]) => {
             const options = rows.map((m) => (
               <option key={m.id} value={m.id} title={m.id}>
@@ -1064,12 +1063,12 @@ function CloudModelPicker({
             )
           })}
         </select>
-        {provider === 'cursor' && selected && effortChoices.length > 0 && (
+        {selected && effortChoices.length > 0 && (
           <select
             value={effortChoices.some((e) => e.id === settings.aiCloudEffort) ? settings.aiCloudEffort : effortChoices[0].id}
             onChange={(e) => onChange({ ...settings, aiCloudEffort: e.target.value as Settings['aiCloudEffort'] })}
-            aria-label="Cursor effort"
-            title="Effort — Low uses the fewest tokens, High the most (and the best answers)"
+            aria-label="Effort"
+            title="Effort — Low uses the fewest tokens, High the most (and the best answers); Auto leaves it to the model"
             className="jb-field h-8 w-[5.75rem] shrink-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)]"
           >
             {effortChoices.map((e) => (
@@ -1080,7 +1079,7 @@ function CloudModelPicker({
           </select>
         )}
         {/* A pricey model has no effort choice; keep its width so the model dropdown does not jump. */}
-        {provider === 'cursor' && selected && effortChoices.length === 0 && <span aria-hidden className="w-[5.75rem] shrink-0" />}
+        {selected && effortChoices.length === 0 && <span aria-hidden className="w-[5.75rem] shrink-0" />}
         <a
           href={guideUrl('ai-cloud-prices')}
           target="_blank"
@@ -1096,8 +1095,8 @@ function CloudModelPicker({
           {pricey && (
             <span
               role="img"
-              aria-label={`Costs ${usd(selected?.price?.output)} per 1M output tokens — above $10`}
-              title={`Costs ${usd(selected?.price?.output)} per 1M output tokens — above $10`}
+              aria-label={`Costly: ${usd(selected?.price?.output)} per 1M output tokens (the line is $${costlyLine})`}
+              title={`Costly: ${usd(selected?.price?.output)} per 1M output tokens (the line is $${costlyLine})`}
               className="text-[16px] leading-none text-[#dc2626]"
             >
               ⚠
@@ -1155,7 +1154,7 @@ function AiFacts({
 }) {
   let tiles: ReactNode
   if (settings.aiBackend === 'cloud') {
-    const rate: CloudPrice | undefined = cloudModel?.price
+    const rate: CloudPrice | undefined = cloudModel?.price ?? undefined
     const biller = CLOUD_KEYS[cloudProviderOf(settings)].biller
     tiles = rate ? (
       <>
@@ -1164,7 +1163,7 @@ function AiFacts({
           label="Output / 1M"
           value={usd(rate.output)}
           warn={isPricey(cloudModel)}
-          hint={`USD per million output tokens — a lower effort spends fewer${isPricey(cloudModel) ? ' · above $10: the expensive end of the list' : ''}`}
+          hint={`USD per million output tokens — a lower effort spends fewer${isPricey(cloudModel) ? ' · costly: at or above the cost line in cloud-models.json' : ''}`}
         />
         <FactTile
           label="Cache read / 1M"
