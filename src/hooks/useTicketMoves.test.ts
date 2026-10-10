@@ -124,6 +124,18 @@ describe('gates, force and undo', () => {
   })
 })
 
+describe('Done is final', () => {
+  it('refuses to move a Done ticket anywhere, with no way to force it', async () => {
+    const done: Ticket = { key: 'F-1', title: 'Shipped', type: 'Story', status: 'Done', column: 'done' }
+    const { moves, toast } = mountMoves()
+    await act(async () => moves().moveTicket(done, 'prog', { forceAsk: true }))
+    const call = toast.mock.calls[toast.mock.calls.length - 1]
+    expect(call[0]).toContain('stays in Done')
+    expect(call[2]).toBeUndefined()
+    expect(moves().applyOverrides([done])[0].column).toBe('done')
+  })
+})
+
 describe('Next Sprint moves', () => {
   const blocked: Ticket = { key: 'B-1', title: 'Stuck', type: 'Story', status: 'Blocked', column: 'blocked' }
   const dev: Ticket = { key: 'D-1', title: 'Build it', type: 'Story', status: 'In Progress', column: 'prog' }

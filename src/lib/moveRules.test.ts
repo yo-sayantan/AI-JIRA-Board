@@ -58,6 +58,22 @@ describe('the QA lane', () => {
   })
 })
 
+describe('Done is final', () => {
+  const done: Ticket = { key: 'D-1', title: 'Shipped', type: 'Story', status: 'Done', column: 'done' }
+  it('a Done ticket cannot be moved to any other column — a lane refusal, never forcible', () => {
+    for (const to of ['todo', 'blocked', 'hold', 'prog', 'rev', 'qa', 'qaip', 'next'] as const) {
+      expect(laneBlocker(done, to), to).toMatch(/stays in Done/)
+      expect(checkMove(done, to).kind, to).toBe('lane')
+    }
+  })
+  it('applies to a QA ticket in Done too', () => {
+    expect(laneBlocker({ ...qaReady, column: 'done' }, 'todo')).toMatch(/stays in Done/)
+  })
+  it('other tickets still move into Done as before', () => {
+    expect(laneBlocker({ ...done, column: 'prog' }, 'done')).toBeNull()
+  })
+})
+
 describe('Next Sprint', () => {
   const FUTURE = 'S99 (future · 2999-01-10 → 2999-01-24)'
   const at = (column: Ticket['column'], status: string, extra: Partial<Ticket> = {}): Ticket => ({ key: 'N-1', title: 'Build it', type: 'Story', status, column, ...extra })
@@ -69,8 +85,8 @@ describe('Next Sprint', () => {
       expect(checkMove(t, 'next').kind, t.column).toBeNull()
     }
   })
-  it('nothing else may: not In Progress, In Review, Done and not QA In Progress', () => {
-    for (const t of [at('prog', 'In Progress'), at('rev', 'In Review'), at('done', 'Done'), { ...qaReady, status: 'QA In Progress' }]) {
+  it('nothing else may: not In Progress, In Review and not QA In Progress (Done is final anyway)', () => {
+    for (const t of [at('prog', 'In Progress'), at('rev', 'In Review'), { ...qaReady, status: 'QA In Progress' }]) {
       expect(laneBlocker(t, 'next'), t.column).toMatch(/Only To Do, Blocked, QA and On Hold/)
       expect(checkMove(t, 'next').kind).toBe('lane') // never forcible
     }
