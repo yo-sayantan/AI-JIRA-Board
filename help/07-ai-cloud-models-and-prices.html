@@ -78,7 +78,7 @@
           A Cursor model must also be in <i>your key's</i> catalog to be found by name (Cursor's catalog is per account and
           team). <span style="color:#dc2626">⚠</span> (red, at the right) marks a <b>costly</b> model: output at or above
           <code class="inl">costlyOutputUsd</code> per 1M tokens (<span data-costly-line>$10</span> now, set in <code class="inl">cloud-models.json</code>).
-          A costly model offers no effort choice unless <code class="inl">costlyShowEffort</code> is on.</p>
+          A costly model always runs at <b>Medium</b> — its effort dropdown stays, disabled — unless <code class="inl">costlyShowEffort</code> is on.</p>
         <details class="faq">
           <summary>On Cursor's table but not in cloud-models.json (<span id="cursor-over-count">…</span>)</summary>
           <div class="a">
@@ -121,9 +121,9 @@
 }</pre>
         <p class="small"><b>Costly:</b> a model whose <code class="inl">outputUsd</code> is at or above
           <code class="inl">costlyOutputUsd</code> (top of the file — <span data-costly-line>$10</span> now) gets the ⚠ and,
-          unless <code class="inl">costlyShowEffort</code> is <code class="inl">true</code>, no effort choice. One entry can
+          unless <code class="inl">costlyShowEffort</code> is <code class="inl">true</code>, a fixed Medium effort (the dropdown is shown disabled). One entry can
           override that with <code class="inl">"costly": true</code> or <code class="inl">false</code>.
-          <b>Auto</b> leaves the effort to the model.</p>
+          <b>Auto</b> leaves the effort to the model and is the default for every other model.</p>
       </div>
 
       

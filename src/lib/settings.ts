@@ -346,7 +346,7 @@ export const DEFAULT_SETTINGS: Settings = {
   aiLocalModel: APP_CONFIG.ai?.localModel || modelCatalog.defaultLocal,
   aiCloudProvider: APP_CONFIG.ai?.cloudProvider ?? 'cursor',
   aiCloudModel: APP_CONFIG.ai?.cloudModel ?? '',
-  aiCloudEffort: APP_CONFIG.ai?.cloudEffort ?? 'low',
+  aiCloudEffort: APP_CONFIG.ai?.cloudEffort ?? 'auto',
   aiUseHostOllama: APP_CONFIG.ai?.useHostOllama ?? false,
   ollamaEnabled: APP_CONFIG.ai?.ollamaEnabled ?? false,
   showLocalModels: true,

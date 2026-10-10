@@ -53,7 +53,7 @@ export async function readBoardSettings() {
     aiLocalModel: ai.localModel || '',
     aiCloudModel: ai.cloudModel || '',
     aiCloudProvider: ai.cloudProvider || 'cursor',
-    aiCloudEffort: ai.cloudEffort || 'low',
+    aiCloudEffort: ai.cloudEffort || 'auto',
     aiUseHostOllama: !!ai.useHostOllama,
     ollamaEnabled: ai.ollamaEnabled === true,
     reportParallel: ai.parallel || 4,

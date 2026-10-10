@@ -22,6 +22,7 @@ code does now, so a reader can check them against the tree.
   and ⓘ buttons, `/help` on the server, the Docker image and `scripts/open-guide.*` all point at `help/`. Also fixed
   in the move: the guide's `docker compose build --pull` (never `--pull` here) and `docker build .` (the Dockerfile is
   in `docker/`).
+- **Model picker tidy-up.** The effort dropdown is always there: for a costly model it shows **Medium**, disabled (the worker runs it at Medium); every other model defaults to **Auto**. The notes under the picker no longer mention your Cursor catalog, and a costly model's note no longer repeats its price (the Output tile has it). More room between the picker, its note and the tiles.
 - **One file lists the cloud models: `ai-intern/cloud-models.json`.** Models, per-model efforts (Low · Medium · High ·
   **Auto**), prices and a **costly** line (`costlyOutputUsd`, default 10, output at or above it) live there; add or delete
   a row and Settings follows within a minute — no rebuild. It replaces the price-based selection (`maxOutputUsd`,
