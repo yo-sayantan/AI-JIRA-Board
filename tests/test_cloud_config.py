@@ -175,14 +175,14 @@ class WorkerUse(unittest.TestCase):
         import worker  # noqa: E402
         cls.worker = worker
 
-    def test_the_effort_is_the_saved_one_when_offered_else_the_first_offered(self):
-        row = {"efforts": ["low", "auto"]}
-        self.assertEqual(self.worker._effort_for(row, "low"), "low")
-        self.assertEqual(self.worker._effort_for(row, "high"), "low")
+    def test_the_effort_is_the_saved_one_when_offered_else_auto(self):
+        self.assertEqual(self.worker._effort_for({"efforts": ["low", "auto"]}, "low"), "low")
+        self.assertEqual(self.worker._effort_for({"efforts": ["low", "auto"]}, "high"), "auto")
+        self.assertEqual(self.worker._effort_for({"efforts": ["low", "high"]}, "medium"), "low")  # no auto offered: the first
 
-    def test_a_model_with_no_efforts_runs_on_auto(self):
-        self.assertEqual(self.worker._effort_for({"efforts": []}, "high"), "auto")
-        self.assertEqual(self.worker._effort_for(None, "high"), "auto")
+    def test_a_costly_model_is_fixed_at_medium_whatever_was_saved(self):
+        for saved in ("low", "medium", "high", "auto"):
+            self.assertEqual(self.worker._effort_for({"efforts": []}, saved), "medium", saved)
 
     def test_the_settings_payload_is_the_file_per_provider(self):
         from unittest import mock
@@ -197,15 +197,15 @@ class WorkerUse(unittest.TestCase):
         luna = next(m for m in out["cursor"]["models"] if m["id"] == "gpt-5.6-luna")
         self.assertEqual((luna["inCatalog"], luna["costly"], luna["efforts"]), (True, False, ALL))
         self.assertEqual({m["id"] for m in out["claude"]["models"]}, {"claude-haiku-5-5", "claude-haiku-4-5"})
-        # Most of the file's Cursor models are not in this one-model catalog: said plainly, still listed.
-        self.assertIn("not in your key's Cursor catalog", out["cursor"]["error"])
+        # Most of the file's Cursor models are not in this one-model catalog: still listed, and nothing is said about it.
+        self.assertIsNone(out["cursor"]["error"])
         self.assertGreater(len(out["cursor"]["models"]), 10)
 
     def test_an_unreadable_cursor_catalog_still_lists_the_file(self):
         from unittest import mock
         with mock.patch.object(self.worker, "file_secret", return_value="k"), mock.patch.object(self.worker, "list_cursor_models", side_effect=RuntimeError("HTTP 401")):
             out = self.worker._fetch_cloud_models()
-        self.assertIn("Couldn't read your key's Cursor catalog (HTTP 401)", out["cursor"]["error"])
+        self.assertIsNone(out["cursor"]["error"])  # the list is the file; an unreadable catalog is not the user's concern
         self.assertGreater(len(out["cursor"]["models"]), 10)
         self.assertIsNone(out["cursor"]["models"][0]["inCatalog"])
 

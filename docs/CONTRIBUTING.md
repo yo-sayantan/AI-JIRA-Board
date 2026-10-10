@@ -96,7 +96,7 @@ and gemini, optional for cursor, whose id is looked up by name in your key's Cur
 re-read within a minute: no rebuild, no restart (the guide's price page, served by the board, picks it up on the next
 deploy). `efforts` is any of `low`, `medium`, `high`, `auto` — the effort dropdown offers exactly those. A model is
 **costly** when `outputUsd` is at or above `costlyOutputUsd` (default 10, set at the top of the file) or its own
-`costly` says so; a costly model gets the ⚠ and no effort choice unless `costlyShowEffort` is true. A missing
+`costly` says so; a costly model gets the ⚠ and is fixed at Medium effort (its dropdown is disabled) unless `costlyShowEffort` is true. A missing
 `outputUsd` is filled from `ai-intern/cursor-prices.json` (Cursor's published table, also the guide's price page);
 matching ignores punctuation and case (`claude-sonnet-5-5` = `claude-sonnet-5.5` = "Claude Sonnet 5.5"), see
 `ai-intern/cursor_prices.py` and `cloud_config.py`. If a row is wrong it is skipped and named in the key strip's hover

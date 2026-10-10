@@ -71,7 +71,7 @@
     "localModel": "",
     "cloudProvider": "cursor",
     "cloudModel": "",
-    "cloudEffort": "low",
+    "cloudEffort": "auto",
     "useHostOllama": false,
     "ollamaEnabled": false,
     "parallel": 4

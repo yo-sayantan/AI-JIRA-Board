@@ -451,15 +451,10 @@ def _fetch_cloud_models():
         if provider == "cursor":
             try:
                 catalog = list_cursor_models(key)
-            except Exception as e:  # the list is still shown, from cloud-models.json
-                note = str(_http_fail(e) if not isinstance(e, RuntimeError) else e)
-                entry["error"] = f"Couldn't read your key's Cursor catalog ({note}) — models are listed from cloud-models.json and Cursor may reject one."
+            except Exception as e:  # the list is still shown, from cloud-models.json — the catalog only refines ids and efforts
+                log(f"cursor catalog unavailable: {_http_fail(e) if not isinstance(e, RuntimeError) else e}")
         entry["models"], entry["info"] = cloud_config.publish(provider, catalog, cfg)
-        info = entry["info"]
-        if provider == "cursor":
-            if not entry["error"] and info["unresolved"]:
-                entry["error"] = f"{len(info['unresolved'])} listed model{'s' if len(info['unresolved']) != 1 else ''} not in your key's Cursor catalog: {', '.join(info['unresolved'][:4])}{'…' if len(info['unresolved']) > 4 else ''}."
-        if not entry["models"] and not entry["error"]:
+        if not entry["models"]:
             entry["error"] = f"No {provider} models in cloud-models.json."
     return out
 
@@ -682,12 +677,14 @@ def _cloud_allowed(provider, model):
 
 
 def _effort_for(row, requested):
-    """The effort a model actually runs at: the saved one if the model offers it, else its first offered; a model
-    that offers none (a costly one) gets auto — the effort dropdown was not there to choose from."""
+    """The effort a model actually runs at: the saved one if the model offers it, else auto (or its first offered);
+    a model that offers none — a costly one — is fixed at medium (its dropdown is shown disabled)."""
     offered = (row or {}).get("efforts") or []
     if not offered:
-        return "auto"
-    return requested if requested in offered else offered[0]
+        return "medium"
+    if requested in offered:
+        return requested
+    return "auto" if "auto" in offered else offered[0]
 
 
 def infer(job, system, user):
@@ -700,7 +697,7 @@ def infer(job, system, user):
             provider = "cursor"
         if not _cloud_allowed(provider, model):
             raise RuntimeError("Pick a listed model in Settings.")
-        requested = job.get("cloudEffort") if job.get("cloudEffort") in EFFORT_CHOICES else "low"
+        requested = job.get("cloudEffort") if job.get("cloudEffort") in EFFORT_CHOICES else "auto"
         effort = _effort_for(_cloud_row(provider, model), requested)
         if provider == "cursor":
             key = file_secret("CURSOR_API_KEY")
@@ -2097,7 +2094,7 @@ def apply_saved_model(job):
     if provider in ("claude", "cursor", "gemini"):
         out["cloudProvider"] = provider
     effort = settings.get("aiCloudEffort")
-    out["cloudEffort"] = effort if effort in EFFORT_CHOICES else "low"
+    out["cloudEffort"] = effort if effort in EFFORT_CHOICES else "auto"
     level = settings.get("aiLevel")
     if level in ("none", "low", "moderate", "full"):
         out["level"] = level
@@ -2170,7 +2167,7 @@ def status_view():
         "backend": backend,
         "model": settings.get("aiCloudModel") if backend == "cloud" else settings.get("aiLocalModel") or catalog().get("defaultLocal"),
         "cloudProvider": settings.get("aiCloudProvider") if settings.get("aiCloudProvider") in ("claude", "cursor", "gemini") else "cursor",
-        "cloudEffort": settings.get("aiCloudEffort") if settings.get("aiCloudEffort") in EFFORT_CHOICES else "low",
+        "cloudEffort": settings.get("aiCloudEffort") if settings.get("aiCloudEffort") in EFFORT_CHOICES else "auto",
         "useHostOllama": use_host,
         "ollamaOk": isinstance(tags, list),
         "ollamaError": tags.get("error") if isinstance(tags, dict) else None,

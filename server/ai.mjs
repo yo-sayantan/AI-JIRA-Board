@@ -58,7 +58,7 @@ export async function enqueueEnrich(key, settings) {
     backend,
     model: backend === 'cloud' ? settings.aiCloudModel || '' : settings.aiLocalModel || DEFAULT_LOCAL_MODEL,
     cloudProvider: CLOUD_PROVIDERS.includes(settings.aiCloudProvider) ? settings.aiCloudProvider : 'cursor',
-    cloudEffort: ['medium', 'high', 'auto'].includes(settings.aiCloudEffort) ? settings.aiCloudEffort : 'low',
+    cloudEffort: ['low', 'medium', 'high', 'auto'].includes(settings.aiCloudEffort) ? settings.aiCloudEffort : 'auto',
     useHostOllama: !!settings.aiUseHostOllama,
     enqueuedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
   }

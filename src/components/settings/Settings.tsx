@@ -859,8 +859,8 @@ function AiInternControls({
         <OllamaStatusRow enabled={settings.ollamaEnabled} info={aiStatus?.container ?? null} showList={settings.showLocalModels} onShowList={(v) => set('showLocalModels', v)} />
       )}
 
-      {/* Picker row + its two-line note: 68px in every state (loading, downloading, hidden list). */}
-      <div className="flex h-[4.25rem] min-w-0 flex-col gap-1">
+      {/* Picker row + its two-line note: 76px in every state (loading, downloading, hidden list). */}
+      <div className="flex h-[4.75rem] min-w-0 flex-col gap-1.5">
         {isCloud ? (
           <CloudModelPicker settings={settings} onChange={onChange} cloud={cloud} />
         ) : settings.showLocalModels ? (
@@ -987,11 +987,10 @@ function CloudKeyRow({ provider, cloud }: { provider: AiCloudProvider; cloud: Cl
         ? { text: cloud.error, color: '#f59e0b' }
         : { text: `${k.env} found · ${detail}`, color: '#22c55e' }
   const problems = info?.problems?.length ? `\nIn cloud-models.json: ${info.problems.join('; ')}.` : ''
-  const unresolved = info?.unresolved?.length ? `\nNot in your key's Cursor catalog (Cursor may reject them): ${info.unresolved.join(', ')}.` : ''
   return (
     <div
       className={STRIP}
-      title={`${state.text}.\nThe list — which models, their efforts, what counts as costly — is ai-intern/cloud-models.json: add or delete a model there and it appears here within a minute.${info?.catalogTotal != null ? `\nYour key's Cursor catalog has ${info.catalogTotal} models.` : ''}${unresolved}${problems}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
+      title={`${state.text}.\nThe list — which models, their efforts, what counts as costly — is ai-intern/cloud-models.json: add or delete a model there and it appears here within a minute.${problems}\nThe key is read from ~/.cursor/mcp-secrets.env (mounted read-only into AI-Intern); usage is billed by ${k.biller} to that key's account.`}
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: state.color }} />
       <span className="min-w-0 truncate font-medium">{state.text}</span>
@@ -1015,8 +1014,15 @@ function CloudModelPicker({
   const models = useMemo(() => cloud?.models ?? [], [cloud])
   const hasKey = !!cloud?.hasKey
   const selected = models.find((m) => m.id === settings.aiCloudModel) ?? null
-  // The efforts cloud-models.json lists for this model (none for a costly one, unless the file says otherwise).
+  // The efforts cloud-models.json lists for this model. A costly one lists none: its effort is fixed at Medium and the
+  // dropdown stays, disabled — so the row never changes shape.
   const effortChoices = CLOUD_EFFORTS.filter((e) => effortChoicesFor(selected).includes(e.id))
+  const effortLocked = !!selected && effortChoices.length === 0
+  const effortValue = effortLocked
+    ? 'medium'
+    : effortChoices.some((e) => e.id === settings.aiCloudEffort)
+      ? settings.aiCloudEffort
+      : (effortChoices.find((e) => e.id === 'auto') ?? effortChoices[0])?.id ?? 'auto'
 
   // Only pre-fill an EMPTY draft (nothing ever saved, or the provider was just switched — both
   // cases where the user is already choosing). Overwriting a saved model that merely isn't in this
@@ -1034,7 +1040,7 @@ function CloudModelPicker({
     : !hasKey
       ? info.missingKey
       : pricey
-        ? `${selected?.label} is costly: ${usd(selected?.price?.output)} per 1M output tokens (the line is $${costlyLine}).${effortChoices.length ? '' : ' It has no effort choice — pick a cheaper model to set one.'}`
+        ? `Costly model (at or above $${costlyLine} per 1M output tokens).${effortLocked ? ' Effort is fixed at Medium — pick a cheaper model to choose one.' : ''}`
         : (cloud.error ?? info.about)
 
   return (
@@ -1063,23 +1069,24 @@ function CloudModelPicker({
             )
           })}
         </select>
-        {selected && effortChoices.length > 0 && (
-          <select
-            value={effortChoices.some((e) => e.id === settings.aiCloudEffort) ? settings.aiCloudEffort : effortChoices[0].id}
-            onChange={(e) => onChange({ ...settings, aiCloudEffort: e.target.value as Settings['aiCloudEffort'] })}
-            aria-label="Effort"
-            title="Effort — Low uses the fewest tokens, High the most (and the best answers); Auto leaves it to the model"
-            className="jb-field h-8 w-[5.75rem] shrink-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)]"
-          >
-            {effortChoices.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.label}
-              </option>
-            ))}
-          </select>
-        )}
-        {/* A pricey model has no effort choice; keep its width so the model dropdown does not jump. */}
-        {selected && effortChoices.length === 0 && <span aria-hidden className="w-[5.75rem] shrink-0" />}
+        <select
+          value={effortValue}
+          onChange={(e) => onChange({ ...settings, aiCloudEffort: e.target.value as Settings['aiCloudEffort'] })}
+          aria-label="Effort"
+          disabled={!selected || effortLocked}
+          title={
+            effortLocked
+              ? 'A costly model always runs at Medium effort'
+              : 'Effort — Low uses the fewest tokens, High the most (and the best answers); Auto leaves it to the model'
+          }
+          className="jb-field h-8 w-[5.75rem] shrink-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2 text-[12px] text-[var(--ink)] disabled:opacity-60"
+        >
+          {(effortLocked || !selected ? CLOUD_EFFORTS : effortChoices).map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.label}
+            </option>
+          ))}
+        </select>
         <a
           href={guideUrl('cloudPrices')}
           target="_blank"
@@ -1095,8 +1102,8 @@ function CloudModelPicker({
           {pricey && (
             <span
               role="img"
-              aria-label={`Costly: ${usd(selected?.price?.output)} per 1M output tokens (the line is $${costlyLine})`}
-              title={`Costly: ${usd(selected?.price?.output)} per 1M output tokens (the line is $${costlyLine})`}
+              aria-label={`Costly model: at or above $${costlyLine} per 1M output tokens`}
+              title={`Costly model: at or above $${costlyLine} per 1M output tokens`}
               className="text-[16px] leading-none text-[#dc2626]"
             >
               ⚠

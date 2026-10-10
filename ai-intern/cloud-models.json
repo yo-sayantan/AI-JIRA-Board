@@ -2,7 +2,7 @@
   "_readme": "THE list of cloud models in Settings → AI → Cloud. Add a model and it appears there, delete one and it goes — no code change; the AI worker re-reads this file on its next model fetch (a restart of the jira-ai container is not needed). Each entry: provider (cursor | claude | gemini); name (shown in Settings; for Cursor also how the id is found in YOUR key's Cursor catalog); id (the exact API model id — required for claude and gemini, optional for cursor); maker (the group in the dropdown); outputUsd (USD per 1M output tokens — omit it and the Cursor price table in cursor-prices.json is used); efforts (any of low, medium, high, auto — the effort dropdown offers exactly these; auto = the model's own default, no instruction added); costly (true/false, optional — otherwise a model is costly when outputUsd >= costlyOutputUsd); note (a pricing caveat shown with the model). Order here = order in the dropdown within its maker.",
   "_costly": "A costly model gets the ⚠ and its cost note. Set the line below to move it; or set \"costly\" on a single model.",
   "costlyOutputUsd": 10,
-  "_costlyShowEffort": "false: a costly model offers no effort choice (pick a cheaper model to set one). true: it offers the efforts listed for it.",
+  "_costlyShowEffort": "false: a costly model is fixed at Medium effort and its effort dropdown is disabled. true: it offers the efforts listed for it.",
   "costlyShowEffort": false,
   "checked": "2026-10-08",
   "models": [
