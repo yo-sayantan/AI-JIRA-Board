@@ -20,7 +20,6 @@ import type { ReportsMenuProps } from './components/header/ReportsMenu'
 import { Stats, type StatSelection } from './components/board/Stats'
 import { Board } from './components/board/Board'
 import { ArchivedUndo, DemoBanner, NoMatches } from './components/board/BoardNotices'
-import { NextSprint } from './components/board/NextSprint'
 import { EmptyState } from './components/board/EmptyState'
 import { FunEmptyBoard } from './components/board/FunEmptyBoard'
 import { CompletedOverlay } from './components/completed/Completed'
@@ -66,8 +65,7 @@ export default function App() {
   const [completedOpen, setCompletedOpen] = useState(false)
   const [raisedOpen, setRaisedOpen] = useState(false)
   const [query, setQuery] = useState('')
-  // One selection drives the chip row: a column filters the board, 'next' reveals the Next Sprint
-  // bar, 'all' reveals everything expanded. Picking any chip clears the others.
+  // One selection drives the chip row: a column filters the board; null is "All" (the default).
   const [sel, setSel] = useState<StatSelection>(null)
   // Settings → Board sections: which optional parts of the board are shown. A switched-off one is gone —
   // its tickets are not on the board, not counted, and a chip focused on it falls back to the whole board.
@@ -75,7 +73,7 @@ export default function App() {
     () => ({ blocked: features.blocked, onHold: features.onHold, qaInProgress: features.qaInProgress }),
     [features.blocked, features.onHold, features.qaInProgress],
   )
-  const focus: ColumnKey | null = sel === 'next' || sel === 'all' || (sel === 'blocked' && !features.blocked) ? null : sel
+  const focus: ColumnKey | null = sel === 'blocked' && !features.blocked ? null : sel
 
   const status = useInternStatus(served, features.autoRefresh || settingsOpen || jobs.running != null)
   const ai = status?.ai ?? null
@@ -97,7 +95,7 @@ export default function App() {
   // A drop judges "from" by the card AS DISPLAYED — moved by an earlier drop (its pin) or folded into
   // To Do (Settings → On Hold off) — not by the dump: dragging a card straight back is then a real
   // move, and dropping a card where it already shows is a no-op instead of a Jira transition.
-  const shownByKey = useMemo(() => new Map([...view.board, ...view.hold].map((t) => [t.key, t] as const)), [view])
+  const shownByKey = useMemo(() => new Map([...view.board, ...view.hold, ...view.nextSprint].map((t) => [t.key, t] as const)), [view])
   const moveTicket = useCallback(
     (key: string, to: MoveTarget, force = false) => {
       const t = shownByKey.get(key) ?? byKey.get(key)
@@ -105,6 +103,8 @@ export default function App() {
     },
     [shownByKey, byKey, moves],
   )
+  // Chip counts: everything on the board — On Hold and Next Sprint are spaces inside Blocked and To Do.
+  const statTickets = useMemo(() => [...view.board, ...view.hold, ...(features.nextSprint ? view.nextSprint : [])], [view, features.nextSprint])
   const hasAnyActive = useMemo(() => hasActiveWork(data.tickets, now), [data.tickets, now])
   const myCompletedCount = useMemo(() => countMyCompleted(data), [data])
   const raisedCount = useMemo(() => countRaised(data), [data])
@@ -113,13 +113,6 @@ export default function App() {
   const doneOnBoard = useMemo(() => new Set(data.tickets.filter((t) => t.column === 'done').map((t) => t.key)), [data.tickets])
   const refreshing = jobs.running === 'daily'
   const archiveRefreshing = jobs.running === 'archive'
-
-  // Picking the Next Sprint chip reveals its bar at the very bottom; bring it into view.
-  useEffect(() => {
-    if (sel !== 'next') return
-    const id = requestAnimationFrame(() => document.getElementById('jb-next-sprint')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
-    return () => cancelAnimationFrame(id)
-  }, [sel])
 
   const refreshedOnOpen = useRef(false)
   useEffect(() => {
@@ -215,11 +208,10 @@ export default function App() {
       {demo && <DemoBanner onExit={exitDemo} />}
 
       <Stats
-        tickets={view.board}
+        tickets={statTickets}
         hideBlocked={!features.blocked}
         completedCount={features.completedArchive ? myCompletedCount : null}
         raisedCount={features.raisedTickets && raisedCount.total > 0 ? raisedCount : null}
-        nextSprintCount={features.nextSprint ? view.nextSprint.length : 0}
         active={sel}
         onSelect={setSel}
         onOpenCompleted={features.completedArchive ? openCompleted : undefined}
@@ -236,7 +228,7 @@ export default function App() {
           onUndo={restoreArchived}
         />
       ) : view.matched.length === 0 && terms.length > 0 ? (
-        // A search that only hits On Hold (its space under Blocked) or Next Sprint (below) still shows them.
+        // A search that only hits On Hold (under Blocked) or Next Sprint (under To Do) still shows them.
         <NoMatches query={query} onClear={clearSearch} />
       ) : (
         <Board
@@ -253,15 +245,12 @@ export default function App() {
           lookup={byKey}
           readiness={features.dragMove && features.moveReadiness}
           held={features.onHold ? view.hold : undefined}
+          nextSprint={features.nextSprint ? view.nextSprint : undefined}
           sections={sections}
         />
       )}
 
       {hasAnyActive && userArchived.length > 0 && <ArchivedUndo keys={userArchived} onUndo={restoreArchived} />}
-
-      {features.nextSprint && (
-        <NextSprint tickets={view.nextSprint} now={now} onOpen={drawers.openTicket} visible={sel === 'next' || sel === 'all'} forceOpen={sel === 'all'} />
-      )}
 
       <Footer />
 

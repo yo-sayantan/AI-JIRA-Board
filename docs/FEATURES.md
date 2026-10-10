@@ -35,9 +35,9 @@ feature can be exercised without real data — and with every server call switch
 
 ## Stat chips (the row above the board)
 
-`src/components/board/Stats.tsx` — one selection drives everything (`StatSelection`):
-column chips filter the board; **Next Sprint** toggles its bar; **All** expands everything;
-**N active** clears. Mutually exclusive by design — picking one clears the rest.
+`src/components/board/Stats.tsx` — one selection drives everything (`StatSelection`): **All N**
+comes first and is selected by default (the whole board); a column chip filters the board to that
+column and clicking it again returns to All. The counts include On Hold and Next Sprint tickets.
 Right-aligned: the indigo **Raised open/total** chip and the gold **Completed N** trophy.
 
 ## Search
@@ -91,8 +91,15 @@ Overlay (indigo megaphone chip, `open/total` count) for every non-sub-task ticke
 ## Next Sprint
 
 To Do tickets whose sprint hasn't started (Jira sprint state `future`, or a grooming bucket)
-are pulled OUT of To Do into a collapsible bar so a finished sprint doesn't look full.
-`src/lib/format.ts::isNextSprint`, `board/NextSprint.tsx`, chip in `Stats.tsx`.
+are pulled OUT of the To Do box into their own space **at the end of the To Do column** — a
+separate header and box built exactly like QA In Progress under QA (`board/SubSection.tsx`). Inside it,
+each sprint gets a caption — its name and when it starts ("starts in 3 days · Oct 14", or "not started" for an undated
+grooming bucket / a slipped start); sprints are ordered soonest first, buckets last. It
+appears only while something is queued, is not a drop target (a ticket sits there because of its
+sprint, not a status — a drop anywhere in the column is a To Do drop), and its cards drag out like
+any other. The moment you pick one up it shows in In Progress / Review / QA where its real status
+lives. `src/lib/format.ts::isNextSprint`, `board/Column.tsx` (`queued`). The old bar below the
+board, its Next Sprint chip and the chip-driven expand/scroll are gone.
 
 ## On Hold
 

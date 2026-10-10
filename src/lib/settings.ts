@@ -96,9 +96,9 @@ export const FEATURES = [
     key: 'nextSprint',
     default: true,
     label: 'Next Sprint section',
-    hint: 'Queue for the sprint that has not started',
+    hint: 'The sprint that has not started, at the end of To Do',
     detail:
-      'Shows the strip below the board holding To Do tickets whose sprint has not begun yet, so upcoming work stays visible without cluttering the active columns.',
+      'Gives the To Do column a second space at its end — a separate header and box, like QA In Progress under QA — holding the tickets whose sprint has not begun yet, so upcoming work stays visible without mixing into this sprint\'s To Do. Off hides those tickets entirely.',
   },
   {
     key: 'completedArchive',

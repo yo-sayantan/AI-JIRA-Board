@@ -192,4 +192,34 @@ describe('Column — empty columns and the On Hold space', () => {
     drop(s, 'Q-2', undefined, true)
     expect(onMove).not.toHaveBeenCalled()
   })
+
+  it('To Do gets a Next Sprint space at its end — its own header and box, not a drop target', () => {
+    const onMove = vi.fn()
+    const todo = { key: 'T-1', title: 'This sprint', status: 'To Do', column: 'todo' as const }
+    const queued = { key: 'T-2', title: 'Later', status: 'To Do', column: 'todo' as const, sprint: 'Sprint 99' }
+    const s = render({ meta: COLUMN_META.todo, tickets: [todo], queued: [queued], onMove })
+    expect(s.getAttribute('aria-label')).toBe('To Do · 1 · Next Sprint · 1')
+    const group = s.querySelector('[role=group]')!
+    expect(group.textContent).toContain('Later')
+    expect(group.getAttribute('data-drop')).toBeNull() // nothing can be dropped on it
+    drop(s, 'ABC-1', 5)
+    expect(onMove).toHaveBeenLastCalledWith('ABC-1', 'todo', false) // a drop anywhere in the column is a To Do drop
+  })
+
+  it('no Next Sprint space when nothing is queued', () => {
+    expect(render({ meta: COLUMN_META.todo, queued: [] }).querySelector('[role=group]')).toBeNull()
+  })
+
+  it('Next Sprint names each sprint and when it starts, one caption per group', () => {
+    const t = (key: string, sprint: string) => ({ key, title: key, status: 'To Do', column: 'todo' as const, sprint })
+    const dated = 'S99 (future · 2999-01-10 → 2999-01-24)'
+    const queued = [t('Q-1', dated), t('Q-2', dated), t('Q-3', 'Platform READY (future)')]
+    const s = render({ meta: COLUMN_META.todo, tickets: [], queued })
+    const group = s.querySelector('[role=group]')!
+    expect(group.textContent).toContain('S99')
+    expect(group.textContent).toMatch(/starts in \d+ days? · Jan 10/)
+    expect(group.textContent).toContain('Platform READY')
+    expect(group.textContent).toContain('not started')
+    expect(group.textContent!.match(/S99/g)).toHaveLength(1) // one caption for both its tickets
+  })
 })

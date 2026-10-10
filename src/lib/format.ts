@@ -540,6 +540,23 @@ export function isNextSprint(t: { column: string; sprint?: string | null }, now:
   return t.column === 'todo' && futureSprintOf(t.sprint, now) != null
 }
 
+/**
+ * How far off a not-yet-started sprint is, SHORT enough to share a line with its name. A grooming bucket
+ * ("Team READY") carries no dates, and a `future` sprint whose planned start has slipped is still not
+ * started. Working days, like the header's sprint chip.
+ */
+export function sprintWhen(sp: SprintInfo, now: number = Date.now()): string {
+  const startTs = sp.start ? Date.parse(`${sp.start}T00:00:00`) : NaN
+  if (Number.isNaN(startTs) || now >= startTs) return 'not started'
+  const d = workdaysBetween(now + 86_400_000, startTs)
+  return `starts in ${d} day${d === 1 ? '' : 's'} · ${fmtDateShort(sp.start)}`
+}
+
+/** Order for the sprints of the Next Sprint space: dated ones soonest first, undated grooming buckets last. */
+export function compareFutureSprints(a: SprintInfo, b: SprintInfo): number {
+  return (a.start ?? '9999').localeCompare(b.start ?? '9999') || a.name.localeCompare(b.name)
+}
+
 /** Compact "Jul 9" style date (no year) — for tight UI like the header sprint chip. */
 export function fmtDateShort(v?: string | null): string {
   const d = parseDate(v)

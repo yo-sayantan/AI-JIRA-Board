@@ -1,11 +1,11 @@
 import { memo, useRef, useState, type DragEvent, type Ref } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { HOLD_COLUMN, QA_IN_PROGRESS, columnMode, isQaInProgress, type ColumnMeta, type ColumnMode, type MoveTarget } from '../../lib/columns'
+import { HOLD_COLUMN, NEXT_SPRINT_SECTION, QA_IN_PROGRESS, columnMode, isQaInProgress, type ColumnMeta, type ColumnMode, type MoveTarget } from '../../lib/columns'
 import { MOVE_OK, checkMove, readinessOf, type MoveCheck, type TicketLookup } from '../../lib/moveRules'
 import type { Ticket } from '../../types'
 import { DRAG_MIME, TicketCard } from './TicketCard'
-import { hexToRgba } from '../../lib/format'
-import { ColumnIcon, PauseIcon } from '../common/Icons'
+import { futureSprintOf, hexToRgba, sprintWhen } from '../../lib/format'
+import { CalendarIcon, ColumnIcon, PauseIcon } from '../common/Icons'
 import { SubSection } from './SubSection'
 import { DeniedNote, LandingSlot, SpaceHeader, dropBoxStyle, deniedOpacity } from './boardParts'
 
@@ -24,19 +24,33 @@ const WIDTH_SLIM = { flex: '0.55 1 12.25rem', minWidth: '11.75rem' } as const
 /** Which of a column's drop targets a card is over: the column itself, or its second space. */
 type DropTarget = 'col' | 'sub'
 
-/** The second space under a column's own box: On Hold under Blocked, QA In Progress under QA. */
+/** The second space in a column: On Hold under Blocked, QA In Progress under QA, Next Sprint at the end of To Do. */
 interface Sub {
-  id: 'hold' | 'qaip'
+  id: 'hold' | 'qaip' | 'next'
   label: string
   accent: string
   droppable: boolean
 }
 const SUB_HOLD: Sub = { id: 'hold', label: HOLD_COLUMN.label, accent: HOLD_COLUMN.accent, droppable: true }
 const SUB_QAIP: Sub = { id: 'qaip', label: QA_IN_PROGRESS.label, accent: QA_IN_PROGRESS.accent, droppable: true }
+/** Next Sprint is not a place to drop on — its tickets are placed there by their sprint, not by a status. */
+const SUB_NEXT: Sub = { id: 'next', label: NEXT_SPRINT_SECTION.label, accent: NEXT_SPRINT_SECTION.accent, droppable: false }
 const SUB_TEXTS = {
   hold: { idle: 'Nothing on hold', dragging: 'Drop here to put on hold', slot: 'Drop to put on hold' },
   qaip: { idle: 'Nobody testing yet', dragging: 'Drop here to mark as in QA', slot: 'Drop to move to QA In Progress' },
+  next: { idle: 'Nothing queued', dragging: 'Nothing queued', slot: '' },
 } as const
+
+const SUB_HINTS = {
+  hold: 'Drag a card here to put it on hold in Jira.',
+  qaip: 'QA tickets being tested. Only QA tickets can be dropped here.',
+  next: 'Assigned to you, but the sprint has not started.',
+} as const
+
+function SubIcon({ sub, size, color }: { sub: Sub; size: number; color?: string }) {
+  const c = color ?? sub.accent
+  return sub.id === 'hold' ? <PauseIcon size={size} color={c} /> : sub.id === 'next' ? <CalendarIcon size={size} color={c} /> : <ColumnIcon col="qa" color={c} size={size} />
+}
 
 export const Column = memo(function Column({
   meta,
@@ -52,6 +66,7 @@ export const Column = memo(function Column({
   dragged,
   focused = false,
   held,
+  queued,
   hideOwn = false,
   showQaInProgress = true,
   lookup,
@@ -75,6 +90,8 @@ export const Column = memo(function Column({
   focused?: boolean
   /** Blocked only: the On Hold space's tickets. Undefined = no On Hold space (Settings → On Hold off). */
   held?: Ticket[]
+  /** To Do only: tickets whose sprint has not started, as a space at the end of the column. Undefined / empty = no such space. */
+  queued?: Ticket[]
   /** Settings → Blocked off while On Hold is on: the column is just the On Hold space, no Blocked box. */
   hideOwn?: boolean
   /** Settings → QA In Progress off: no second space under QA. */
@@ -87,8 +104,9 @@ export const Column = memo(function Column({
   // QA's cards split in two spaces: waiting for QA (the column's own box) and picked up by QA.
   const inProgress = meta.key === 'qa' ? tickets.filter((t) => isQaInProgress(t.status)) : []
   const own = meta.key === 'qa' ? tickets.filter((t) => !isQaInProgress(t.status)) : tickets
-  const sub: Sub | null = meta.key === 'qa' ? (showQaInProgress ? SUB_QAIP : null) : meta.key === 'blocked' && held !== undefined ? SUB_HOLD : null
-  const subTickets = sub?.id === 'hold' ? (held ?? []) : inProgress
+  const sub: Sub | null =
+    meta.key === 'qa' ? (showQaInProgress ? SUB_QAIP : null) : meta.key === 'blocked' && held !== undefined ? SUB_HOLD : meta.key === 'todo' && queued?.length ? SUB_NEXT : null
+  const subTickets = sub?.id === 'hold' ? (held ?? []) : sub?.id === 'next' ? (queued ?? []) : inProgress
   // With its own box off, the column IS its second space: it wears that space's header and fills with it.
   const ownOff = hideOwn && sub?.id === 'hold'
 
@@ -104,7 +122,7 @@ export const Column = memo(function Column({
   const ownTarget: MoveTarget = meta.key
   const checkFor = (target: MoveTarget): MoveCheck => (dragged ? checkMove(dragged, target, lookup) : MOVE_OK)
   const ownCheck = checkFor(ownTarget)
-  const subCheck = sub ? checkFor(sub.id) : MOVE_OK
+  const subCheck = sub?.droppable && sub.id !== 'next' ? checkFor(sub.id) : MOVE_OK
   const [alt, setAlt] = useState(false)
   const usable = (c: MoveCheck, altKey: boolean) => c.kind === null || (c.kind === 'gate' && altKey)
   const accepts = (e: DragEvent) => !!onMove && e.dataTransfer.types.includes(DRAG_MIME)
@@ -143,7 +161,7 @@ export const Column = memo(function Column({
     if (!accepts(e)) return
     e.preventDefault()
     const where = targetOf(e)
-    const to: MoveTarget = where === 'sub' && sub ? sub.id : ownTarget
+    const to: MoveTarget = where === 'sub' && sub && sub.id !== 'next' ? sub.id : ownTarget
     const c = where === 'sub' ? subCheck : ownCheck
     setOver(null)
     setAlt(false)
@@ -165,6 +183,11 @@ export const Column = memo(function Column({
   const name = ownOff ? sub!.label : sub ? `${meta.label} and ${sub.label}` : meta.label
   const stacked = !!sub && !ownOff
 
+  // Next Sprint: which sprint each ticket waits for, and when it starts.
+  const sprintCaption = (t: Ticket) => {
+    const sp = futureSprintOf(t.sprint, now)
+    return sp ? { text: sp.name, detail: sprintWhen(sp, now) } : null
+  }
   const card = (t: Ticket) => {
     const r = readiness ? readinessOf(t, lookup) : null
     return (
@@ -254,7 +277,7 @@ export const Column = memo(function Column({
               id={sub.id}
               label={sub.label}
               accent={sub.accent}
-              icon={sub.id === 'hold' ? <PauseIcon size={12} color={sub.accent} /> : <ColumnIcon col="qa" color={sub.accent} size={12} />}
+              icon={<SubIcon sub={sub} size={12} />}
               tickets={subTickets}
               card={card}
               over={over === 'sub'}
@@ -264,7 +287,8 @@ export const Column = memo(function Column({
               alt={alt}
               bare={ownOff}
               texts={SUB_TEXTS[sub.id]}
-              hint={sub.id === 'hold' ? 'Drag a card here to put it on hold in Jira.' : 'QA tickets being tested. Only QA tickets can be dropped here.'}
+              hint={SUB_HINTS[sub.id]}
+              captionOf={sub.id === 'next' ? sprintCaption : undefined}
             />
           )}
         </div>
@@ -285,7 +309,7 @@ function RailBox({ boxRef, accent, label, stacked, sub }: { boxRef?: Ref<HTMLDiv
       className={`jb-rail-zone flex flex-col items-center gap-1.5 rounded-2xl border border-dashed py-2 ${stacked ? 'min-h-[132px]' : 'flex-1'}`}
       style={dropBoxStyle(accent, false)}
     >
-      {sub && (sub.id === 'hold' ? <PauseIcon size={11} color={accent} /> : <ColumnIcon col="qa" color={accent} size={11} />)}
+      {sub && <SubIcon sub={sub} size={11} color={accent} />}
       <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', color: hexToRgba(accent, 0.85) }}>
         {label}
       </span>
@@ -324,7 +348,7 @@ function DropZone({
       style={{ ...dropBoxStyle(accent, active), opacity: deniedOpacity(denied, active) }}
       title={denied?.reason ?? undefined}
     >
-      {sub && (sub.id === 'hold' ? <PauseIcon size={13} color={accent} /> : <ColumnIcon col="qa" color={accent} size={13} />)}
+      {sub && <SubIcon sub={sub} size={13} color={accent} />}
       {denied ? (
         <DeniedNote check={denied} alt={alt} active={active} inline />
       ) : (

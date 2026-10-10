@@ -129,8 +129,8 @@ export function qaStage(t: { column: ColumnKey; status?: string | null }): 'read
 }
 
 // NOT a column — a *partition* of the To Do column. Tickets keep `column: 'todo'`; they're
-// pulled out of the kanban row by isNextSprint() (see lib/format.ts) because their sprint
-// hasn't started, and rendered in their own section below the board.
+// pulled out of the To Do box by isNextSprint() (see lib/format.ts) because their sprint
+// hasn't started, and rendered in their own space at the end of the To Do column.
 export const NEXT_SPRINT_SECTION = {
   label: 'Next Sprint',
   accent: '#ec4899',

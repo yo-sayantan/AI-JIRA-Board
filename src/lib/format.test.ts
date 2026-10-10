@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardBranches, dtf, isAssignedToMe, primaryPrOf, releaseEnvOf } from './format'
+import { cardBranches, dtf, isAssignedToMe, primaryPrOf, releaseEnvOf, compareFutureSprints, parseSprint, sprintWhen } from './format'
 
 describe('dtf', () => {
   it('does not throw for an invalid zone and still formats', () => {
@@ -70,5 +70,21 @@ describe('cardBranches — what a parent card says about branches', () => {
   it('no branch: nothing at all', () => {
     expect(cardBranches({})).toBeNull()
     expect(cardBranches({ branches: [], prs: [] })).toBeNull()
+  })
+})
+
+describe('next-sprint timing', () => {
+  const NOW = Date.parse('2026-10-10T09:00:00')
+  it('says how many working days away a dated sprint is', () => {
+    expect(sprintWhen(parseSprint('S25 (future · 2026-10-14 → 2026-10-28)')!, NOW)).toMatch(/^starts in \d+ days? · Oct 14$/)
+  })
+  it('a grooming bucket with no dates, or a start that has slipped past, is just "not started"', () => {
+    expect(sprintWhen(parseSprint('Platform READY (future)')!, NOW)).toBe('not started')
+    expect(sprintWhen(parseSprint('S24 (future · 2026-10-01 → 2026-10-08)')!, NOW)).toBe('not started')
+  })
+  it('orders dated sprints soonest first and undated buckets last', () => {
+    const names = ['Platform READY (future)', 'S26 (future · 2026-11-01 → 2026-11-15)', 'S25 (future · 2026-10-18 → 2026-11-01)']
+    const sorted = names.map((n) => parseSprint(n)!).sort(compareFutureSprints).map((x) => x.name)
+    expect(sorted).toEqual(['S25', 'S26', 'Platform READY'])
   })
 })
