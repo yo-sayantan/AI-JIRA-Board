@@ -56,51 +56,9 @@
     },
     {
       "provider": "cursor",
-      "name": "GPT-5 Mini",
-      "maker": "OpenAI",
-      "outputUsd": 2.0,
-      "efforts": ["low", "medium", "high", "auto"]
-    },
-    {
-      "provider": "cursor",
-      "name": "GPT-5.1 Codex Mini",
-      "maker": "OpenAI",
-      "outputUsd": 2.0,
-      "efforts": ["low", "medium", "high", "auto"]
-    },
-    {
-      "provider": "cursor",
       "name": "GPT-5.4 Mini",
       "maker": "OpenAI",
       "outputUsd": 4.5,
-      "efforts": ["low", "medium", "high", "auto"]
-    },
-    {
-      "provider": "cursor",
-      "name": "GPT-5",
-      "maker": "OpenAI",
-      "outputUsd": 10.0,
-      "efforts": ["low", "medium", "high", "auto"]
-    },
-    {
-      "provider": "cursor",
-      "name": "GPT-5-Codex",
-      "maker": "OpenAI",
-      "outputUsd": 10.0,
-      "efforts": ["low", "medium", "high", "auto"]
-    },
-    {
-      "provider": "cursor",
-      "name": "GPT-5.1 Codex",
-      "maker": "OpenAI",
-      "outputUsd": 10.0,
-      "efforts": ["low", "medium", "high", "auto"]
-    },
-    {
-      "provider": "cursor",
-      "name": "GPT-5.1 Codex Max",
-      "maker": "OpenAI",
-      "outputUsd": 10.0,
       "efforts": ["low", "medium", "high", "auto"]
     },
     {
@@ -132,13 +90,6 @@
       "name": "GLM 5.3 Flash",
       "maker": "Z.ai",
       "outputUsd": 0.5,
-      "efforts": ["low", "medium", "high", "auto"]
-    },
-    {
-      "provider": "cursor",
-      "name": "GLM 5.2",
-      "maker": "Z.ai",
-      "outputUsd": 4.4,
       "efforts": ["low", "medium", "high", "auto"]
     },
     {
