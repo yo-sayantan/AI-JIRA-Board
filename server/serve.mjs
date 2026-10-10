@@ -22,8 +22,9 @@
 //
 // Static
 //   GET  /                                 302 → /dist/index.html
-//   GET  /dist/*  /docs/*  /setup/*        file (ETag / 304, gzip, Cache-Control: no-cache)
-//   GET  /ai-intern/models.json            file
+//   GET  /help  /help/                     302 → /help/00-start-here.html (the help guide)
+//   GET  /dist/*  /help/*  /docs/*  /setup/*  file (ETag / 304, gzip, Cache-Control: no-cache)
+//   GET  /ai-intern/models|cursor-prices|cloud-models.json  file (the help guide reads them live)
 //   GET  /jira-intern/data.json|data.js    file, Cache-Control: no-store (Jira data never hits disk cache)
 //   GET  /jira-intern/reports/index.js     file, Cache-Control: no-store
 //   GET  /jira-intern/demo/data.json       file, the Demo-mode sample board
@@ -66,7 +67,7 @@
 // ───────────────────────────────────────────────────────────────────────────────────────────────
 import { createServer } from 'node:http'
 import { stat } from 'node:fs/promises'
-import { ALLOWED_HOSTS, BOARD_PATH, DATE_RE, HOST, KEY_RE, PATHS, PORT, ROOT, YEAR_RE } from './config.mjs'
+import { ALLOWED_HOSTS, BOARD_PATH, HELP_PATH, DATE_RE, HOST, KEY_RE, PATHS, PORT, ROOT, YEAR_RE } from './config.mjs'
 import { SECURITY_HEADERS, createStaticHandler, json, readBody } from './http.mjs'
 import { MOVE_TARGETS, moveTicket, runStatus, startArchive, startDaily, startRaised, stopArchive, ticketRefresh } from './jobs.mjs'
 import { externalGenerating, readReport, reportQueue, reportsIndex, resolveReportKeys, stopReports } from './reports.mjs'
@@ -79,9 +80,11 @@ const serveStatic = createStaticHandler(
   ROOT,
   [
     /^\/dist\//,
+    // The help guide (plain pages that also open from disk) and the markdown it renders from docs/.
+    /^\/help\//,
     /^\/docs\//,
     /^\/setup\//,
-    /^\/ai-intern\/(models|cursor-prices)\.json$/,
+    /^\/ai-intern\/(models|cursor-prices|cloud-models)\.json$/,
     /^\/jira-intern\/data\.js(on)?$/,
     /^\/jira-intern\/reports\/index\.js$/,
     // Demo mode's sample board, kept beside the real dump so it can be read and edited by hand.
@@ -387,6 +390,10 @@ async function handle(req, res) {
   if (path === null) return json(res, 400, { ok: false, error: 'bad url' })
   if (path === '/') {
     res.writeHead(302, { Location: BOARD_PATH, ...SECURITY_HEADERS }).end()
+    return
+  }
+  if (path === '/help' || path === '/help/') {
+    res.writeHead(302, { Location: HELP_PATH, ...SECURITY_HEADERS }).end()
     return
   }
 

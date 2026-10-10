@@ -1,152 +1,64 @@
 <!doctype html>
+<!-- Jira Board Help — Policies, Privacy &amp;amp; Accessibility. Plain HTML: open this file straight from disk, no server needed. -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Same help-&-support favicon as the guide. -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
-    <title>Jira Board Guide — Policies, Privacy &amp; Accessibility</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        --bg: #eef1f7; --bg2: #e6eaf3; --card: #ffffff; --ink: #131722; --soft: #43506a; --muted: #74809a;
-        --line: rgba(20, 28, 48, 0.12); --line2: rgba(20, 28, 48, 0.07);
-        --brand: #6d5bd0; --brand2: #3b82f6; --accent: #ec4899;
-        --ok: #16a34a; --warn: #b45309;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #11141a; --bg2: #161a21; --card: #1b1f27; --ink: #f3f6fb; --soft: #d4dbe8; --muted: #9da7b8;
-          --line: rgba(255, 255, 255, 0.14); --line2: rgba(255, 255, 255, 0.07);
-          --ok: #4ade80; --warn: #fbbf24;
-        }
-      }
-      * { box-sizing: border-box; }
-      /* --nav-h is the sticky nav's measured height (set by anchors.js, which also lands every
-         in-page link exactly); headings land 16px below it. */
-      html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h, 50px) + 16px); }
-      @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-      body {
-        margin: 0; background: var(--bg); color: var(--ink); line-height: 1.68;
-        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        -webkit-font-smoothing: antialiased;
-      }
-      nav.top {
-        position: sticky; top: 0; z-index: 50; backdrop-filter: blur(14px);
-        background: color-mix(in srgb, var(--bg) 82%, transparent);
-        border-bottom: 1px solid var(--line); padding: 10px 20px;
-      }
-      nav.top .inner { max-width: none; margin: 0 auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      nav.top .brand { font-weight: 800; font-size: 14px; margin-right: 6px; letter-spacing: -0.01em; }
-      nav.top a {
-        font-size: 12.5px; font-weight: 600; color: var(--soft); text-decoration: none;
-        padding: 5px 10px; border-radius: 999px; border: 1px solid transparent;
-      }
-      nav.top a:hover { border-color: var(--line); background: var(--card); color: var(--ink); }
-
-      header.hero {
-        text-align: center; padding: 52px 20px 30px;
-        background: radial-gradient(1100px 380px at 50% -130px, rgba(109, 91, 208, 0.28), transparent 70%);
-      }
-      .logo {
-        width: 56px; height: 56px; border-radius: 16px; display: inline-grid; place-items: center;
-        background: linear-gradient(135deg, var(--brand), var(--brand2)); font-size: 27px; color: #fff;
-        box-shadow: 0 12px 30px -10px rgba(109, 91, 208, 0.6); margin-bottom: 14px; font-weight: 800;
-      }
-      h1 { font-size: 30px; margin: 0 0 8px; letter-spacing: -0.025em; }
-      .sub { color: var(--muted); font-size: 15px; max-width: 900px; margin: 0 auto; }
-      .stamp { display: inline-block; margin-top: 14px; font-size: 12px; font-weight: 700; color: var(--soft);
-        border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 72%, transparent);
-        border-radius: 999px; padding: 5px 13px; }
-
-      .layout { max-width: none; margin: 0; padding: 0 32px 90px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 40px; align-items: start; }
-      main.content { min-width: 0; }
-      aside.toc { display: none; }
-      @media (min-width: 1080px) {
-        .layout { grid-template-columns: 232px minmax(0, 1fr); }
-        aside.toc { display: block; position: sticky; top: calc(var(--nav-h, 50px) + 22px); align-self: start; max-height: calc(100vh - var(--nav-h, 50px) - 42px); overflow-y: auto; padding: 22px 0 24px; }
-      }
-      .toc .toc-h { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 0 0 8px 13px; }
-      .toc a { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); text-decoration: none; padding: 5px 12px; border-left: 2px solid var(--line2); transition: color 0.15s, border-color 0.15s; }
-      .toc a:hover { color: var(--ink); border-left-color: var(--line); }
-      .toc a.on { color: var(--brand2); border-left-color: var(--brand2); background: color-mix(in srgb, var(--brand2) 7%, transparent); }
-
-      h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); margin: 46px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line2); }
-      h3 { font-size: 16px; margin: 18px 0 4px; }
-      .card {
-        background: var(--card); border: 1px solid var(--line); border-radius: 15px;
-        padding: 18px 22px; margin: 12px 0;
-        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 32px -24px rgba(16, 24, 40, 0.4);
-        transition: transform 0.18s ease, box-shadow 0.18s ease;
-      }
-      .card:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 18px 42px -26px rgba(16, 24, 40, 0.5); }
-      .card > :first-child { margin-top: 0; }
-      .card > :last-child { margin-bottom: 0; }
-      p { margin: 8px 0; color: var(--soft); }
-      .small { font-size: 13px; color: var(--muted); }
-      ul { color: var(--soft); padding-left: 20px; margin: 8px 0; }
-      li { margin: 4px 0; }
-      a { color: var(--brand2); }
-      b { color: var(--ink); }
-      code.inl { background: var(--line2); padding: 1.5px 6px; border-radius: 6px; font-size: 0.88em; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
-      table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 10px 0; }
-      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line2); vertical-align: top; }
-      th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
-      td { color: var(--soft); }
-      .note { border-left: 3px solid var(--brand2); background: color-mix(in srgb, var(--brand2) 8%, transparent); border-radius: 0 10px 10px 0; padding: 11px 15px; margin: 12px 0; font-size: 13.8px; color: var(--soft); }
-      .note.ok { border-left-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
-      .note.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 11%, transparent); }
-      .pill { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
-      .pill.no { color: var(--muted); background: var(--line2); }
-
-      footer.site { border-top: 1px solid var(--line); margin-top: 60px; padding: 26px 24px 34px; }
-      footer.site .inner { max-width: none; margin: 0 auto; text-align: center; }
-      footer.site .links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-bottom: 10px; }
-      footer.site .links a { font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: none; }
-      footer.site .links a:hover { color: var(--ink); }
-      footer.site .tag { font-size: 12.5px; color: var(--muted); }
-    </style>
+    <title>Jira Board Help — Policies, Privacy &amp;amp; Accessibility</title>
+    <link rel="stylesheet" href="help.css" />
   </head>
-  <body>
-    <nav class="top">
+  <body class="policies">
+    <nav class="top" aria-label="Help pages">
       <div class="inner">
-        <span class="brand">🎫 Jira Board Guide</span>
-        <a href="index.html">← Setup guide</a>
-        <a href="#privacy">Privacy</a>
-        <a href="#data">Your data</a>
-        <a href="#cookies">Cookies</a>
-        <a href="#terms">Terms</a>
-        <a href="#embeds">Embeds</a>
-        <a href="#a11y">Accessibility</a>
-        <a href="#contact">Contact</a>
+        <span class="brand"><a href="00-start-here.html">🎫 Jira Board Help</a></span>
+        <a class="nl" href="00-start-here.html">Start</a>
+        <a class="nl" href="01-requirements.html"><span class="n">1</span>Requirements</a>
+        <a class="nl" href="02-install-the-tools.html"><span class="n">2</span>Install</a>
+        <a class="nl" href="03-get-the-code-with-git.html"><span class="n">3</span>Git</a>
+        <a class="nl" href="04-configure-token-and-settings.html"><span class="n">4</span>Configure</a>
+        <a class="nl" href="05-deploy-with-docker.html"><span class="n">5</span>Deploy</a>
+        <a class="nl" href="06-ai-local-models.html"><span class="n">6</span>Local AI</a>
+        <a class="nl" href="07-ai-cloud-models-and-prices.html"><span class="n">7</span>Cloud AI</a>
+        <a class="nl" href="08-other-ways-to-run.html"><span class="n">8</span>Other ways</a>
+        <a class="nl" href="09-troubleshooting-and-faq.html"><span class="n">9</span>Troubleshooting</a>
+        <a class="nl" href="10-developer-documentation.html">Docs</a>
       </div>
     </nav>
 
-    <header class="hero">
+    <header class="hero page">
       <div class="logo">§</div>
       <h1>Policies, Privacy &amp; Accessibility</h1>
-      <p class="sub">My Jira Board is a <b>self-hosted</b>, open-source tool. These policies describe — honestly and
-        specifically — what this software does with data on <b>your</b> machine. There is no company behind it,
-        no server of ours, and no analytics.</p>
-      <span class="stamp">Last updated · 7 October 2026</span>
+      <p class="sub">My Jira Board is a <b>self-hosted</b>, open-source tool. These policies describe — honestly and specifically — what this software does with data on <b>your</b> machine. There is no company behind it, no server of ours, and no analytics.<br /><span class="stamp">Last updated · 10 October 2026</span></p>
     </header>
 
     <div class="layout">
       <aside class="toc" aria-label="On this page">
         <p class="toc-h">On this page</p>
         <a href="#privacy">Privacy Policy</a>
-        <a href="#data">Data we collect &amp; store</a>
+        <a href="#data">What data we collect, process and store</a>
         <a href="#cookies">Cookie Policy</a>
         <a href="#terms">Terms &amp; Conditions</a>
-        <a href="#embeds">Third-party embeds</a>
-        <a href="#a11y">Alt text &amp; colour contrast</a>
+        <a href="#embeds">Third-party embeds &amp; outbound connections</a>
+        <a href="#a11y">Accessibility — alt text &amp; colour contrast</a>
         <a href="#contact">Contact us</a>
+        <p class="toc-h">Guide pages</p>
+        <a href="00-start-here.html">00 · Start here</a>
+        <a href="01-requirements.html">01 · Requirements — what to install</a>
+        <a href="02-install-the-tools.html">02 · Install the tools</a>
+        <a href="03-get-the-code-with-git.html">03 · Get the code with Git</a>
+        <a href="04-configure-token-and-settings.html">04 · Configure your token and settings</a>
+        <a href="05-deploy-with-docker.html">05 · Deploy with Docker</a>
+        <a href="06-ai-local-models.html">06 · AI with local models</a>
+        <a href="07-ai-cloud-models-and-prices.html">07 · AI with cloud models and prices</a>
+        <a href="08-other-ways-to-run.html">08 · Other ways to run</a>
+        <a href="09-troubleshooting-and-faq.html">09 · Troubleshooting and FAQ</a>
+        <a href="10-developer-documentation.html">10 · Developer documentation</a>
+        <a href="legal-privacy-and-accessibility.html" aria-current="page">Policies &amp; privacy</a>
       </aside>
 
       <main class="content">
-
-      <!-- ── PRIVACY ─────────────────────────────────────────────── -->
-      <h2 id="privacy">Privacy Policy</h2>
+<h2 id="privacy">Privacy Policy</h2>
       <div class="card">
         <p><b>The short version:</b> everything runs on your computer. This application has no backend of its
           own, sends nothing to the project's authors, and contains no analytics, telemetry, crash reporting,
@@ -178,9 +90,7 @@
           can perform yourself — see <a href="#data">deleting your data</a>. Nothing needs to be requested from
           anyone.</p>
       </div>
-
-      <!-- ── DATA ────────────────────────────────────────────────── -->
-      <h2 id="data">What data we collect, process and store</h2>
+<h2 id="data">What data we collect, process and store</h2>
       <div class="card">
         <p>"Collect" here always means <b>your instance fetching, with your tokens, onto your disk</b>. This is
           the complete inventory — there is no other store.</p>
@@ -192,13 +102,13 @@
             <td><code class="inl">jira-intern/data.json</code> / <code class="inl">data.js</code>,
               per-ticket <code class="inl">cache/</code></td>
             <td>Rendering your board, the Completed archive and the Raised-by-me view</td>
-            <td><span class="pill no">No</span> (only to a cloud AI provider if you enable one)</td>
+            <td><span class="badge no">No</span> (only to a cloud AI provider if you enable one)</td>
           </tr>
           <tr>
             <td>Bitbucket code data: branch names, PR titles, reviewers, approval states</td>
             <td>Same files, plus <code class="inl">reports/</code> for PR-readiness reports</td>
             <td>PR badges and ship/no-ship reports</td>
-            <td><span class="pill no">No</span> (same AI exception)</td>
+            <td><span class="badge no">No</span> (same AI exception)</td>
           </tr>
           <tr>
             <td>Your credentials: Jira/Bitbucket/Confluence personal access tokens, optional AI API keys</td>
@@ -212,19 +122,19 @@
             <td>Your identity settings: display name, account id, company URLs</td>
             <td><code class="inl">~/.ai/config.json</code> — outside the repository</td>
             <td>Matching "assigned to me" / "raised by me"</td>
-            <td><span class="pill no">No</span></td>
+            <td><span class="badge no">No</span></td>
           </tr>
           <tr>
             <td>Run logs (timestamps, ticket keys, fetch outcomes)</td>
             <td><code class="inl">jira-intern/logs/</code>, <code class="inl">_STATUS.md</code></td>
             <td>Troubleshooting your own runs</td>
-            <td><span class="pill no">No</span></td>
+            <td><span class="badge no">No</span></td>
           </tr>
           <tr>
             <td>UI preferences (theme, feature toggles, parallelism, archived keys)</td>
             <td>Your browser's <code class="inl">localStorage</code> + <code class="inl">jira-intern/.settings.json</code></td>
             <td>Remembering your choices</td>
-            <td><span class="pill no">No</span></td>
+            <td><span class="badge no">No</span></td>
           </tr>
         </table>
         <h3>Retention</h3>
@@ -241,9 +151,7 @@
           <li>AI models &amp; queues: <code class="inl">docker volume rm jira-ai-models</code>.</li>
         </ul>
       </div>
-
-      <!-- ── COOKIES ─────────────────────────────────────────────── -->
-      <h2 id="cookies">Cookie Policy</h2>
+<h2 id="cookies">Cookie Policy</h2>
       <div class="card">
         <p><b>This application sets no cookies. None.</b> There is no consent banner because there is nothing to
           consent to: no advertising cookies, no analytics cookies, no third-party cookies, no fingerprinting.</p>
@@ -255,14 +163,12 @@
           <tr><td><code class="inl">jb-settings</code></td><td>Theme policy, feature toggles, AI level, parallelism, toast prefs</td><td>Until you clear it</td></tr>
           <tr><td><code class="inl">jb-archived</code></td><td>Ticket keys you manually moved to Completed</td><td>Pruned automatically as tickets leave the dump</td></tr>
           <tr><td><code class="inl">jb-completed-show-context</code></td><td>The Completed view's "Mine only" toggle</td><td>Until you clear it</td></tr>
-          <tr><td><code class="inl">jb-guide-os</code></td><td>Which OS tab you picked in the setup guide</td><td>Until you clear it</td></tr>
+          <tr><td><code class="inl">jb-guide-os</code></td><td>Which OS tab you picked in this help guide</td><td>Until you clear it</td></tr>
         </table>
         <p class="small">Clearing: browser settings → site data for <code class="inl">localhost:4321</code> →
           remove. The board falls back to defaults on next load, losing nothing but preferences.</p>
       </div>
-
-      <!-- ── TERMS ───────────────────────────────────────────────── -->
-      <h2 id="terms">Terms &amp; Conditions</h2>
+<h2 id="terms">Terms &amp; Conditions</h2>
       <div class="card">
         <h3>Licence</h3>
         <p>My Jira Board is open-source software released under the <b>MIT License</b> (see the
@@ -291,12 +197,10 @@
           project — <b>not affiliated with, endorsed by, or supported by Atlassian</b> (or any AI provider it can
           optionally talk to).</p>
         <h3>Changes</h3>
-        <p>These documents live in the repository (<code class="inl">docs/legal.html</code>) and change only via
+        <p>These documents live in the repository (<code class="inl">help/legal-privacy-and-accessibility.html</code>) and change only via
           commits — the full history of every revision is in Git.</p>
       </div>
-
-      <!-- ── EMBEDS ──────────────────────────────────────────────── -->
-      <h2 id="embeds">Third-party embeds &amp; outbound connections</h2>
+<h2 id="embeds">Third-party embeds &amp; outbound connections</h2>
       <div class="card">
         <p><b>There are no third-party embeds.</b> No CDN scripts, no web fonts fetched from font services, no
           iframes, no social widgets, no map or video embeds, no remote images. The board is a single
@@ -314,9 +218,7 @@
           Face, GitHub). Following a link is a normal page visit governed by that site's own policies — nothing is
           loaded from them until you click.</p>
       </div>
-
-      <!-- ── ACCESSIBILITY ───────────────────────────────────────── -->
-      <h2 id="a11y">Accessibility — alt text &amp; colour contrast</h2>
+<h2 id="a11y">Accessibility — alt text &amp; colour contrast</h2>
       <div class="card">
         <p>The board aims for <b>WCAG 2.1 AA</b>. Accessibility work that is already in place:</p>
         <h3>Alt text &amp; semantics</h3>
@@ -353,9 +255,7 @@
           something else? Please <a href="#contact">report it</a> — accessibility issues are treated as bugs,
           not feature requests.</div>
       </div>
-
-      <!-- ── CONTACT ─────────────────────────────────────────────── -->
-      <h2 id="contact">Contact us</h2>
+<h2 id="contact">Contact us</h2>
       <div class="card">
         <p>This is an open-source project — the repository is the front door, and issues are read by the
           maintainer:</p>
@@ -371,26 +271,22 @@
           the right first contact for data questions about that instance — they hold its files.</p>
       </div>
 
+      
+      <footer>
+        <div class="flinks">
+          <a href="legal-privacy-and-accessibility.html#privacy">Privacy Policy</a>
+          <a href="legal-privacy-and-accessibility.html#terms">Terms &amp; Conditions</a>
+          <a href="legal-privacy-and-accessibility.html#cookies">Cookie Policy</a>
+          <a href="legal-privacy-and-accessibility.html#data">Your data</a>
+          <a href="legal-privacy-and-accessibility.html#embeds">Third-party embeds</a>
+          <a href="legal-privacy-and-accessibility.html#a11y">Accessibility</a>
+          <a href="legal-privacy-and-accessibility.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking · works offline</div>
+      </footer>
       </main>
     </div>
 
-    <footer class="site">
-      <div class="inner">
-        <div class="links">
-          <a href="index.html">Setup guide</a>
-          <a href="#privacy">Privacy</a>
-          <a href="#data">Your data</a>
-          <a href="#cookies">Cookies</a>
-          <a href="#terms">Terms</a>
-          <a href="#embeds">Embeds</a>
-          <a href="#a11y">Accessibility</a>
-          <a href="#contact">Contact</a>
-        </div>
-        <div class="tag">My Jira Board · self-hosted &amp; open source (MIT) · no cookies, no tracking, no telemetry</div>
-      </div>
-    </footer>
-
-    <!-- In-page jumps and the sidebar highlight. -->
-    <script src="anchors.js"></script>
+    <script src="help.js"></script>
   </body>
 </html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<!-- Jira Board Help — Configure your token and settings. Plain HTML: open this file straight from disk, no server needed. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
+    <title>Jira Board Help — Configure your token and settings</title>
+    <link rel="stylesheet" href="help.css" />
+  </head>
+  <body>
+    <nav class="top" aria-label="Help pages">
+      <div class="inner">
+        <span class="brand"><a href="00-start-here.html">🎫 Jira Board Help</a></span>
+        <a class="nl" href="00-start-here.html">Start</a>
+        <a class="nl" href="01-requirements.html"><span class="n">1</span>Requirements</a>
+        <a class="nl" href="02-install-the-tools.html"><span class="n">2</span>Install</a>
+        <a class="nl" href="03-get-the-code-with-git.html"><span class="n">3</span>Git</a>
+        <a class="nl" href="04-configure-token-and-settings.html" aria-current="page"><span class="n">4</span>Configure</a>
+        <a class="nl" href="05-deploy-with-docker.html"><span class="n">5</span>Deploy</a>
+        <a class="nl" href="06-ai-local-models.html"><span class="n">6</span>Local AI</a>
+        <a class="nl" href="07-ai-cloud-models-and-prices.html"><span class="n">7</span>Cloud AI</a>
+        <a class="nl" href="08-other-ways-to-run.html"><span class="n">8</span>Other ways</a>
+        <a class="nl" href="09-troubleshooting-and-faq.html"><span class="n">9</span>Troubleshooting</a>
+        <a class="nl" href="10-developer-documentation.html">Docs</a>
+      </div>
+    </nav>
+
+    <header class="hero page">
+      <div class="logo">🔑</div>
+      <span class="step-of">Step 4 of 9</span><h1>Configure your token and settings</h1>
+      <p class="sub">Your Jira token (secrets file) and your personal config — two files, once.</p>
+    </header>
+
+    <div class="layout">
+      <aside class="toc" aria-label="On this page">
+        <p class="toc-h">On this page</p>
+        <a href="#secrets">1 · Your Jira token — the secrets file</a>
+        <a href="#personal-config">2 · Your personal config</a>
+        <a href="#ai-catalogs">3 · The AI model lists (optional)</a>
+        <p class="toc-h">Guide pages</p>
+        <a href="00-start-here.html">00 · Start here</a>
+        <a href="01-requirements.html">01 · Requirements — what to install</a>
+        <a href="02-install-the-tools.html">02 · Install the tools</a>
+        <a href="03-get-the-code-with-git.html">03 · Get the code with Git</a>
+        <a href="04-configure-token-and-settings.html" aria-current="page">04 · Configure your token and settings</a>
+        <a href="05-deploy-with-docker.html">05 · Deploy with Docker</a>
+        <a href="06-ai-local-models.html">06 · AI with local models</a>
+        <a href="07-ai-cloud-models-and-prices.html">07 · AI with cloud models and prices</a>
+        <a href="08-other-ways-to-run.html">08 · Other ways to run</a>
+        <a href="09-troubleshooting-and-faq.html">09 · Troubleshooting and FAQ</a>
+        <a href="10-developer-documentation.html">10 · Developer documentation</a>
+        <a href="legal-privacy-and-accessibility.html">Policies &amp; privacy</a>
+      </aside>
+
+      <main class="content">
+      <h2 id="secrets">1 · Your Jira token — the secrets file</h2>
+      <div class="step">
+        <div class="step-h"><span class="num">1</span><h3>Create your secrets file</h3></div>
+        <p class="small">macOS / Linux:</p>
+        <pre><button class="copy">Copy</button>mkdir -p ~/.cursor
+cp setup/mcp-secrets.env.template ~/.cursor/mcp-secrets.env
+chmod 600 ~/.cursor/mcp-secrets.env</pre>
+        <p class="small">Windows (PowerShell):</p>
+        <pre><button class="copy">Copy</button>New-Item -ItemType Directory -Force "$HOME\.cursor" | Out-Null
+Copy-Item "setup\mcp-secrets.env.template" "$HOME\.cursor\mcp-secrets.env"</pre>
+        <p class="small">Now open that file and set at least these two lines:</p>
+        <pre><button class="copy">Copy</button>JIRA_URL=https://jira.your-company.example
+JIRA_PERSONAL_TOKEN=your-token-here</pre>
+      </div>
+
+      <h2 id="personal-config">2 · Your personal config</h2>
+      <div class="step">
+        <div class="step-h"><span class="num">2</span><h3>Create your personal config</h3></div>
+        <p class="small">Your identity and company URLs live <b>outside the repo</b>, at
+          <code class="inl">~/.ai/config.json</code>, so they never enter git.</p>
+        <p class="small">macOS / Linux:</p>
+        <pre><button class="copy">Copy</button>mkdir -p ~/.ai
+cp setup/config.example.json ~/.ai/config.json
+chmod 600 ~/.ai/config.json</pre>
+        <p class="small">Windows (PowerShell):</p>
+        <pre><button class="copy">Copy</button>New-Item -ItemType Directory -Force "$HOME\.ai" | Out-Null
+Copy-Item "setup\config.example.json" "$HOME\.ai\config.json"</pre>
+        <p class="small">Edit it — your <b>name exactly as Jira shows it</b> (that's how "assigned to me"
+          matches), your company URLs, and the footer branding. Every key is documented in
+          <a href="developer-doc-viewer.html?f=CONFIG.md">docs/CONFIG.md</a>. <b>No tokens go in this file.</b></p>
+        <div class="note"><b>Config precedence:</b> tracked defaults from
+          <code class="inl">config/jira-board.config.json</code>, then a sparse
+          <code class="inl">$AI_CONFIG_FILE</code> or <code class="inl">~/.ai/config.json</code>
+          override, then saved runtime Settings. Check with
+          <code class="inl">node jira-intern/local-runner/config.mjs path</code>.</div>
+      </div>
+
+      <h2 id="ai-catalogs">3 · The AI model lists (optional)</h2>
+      <div class="step">
+        <div class="step-h"><span class="num">3</span><h3>Local and cloud model lists</h3></div>
+        <p class="small">Every local LLM the intern can run — Ollama tags <b>and</b> direct GGUF downloads —
+          lives in <code class="inl">ai-intern/models.json</code>. Settings and this guide both read that file.
+          When a new model ships, add an object there (see the <code class="inl">howto</code> field at the top
+          of the file) and restart <code class="inl">AI-Intern</code>. The <b>cloud</b> models (Cursor, Claude, Gemini),
+          their efforts and what counts as costly are listed in <code class="inl">ai-intern/cloud-models.json</code> —
+          see <a href="07-ai-cloud-models-and-prices.html#cloud-models-file">page 07</a>.</p>
+        <p class="small">Host Ollama (Settings checkbox on): <a href="06-ai-local-models.html#ai-ollama">install, pull, where files live</a>.
+          Checkbox off: <a href="06-ai-local-models.html#ai-model-files">download a GGUF, where to place it, how to register it</a>.</p>
+      </div>
+
+      
+      <div class="note warn"><b>Never commit these two files.</b> They live outside the repository on purpose. If you
+        ever see <code class="inl">mcp-secrets.env</code> or a <code class="inl">config.json</code> with your name in
+        <code class="inl">git status</code>, stop and move it back to your home folder.</div>
+      <nav class="pager" aria-label="Previous and next page">
+        <a class="prev" href="03-get-the-code-with-git.html"><small>← Previous · 03</small><b>Get the code with Git</b></a>
+        <a class="next" href="05-deploy-with-docker.html"><small>Next · 05 →</small><b>Deploy with Docker</b></a>
+      </nav>
+      <footer>
+        <div class="flinks">
+          <a href="legal-privacy-and-accessibility.html#privacy">Privacy Policy</a>
+          <a href="legal-privacy-and-accessibility.html#terms">Terms &amp; Conditions</a>
+          <a href="legal-privacy-and-accessibility.html#cookies">Cookie Policy</a>
+          <a href="legal-privacy-and-accessibility.html#data">Your data</a>
+          <a href="legal-privacy-and-accessibility.html#embeds">Third-party embeds</a>
+          <a href="legal-privacy-and-accessibility.html#a11y">Accessibility</a>
+          <a href="legal-privacy-and-accessibility.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking · works offline</div>
+      </footer>
+      </main>
+    </div>
+
+    <script src="help.js"></script>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PrReport } from '../lib/reportTypes'
 import { pollNow } from '../lib/statusPoller'
 import {
@@ -43,6 +43,7 @@ export function useReports({
 }) {
   const [index, setIndex] = useState<PrReportsIndex | null>(null)
   const [generating, setGenerating] = useState<ReadonlySet<string>>(EMPTY)
+  const [enriching, setEnriching] = useState<ReadonlySet<string>>(EMPTY)
   const [openReport, setOpenReport] = useState<PrReport | null>(null)
   const [loadingKey, setLoadingKey] = useState<string | null>(null)
   const openKey = useRef<string | null>(null)
@@ -76,6 +77,9 @@ export function useReports({
     const nextEnriching = new Set(status.reportsEnriching ?? [])
     const enrichedDone = [...prev.enriching].some((k) => !nextEnriching.has(k))
     seen.current = { generating: nextGenerating, enriching: nextEnriching }
+    // Queued AI passes of an intern that is down are not progress — nothing will run them (same rule as the poller).
+    const live = status.ai?.down ? EMPTY : nextEnriching
+    setEnriching((cur) => (sameKeys(cur, live) ? cur : live))
     if (sameKeys(prev.generating, nextGenerating)) {
       if (enrichedDone) void refreshIndex()
       return
@@ -154,5 +158,10 @@ export function useReports({
     void pollNow()
   }, [demo, toast])
 
-  return { index, generating, openReport, loadingKey, openReportFor, closeReport, generateOne, generateBulk, stopAll }
+  // Everything still being worked on, base report OR AI pass. The base report is quick and the server's own
+  // "generating" list empties as soon as the last one is built — the AI pass that follows is the slow part,
+  // and a progress bar that only watched the first half read "done" while the intern was still running.
+  const working = useMemo<ReadonlySet<string>>(() => (enriching.size === 0 ? generating : new Set([...generating, ...enriching])), [generating, enriching])
+
+  return { index, generating, working, openReport, loadingKey, openReportFor, closeReport, generateOne, generateBulk, stopAll }
 }

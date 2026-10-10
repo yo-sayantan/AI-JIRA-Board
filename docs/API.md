@@ -38,7 +38,8 @@ params unless marked `body:`.
 | Route | Notes |
 |---|---|
 | `GET /` | 302 → `/dist/index.html` |
-| `GET /dist/*` · `/docs/*` · `/setup/*` | file; ETag / 304, gzip, `Cache-Control: no-cache` |
+| `GET /dist/*` · `/help/*` · `/docs/*` · `/setup/*` | file; ETag / 304, gzip, `Cache-Control: no-cache` |
+| `GET /help` · `/help/` | 302 → `/help/00-start-here.html` (the help guide) |
 | `GET /ai-intern/models.json` | file (the local model catalogue) |
 | `GET /jira-intern/data.json` · `/jira-intern/data.js` | file, `Cache-Control: no-store` — Jira data never hits the disk cache |
 | `GET /jira-intern/reports/index.js` | file, `Cache-Control: no-store` |
@@ -80,7 +81,7 @@ A report summary is `{ key, title, timeZone, generatedAt, enrichedAt, enriched, 
 
 Accepted fields (`server/settings.mjs` `SCHEMA`): `aiLevel` (none/low/moderate/full),
 `aiBackend` (local/cloud), `aiLocalModel` (≤ 80 chars), `aiCloudModel` (≤ 128), `aiCloudProvider`
-(claude/cursor/gemini), `aiCloudEffort` (low/medium), `aiUseHostOllama`, `reportParallel` (1–6),
+(claude/cursor/gemini), `aiCloudEffort` (low/medium/high/auto), `aiUseHostOllama`, `reportParallel` (1–10),
 `archiveParallel` (1–16), `refreshParallel` (1–16), `activeRefresh` (off/daily/twice-daily),
 `fullRefresh` and `reportRefresh` (off/daily/weekly/twice-weekly). Model ids must match
 `^[\w.:/-]*$`. Unknown keys are ignored; one invalid value rejects the whole patch.

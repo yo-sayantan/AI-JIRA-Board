@@ -36,12 +36,13 @@ AI agent to make a correct change without re-deriving the architecture.
 | `jira-intern/local-runner/` | Shell entrypoints the server invokes: `run-intern.sh`, `update-completed.sh`, `refresh-ticket.sh`, `refresh-raised.sh`, `pr-report.sh`; `runner-env.sh` (env, locks, timeouts), `config.mjs` (config merge → shellenv/prompts), `sync-datajs.mjs`. |
 | `server/` (entry: `server/serve.mjs`) | Zero-dependency Node server: static allowlist + the `/api/*` routes (jobs, reports, settings, AI proxy, status). |
 | `docker/` | `Dockerfile` (build context is the repo root — `docker-compose.yml` sets `dockerfile: docker/Dockerfile`) and `docker-entrypoint.sh`. `docker-compose.yml` stays at the root on purpose. |
-| `scripts/` | `start-jira-board.sh` (host build + Docker deploy), `open-guide.sh` / `open-guide.bat` (open `docs/index.html`, no server) and `Open Board.html`. |
+| `scripts/` | `start-jira-board.sh` (host build + Docker deploy), `open-guide.sh` / `open-guide.bat` (open `help/00-start-here.html`, no server), `build-help-data.mjs` (writes `help/help-data.js`; `npm run build` runs it first) and `Open Board.html`. |
 | `tooling/` | `vite.config.ts`, `vitest.config.ts` — selected by `--config` in the npm scripts. `src/tsconfig.json` is the TypeScript config; `.claude/CLAUDE.md` is the agent entry point. |
-| `ai-intern/` | The AI worker container: `worker.py` (job queue + HTTP; Ollama local or Claude/Cursor/Gemini cloud), `models.json` (local model catalog). |
+| `ai-intern/` | The AI worker container: `worker.py` (job queue + HTTP; Ollama local or Claude/Cursor/Gemini cloud), `models.json` (local model catalog), `cloud-models.json` (THE cloud model list: models, efforts, costly line) + `cloud_config.py`, `cursor-prices.json` (Cursor's price table — reference data). |
 | `config/` | `jira-board.config.json` — tracked, **generic** project defaults (+ JSON schema). Personal values live OUTSIDE the repo in `~/.ai/config.json`. |
 | `setup/` | Templates ONLY (secrets, personal config, MCP, Desktop launcher) — the guide for them is `docs/SETUP.md`. Shipped into the Docker image. |
-| `docs/` | **All** documentation lives here (see index at the bottom): the suite, `index.html` (served Setup Guide), `doc.html` (styled viewer for the .md files), `legal.html` (policies). The only `.md` files outside are runtime inputs, not docs: `jira-intern/prompts/*.md` (LLM prompts read by scripts) and `.github/pull_request_template.md` (GitHub requires its location). |
+| `help/` | **The help guide** (the board's **?** button): plain HTML pages that open straight from disk, numbered in deploy order — `00-start-here.html` … `10-developer-documentation.html`, `developer-doc-viewer.html` (renders `docs/*.md`), `legal-privacy-and-accessibility.html`. One `help.css`, one `help.js`, and `help-data.js` — a GENERATED copy of `ai-intern/models.json`, `cursor-prices.json`, `cloud-models.json` and `docs/*.md` so tables and docs work offline (`scripts/build-help-data.mjs`; a test fails when it is stale). |
+| `docs/` | **Developer documentation** (markdown, see index at the bottom). The only `.md` files outside are runtime inputs, not docs: `jira-intern/prompts/*.md` (LLM prompts read by scripts) and `.github/pull_request_template.md` (GitHub requires its location). |
 | `jira-intern/demo/` | Demo mode's sample board: `data.json` (the source — tracked in git, unlike the real dump), `tickets/*.json` (per-ticket mirror, `npm run demo:split`), `README.md`. |
 | `src/demo/` | Demo mode's code: loads + re-dates `jira-intern/demo/data.json`, two canned PR reports, and a browser-side mirror of the move gates. Driven by the `demoMode` feature toggle; `runner.ts::setDemoMode` blocks every server call while it is on. |
 | `tests/` | Python unittests (`npm test`). |
@@ -181,6 +182,14 @@ deployed from** (see `docs/DEPLOYMENT.md` → "the data mount follows the deploy
   API, the board decides membership with `isNextSprint` (a dated future sprint or READY / REFINEMENT; the
   optimistic `Ticket.queued` flag overrides it between a drop and the refresh), and `moveRules.laneBlocker` /
   `lane_blocker` keep it one-way (4 entrances, only To Do out). Mirror both sides.
+- The cloud model list is `ai-intern/cloud-models.json` (read by `cloud_config.py`, re-read on edit). Don't add model
+  ids or price filters to `worker.py`; `cursor-prices.json` is reference data only. A model the worker may run is one
+  Settings offers (`_cloud_allowed`), at an effort the file lists for it (`_effort_for`).
+- The help guide must keep working from `file://`: no `fetch` for anything it needs (it reads `help-data.js` via
+  `<script src>`, and only refreshes from the live files when served), no CDN or web fonts, no absolute paths.
+  `tests/test_help_pages.py` checks every link and anchor, the shared nav / sidebar / pager on every page, and that
+  `help-data.js` matches its sources — after editing `docs/*.md` or the model JSONs, run `npm run build` (or
+  `npm run help:data`). A new page: next free number, plain lowercase name, add it to every page's nav (the test says where).
 - Native drag with ⌥ held asks the browser for a COPY: cards set `effectAllowed = 'copyMove'` and zones set
   `dropEffect = 'move'`, or an Option-drop is refused before the board sees it.
 - localStorage keys in use: `jb-settings`, `jb-archived`, `jb-completed-show-context`,

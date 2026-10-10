@@ -47,8 +47,8 @@ Right-aligned: the indigo **Raised open/total** chip and the gold **Completed N*
 - A **bare number is an identifier**, matched only against ticket numbers (own, parent's,
   sub-tickets') and PR ids — never free text. `611` prefix-matches `6115`; single digits match
   exactly only.
-- `FIDM-6115` / `fidm6115` count as exact key matches (lazy project parse so `fidm6115` reads as
-  `fidm`+`6115`).
+- `PROJ-6115` / `proj6115` count as exact key matches (lazy project parse so `proj6115` reads as
+  `proj`+`6115`).
 - Everything else is token-AND substring search over a cached haystack (title, status, people,
   labels, branches, PR metadata, sub-tickets). Rows are indexed once per load (`WeakMap`).
 
@@ -169,7 +169,7 @@ raised rows queue after active tickets. Render path heals JSON-wrapped model out
 - **Refresh board** — the quick daily fetch; the button IS its own progress bar (fill + x/y count
   from `.progress.json`). **Archive menu** — full/year/since/key rebuild with live progress and
   Stop. **Reports menu** — bulk PR-report generation with scope.
-- Settings gear, help (?) → the served Setup Guide, theme toggle.
+- Settings gear, help (?) → the help guide (`help/00-start-here.html`; plain pages, also open from disk), theme toggle.
 - `src/components/header/Header.tsx`, `ArchiveMenu.tsx`, `ReportsMenu.tsx`.
 
 ## Settings
@@ -190,7 +190,7 @@ Overlay with three areas (`src/components/settings/Settings.tsx`):
   shortcuts, refresh on open, auto-refresh, motion & animations, the AI-Ollama container), generated from
   `src/lib/settings.ts::FEATURES` (entry + colour/icon in `FEATURE_STYLE`; TypeScript enforces both).
 - **AI usage** — level None/Low/Moderate/Max, backend local (Ollama tag dropdown, host-Ollama
-  checkbox, model pulls with live progress) or cloud (provider/model/effort), parallelism knobs,
+  checkbox, model pulls with live progress) or cloud (provider / model / effort — the models, their efforts Low · Medium · High · Auto and the ⚠ costly line all come from `ai-intern/cloud-models.json`), parallelism knobs (PR reports 1–10 at once),
   server cadences. Server-relevant keys mirror to `jira-intern/.settings.json`.
 
 ## Live jobs & notifications
@@ -205,4 +205,4 @@ Overlay with three areas (`src/components/settings/Settings.tsx`):
 
 `/` focuses search, `r` refreshes, Esc closes the top layer; disabled while typing/overlays and
 toggleable. Reduce-motion honoured via the animations toggle (`jb-no-anim`). Colour is never the
-only signal (labels/glyphs everywhere). See `docs/legal.html#a11y` for the public statement.
+only signal (labels/glyphs everywhere). See `help/legal-privacy-and-accessibility.html#a11y` for the public statement.

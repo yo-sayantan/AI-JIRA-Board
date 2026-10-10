@@ -112,7 +112,7 @@ LLM-agent fallback may read Confluence through MCP (policy string from `config.m
 | `GET /api/reports` · `GET /api/reports/<KEY>` · `POST /api/report?key=K` · `POST /api/reports/bulk?scope=…` · `POST /api/reports/stop` | PR-report index / one report / generate one / bulk / stop. |
 | `GET|POST /api/settings` | Machine-wide settings (mirrored to `.settings.json`). |
 | `GET /api/ai-status` · `GET /api/ai-models` · `GET /api/cloud-models` · `POST /api/ai-models/pull` · `POST /api/ai-jobs` | Proxied to the AI intern. |
-| static | Allowlist only: `/dist/`, `/docs/`, `/setup/`, `/ai-intern/models.json`, `/jira-intern/data.js(on)`, `/jira-intern/reports/index.js`. Gzip + ETag/304, in-memory cache keyed by mtime. |
+| static | Allowlist only: `/dist/`, `/help/` (`/help` → `/help/00-start-here.html`), `/docs/`, `/setup/`, `/ai-intern/{models,cursor-prices,cloud-models}.json`, `/jira-intern/data.js(on)`, `/jira-intern/reports/index.js`. Gzip + ETag/304, in-memory cache keyed by mtime. |
 
 Client side, every route has a typed wrapper in `src/lib/runner.ts`; `src/lib/statusPoller.ts`
 multiplexes all watchers onto ONE `/api/intern-status` request at the fastest subscribed rate.

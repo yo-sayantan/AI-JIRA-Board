@@ -1,0 +1,213 @@
+<!doctype html>
+<!-- Jira Board Help — AI with local models. Plain HTML: open this file straight from disk, no server needed. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
+    <title>Jira Board Help — AI with local models</title>
+    <link rel="stylesheet" href="help.css" />
+  </head>
+  <body>
+    <nav class="top" aria-label="Help pages">
+      <div class="inner">
+        <span class="brand"><a href="00-start-here.html">🎫 Jira Board Help</a></span>
+        <a class="nl" href="00-start-here.html">Start</a>
+        <a class="nl" href="01-requirements.html"><span class="n">1</span>Requirements</a>
+        <a class="nl" href="02-install-the-tools.html"><span class="n">2</span>Install</a>
+        <a class="nl" href="03-get-the-code-with-git.html"><span class="n">3</span>Git</a>
+        <a class="nl" href="04-configure-token-and-settings.html"><span class="n">4</span>Configure</a>
+        <a class="nl" href="05-deploy-with-docker.html"><span class="n">5</span>Deploy</a>
+        <a class="nl" href="06-ai-local-models.html" aria-current="page"><span class="n">6</span>Local AI</a>
+        <a class="nl" href="07-ai-cloud-models-and-prices.html"><span class="n">7</span>Cloud AI</a>
+        <a class="nl" href="08-other-ways-to-run.html"><span class="n">8</span>Other ways</a>
+        <a class="nl" href="09-troubleshooting-and-faq.html"><span class="n">9</span>Troubleshooting</a>
+        <a class="nl" href="10-developer-documentation.html">Docs</a>
+      </div>
+    </nav>
+
+    <header class="hero page">
+      <div class="logo">🧠</div>
+      <span class="step-of">Step 6 of 9 · optional</span><h1>AI with local models</h1>
+      <p class="sub">The AI Intern, host Ollama, downloading a GGUF model, adding a new model.</p>
+    </header>
+
+    <div class="layout">
+      <aside class="toc" aria-label="On this page">
+        <p class="toc-h">On this page</p>
+        <a href="#ai-intern">The AI Intern — what it is</a>
+        <a href="#ai-ollama">Host Ollama — install, pull, deploy</a>
+        <a href="#ai-model-files">Download a GGUF — place, register, trigger</a>
+        <a href="#add-model">Add a newly released model</a>
+        <p class="toc-h">Guide pages</p>
+        <a href="00-start-here.html">00 · Start here</a>
+        <a href="01-requirements.html">01 · Requirements — what to install</a>
+        <a href="02-install-the-tools.html">02 · Install the tools</a>
+        <a href="03-get-the-code-with-git.html">03 · Get the code with Git</a>
+        <a href="04-configure-token-and-settings.html">04 · Configure your token and settings</a>
+        <a href="05-deploy-with-docker.html">05 · Deploy with Docker</a>
+        <a href="06-ai-local-models.html" aria-current="page">06 · AI with local models</a>
+        <a href="07-ai-cloud-models-and-prices.html">07 · AI with cloud models and prices</a>
+        <a href="08-other-ways-to-run.html">08 · Other ways to run</a>
+        <a href="09-troubleshooting-and-faq.html">09 · Troubleshooting and FAQ</a>
+        <a href="10-developer-documentation.html">10 · Developer documentation</a>
+        <a href="legal-privacy-and-accessibility.html">Policies &amp; privacy</a>
+      </aside>
+
+      <main class="content">
+<h2 id="ai-intern">The AI Intern — what it is</h2>
+      <div class="card">
+        <h3>Two containers, one command</h3>
+        <p><code class="inl">docker compose up -d --build</code> starts project <b>JIRA-Project</b> with <b>JIRA-Board</b> (fetch + UI), <b>AI-Ollama</b>, and
+          <b>AI-Intern</b> (report enrichment, ticket briefs, model download). Both stay up with
+          <code class="inl">restart: unless-stopped</code>. Refresh and Regenerate honour Settings — you do not
+          need a host terminal for AI.</p>
+        <p class="small">Settings → AI usage: <b>None / Low / Moderate / Max</b>, then <b>Local</b> or <b>Cloud</b>.
+          Max is the product name for the stored value <code class="inl">full</code> (longest timeout).
+          Local models are a <b>dropdown</b>. If the chosen tag is already on disk, that is enough.
+          If it is not, the download icon beside the list queues a pull. The <b>?</b> next to the list
+          opens <a href="#ai-model-files">GGUF models</a> — download a file, place it, register it. For Cloud AI
+          the <b>i</b> next to the model list opens <a href="07-ai-cloud-models-and-prices.html#ai-cloud-prices">Cloud prices</a>.</p>
+        <p class="small">The catalog of every local LLM (tags + download links) is
+          <code class="inl">ai-intern/models.json</code> — add a row there when a new model is released.
+          Jump: <a href="#ai-ollama">Host Ollama</a> · <a href="#ai-model-files">GGUF files</a>.</p>
+      </div>
+
+      <h2 id="ai-ollama">Host Ollama — install, pull, deploy</h2>
+      <div class="card">
+        <h3>When the Host Ollama checkbox is on</h3>
+        <p class="small">Settings → Local AI → tick <b>Host Ollama</b>. The intern then talks to
+          Ollama.app on this Mac (Metal) at <code class="inl">host.docker.internal:11434</code> instead of
+          the Linux Docker VM (CPU). Use this for 14B+ if you can, and for every 32B / 70B tag.</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">1</span><h3>Install Ollama and leave it running</h3></div>
+        <p class="small">Download <a href="https://ollama.com/download">Ollama.app</a>, open it once, and keep
+          it in the menu bar. First-run will listen on <code class="inl">127.0.0.1:11434</code>.</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">2</span><h3>Pull a model (or let Settings do it)</h3></div>
+        <p class="small">Easiest: pick the tag in Settings and click the download icon. Same thing from a terminal:</p>
+        <pre><button class="copy">Copy</button>ollama pull qwen2.5-coder:7b</pre>
+        <p class="small">Weights land in <code class="inl">~/.ollama/models</code>. Do not copy blobs into that
+          tree by hand — Ollama owns it. Catalog: <a href="https://ollama.com/library">ollama.com/library</a>.
+          Default tag: <code class="inl">qwen2.5-coder:7b</code>.</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">3</span><h3>Trigger it from the board</h3></div>
+        <p class="small">Host Ollama on, model selected (no download icon once it is installed), AI usage not
+          None. Then <b>Regenerate</b> a PR report or <b>Refresh</b> — AI-Intern enqueues enrichment
+          against that tag. Idle status in Settings should read
+          <code class="inl">Idle · local · &lt;tag&gt;</code>.</p>
+      </div>
+      <div class="card">
+        <h3>Ollama library links (from the catalog)</h3>
+        <p class="small">These rows come from <code class="inl">ai-intern/models.json</code>.</p>
+        <p class="data-src" data-src-for="models" data-file="ai-intern/models.json"></p>
+        <table>
+          <thead>
+            <tr><th>Model</th><th>Tag</th><th>RAM</th><th>Pull</th></tr>
+          </thead>
+          <tbody id="ollama-model-rows">
+            <tr><td colspan="4">Loading the model list… (this needs JavaScript; the list itself is <code class="inl">ai-intern/models.json</code>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="ai-model-files">Download a GGUF — place, register, trigger</h2>
+      <div class="card">
+        <h3>When Host Ollama is off</h3>
+        <p class="small">The intern uses the <code class="inl">AI-Ollama</code> container. You can still
+          skip <code class="inl">ollama pull</code> and drop in a file you already have — but a raw
+          <code class="inl">.gguf</code> is invisible until you <code class="inl">ollama create</code> it
+          with the <b>same tag</b> the Settings dropdown uses (<code class="inl">id</code> in
+          <code class="inl">ai-intern/models.json</code>).</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">1</span><h3>Download the file</h3></div>
+        <p class="small">Use a <b>direct download</b> from the table (Hugging Face <code class="inl">resolve/main</code>
+          URL — the browser saves the <code class="inl">.gguf</code>). Q4_K_M is the size/quality sweet spot.
+          32B+ files are large and may be split on the repo page; if a direct link 404s, open the repo and
+          pick the matching quant.</p>
+        <table>
+          <thead>
+            <tr><th>Model</th><th>File</th><th>Direct download</th><th>Repo</th></tr>
+          </thead>
+          <tbody id="gguf-model-rows">
+            <tr><td colspan="4">Loading the model list… (this needs JavaScript; the list itself is <code class="inl">ai-intern/models.json</code>)</td></tr>
+          </tbody>
+        </table>
+        <p class="small">Other sources: <a href="https://huggingface.co/models?library=gguf">Hugging Face GGUF</a>,
+          <a href="https://huggingface.co/bartowski">bartowski quants</a>,
+          <a href="https://ollama.com/library">Ollama library</a> (pull instead of a file).</p>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">2</span><h3>Where to place it</h3></div>
+        <p class="small">Save the file in <code class="inl">jira-intern/models/</code> (git-ignored). That
+          directory <i>is</i> the AI-Ollama container's model store (<code class="inl">/root/.ollama</code>), and a
+          model there is what lets the container start — with Settings → Features → <b>AI-Ollama container</b> on.
+          Ollama still will not list it until you register it.</p>
+        <pre><button class="copy">Copy</button>mkdir -p jira-intern/models
+# move the downloaded .gguf in here, e.g.
+# mv ~/Downloads/qwen2.5-coder-7b-instruct-q4_k_m.gguf jira-intern/models/</pre>
+      </div>
+      <div class="step">
+        <div class="step-h"><span class="num">3</span><h3>Register the tag (how to trigger)</h3></div>
+        <p class="small"><b>In-container</b> (Host Ollama <b>off</b>) — the file is already inside the container at
+          <code class="inl">/root/.ollama/</code>; create it with the Settings tag:</p>
+        <pre><button class="copy">Copy</button>docker exec AI-Ollama sh -c 'printf "FROM /root/.ollama/qwen2.5-coder-7b-instruct-q4_k_m.gguf\n" &gt; /root/.ollama/Modelfile &amp;&amp; ollama create qwen2.5-coder:7b -f /root/.ollama/Modelfile'</pre>
+        <p class="small">The created model lands in <code class="inl">jira-intern/models/</code> on this machine, so it
+          survives container rebuilds and redeploys.</p>
+        <p class="small"><b>Host Ollama</b> — same file, then:</p>
+        <pre><button class="copy">Copy</button>cat &gt; /tmp/Modelfile &lt;&lt;'EOF'
+FROM /absolute/path/to/qwen2.5-coder-7b-instruct-q4_k_m.gguf
+EOF
+ollama create qwen2.5-coder:7b -f /tmp/Modelfile</pre>
+        <p class="small">That writes into <code class="inl">~/.ollama/models</code>. Tick <b>Host Ollama</b> so
+          the intern uses it.</p>
+        <p class="small"><b>Then from the board:</b> Settings → pick the matching tag (download icon disappears
+          once the tag exists) → AI usage not None → <b>Regenerate</b> / <b>Refresh</b>. The intern enqueues
+          the job; you do not need a host console.</p>
+      </div>
+      <h2 id="add-model">Add a newly released model</h2>
+      <div class="card">
+        <h3>One entry in models.json</h3>
+        <p class="small">Edit <code class="inl">ai-intern/models.json</code>. Copy an existing object, set
+          <code class="inl">id</code> / <code class="inl">pull</code> to the Ollama tag you will
+          <code class="inl">ollama create</code> or <code class="inl">ollama pull</code>, fill
+          <code class="inl">ollama</code> (library URL) and <code class="inl">gguf</code> (direct
+          <code class="inl">.gguf</code> URL), then restart the intern:</p>
+        <pre><button class="copy">Copy</button>docker compose up -d --build jira-ai</pre>
+        <p class="small">The Settings dropdown and both tables on this page pick up the new row from that file
+          (opened from disk, this page shows the copy made by the last <code class="inl">npm run build</code>).
+          No UI change is required.</p>
+      </div>
+
+      <div class="note warn" id="gap"><b>Honest gap.</b> Local models (including Gemma / GPT-OSS / nano) read the intern
+        volume and live Jira/Bitbucket REST (same tokens as Cursor MCP). CI, Checkmarx and live Dynatrace stay
+        <b>Not verified</b> until dedicated REST is added.</div>
+
+      
+      <nav class="pager" aria-label="Previous and next page">
+        <a class="prev" href="05-deploy-with-docker.html"><small>← Previous · 05</small><b>Deploy with Docker</b></a>
+        <a class="next" href="07-ai-cloud-models-and-prices.html"><small>Next · 07 →</small><b>AI with cloud models and prices</b></a>
+      </nav>
+      <footer>
+        <div class="flinks">
+          <a href="legal-privacy-and-accessibility.html#privacy">Privacy Policy</a>
+          <a href="legal-privacy-and-accessibility.html#terms">Terms &amp; Conditions</a>
+          <a href="legal-privacy-and-accessibility.html#cookies">Cookie Policy</a>
+          <a href="legal-privacy-and-accessibility.html#data">Your data</a>
+          <a href="legal-privacy-and-accessibility.html#embeds">Third-party embeds</a>
+          <a href="legal-privacy-and-accessibility.html#a11y">Accessibility</a>
+          <a href="legal-privacy-and-accessibility.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking · works offline</div>
+      </footer>
+      </main>
+    </div>
+
+    <script src="help-data.js"></script>
+    <script src="help.js"></script>
+  </body>
+</html>

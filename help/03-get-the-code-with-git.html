@@ -1,0 +1,102 @@
+<!doctype html>
+<!-- Jira Board Help — Get the code with Git. Plain HTML: open this file straight from disk, no server needed. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
+    <title>Jira Board Help — Get the code with Git</title>
+    <link rel="stylesheet" href="help.css" />
+  </head>
+  <body>
+    <nav class="top" aria-label="Help pages">
+      <div class="inner">
+        <span class="brand"><a href="00-start-here.html">🎫 Jira Board Help</a></span>
+        <a class="nl" href="00-start-here.html">Start</a>
+        <a class="nl" href="01-requirements.html"><span class="n">1</span>Requirements</a>
+        <a class="nl" href="02-install-the-tools.html"><span class="n">2</span>Install</a>
+        <a class="nl" href="03-get-the-code-with-git.html" aria-current="page"><span class="n">3</span>Git</a>
+        <a class="nl" href="04-configure-token-and-settings.html"><span class="n">4</span>Configure</a>
+        <a class="nl" href="05-deploy-with-docker.html"><span class="n">5</span>Deploy</a>
+        <a class="nl" href="06-ai-local-models.html"><span class="n">6</span>Local AI</a>
+        <a class="nl" href="07-ai-cloud-models-and-prices.html"><span class="n">7</span>Cloud AI</a>
+        <a class="nl" href="08-other-ways-to-run.html"><span class="n">8</span>Other ways</a>
+        <a class="nl" href="09-troubleshooting-and-faq.html"><span class="n">9</span>Troubleshooting</a>
+        <a class="nl" href="10-developer-documentation.html">Docs</a>
+      </div>
+    </nav>
+
+    <header class="hero page">
+      <div class="logo">🌿</div>
+      <span class="step-of">Step 3 of 9</span><h1>Get the code with Git</h1>
+      <p class="sub">Clone the repository, set your Git identity, everyday Git.</p>
+    </header>
+
+    <div class="layout">
+      <aside class="toc" aria-label="On this page">
+        <p class="toc-h">On this page</p>
+        <a href="#clone">Clone the repository</a>
+        <a href="#everyday">Everyday Git</a>
+        <p class="toc-h">Guide pages</p>
+        <a href="00-start-here.html">00 · Start here</a>
+        <a href="01-requirements.html">01 · Requirements — what to install</a>
+        <a href="02-install-the-tools.html">02 · Install the tools</a>
+        <a href="03-get-the-code-with-git.html" aria-current="page">03 · Get the code with Git</a>
+        <a href="04-configure-token-and-settings.html">04 · Configure your token and settings</a>
+        <a href="05-deploy-with-docker.html">05 · Deploy with Docker</a>
+        <a href="06-ai-local-models.html">06 · AI with local models</a>
+        <a href="07-ai-cloud-models-and-prices.html">07 · AI with cloud models and prices</a>
+        <a href="08-other-ways-to-run.html">08 · Other ways to run</a>
+        <a href="09-troubleshooting-and-faq.html">09 · Troubleshooting and FAQ</a>
+        <a href="10-developer-documentation.html">10 · Developer documentation</a>
+        <a href="legal-privacy-and-accessibility.html">Policies &amp; privacy</a>
+      </aside>
+
+      <main class="content">
+<h2 id="clone">Clone the repository</h2>
+      <div class="card">
+        <h3>Clone</h3>
+        <pre><button class="copy">Copy</button>git clone https://github.com/yo-sayantan/AI-JIRA-Board.git
+cd AI-JIRA-Board</pre>
+        <p class="small">First time using Git on this machine? Set your identity:</p>
+        <pre><button class="copy">Copy</button>git config --global user.name  "Your Name"
+git config --global user.email "you@example.com"</pre>
+      </div>
+      <h2 id="everyday">Everyday Git</h2>
+      <div class="card">
+        <h3>The commands you will use</h3>
+        <pre><button class="copy">Copy</button>git pull                       <span class="cmt"># get the latest changes</span>
+git status                     <span class="cmt"># what have I changed?</span>
+git switch -c my-change        <span class="cmt"># start a branch</span>
+git add -A                     <span class="cmt"># stage everything</span>
+git commit -m "What I changed" <span class="cmt"># commit</span>
+git push -u origin my-change   <span class="cmt"># push the branch</span></pre>
+        <div class="note warn"><b>Never commit secrets.</b> <code class="inl">.gitignore</code> already blocks
+          <code class="inl">*.env</code> and the fetched ticket data. Before pushing, a quick sanity check:
+          <code class="inl">git status</code> should show no <code class="inl">.env</code> files and no
+          <code class="inl">jira-intern/data.*</code>.</div>
+      </div>
+
+      
+      <nav class="pager" aria-label="Previous and next page">
+        <a class="prev" href="02-install-the-tools.html"><small>← Previous · 02</small><b>Install the tools</b></a>
+        <a class="next" href="04-configure-token-and-settings.html"><small>Next · 04 →</small><b>Configure your token and settings</b></a>
+      </nav>
+      <footer>
+        <div class="flinks">
+          <a href="legal-privacy-and-accessibility.html#privacy">Privacy Policy</a>
+          <a href="legal-privacy-and-accessibility.html#terms">Terms &amp; Conditions</a>
+          <a href="legal-privacy-and-accessibility.html#cookies">Cookie Policy</a>
+          <a href="legal-privacy-and-accessibility.html#data">Your data</a>
+          <a href="legal-privacy-and-accessibility.html#embeds">Third-party embeds</a>
+          <a href="legal-privacy-and-accessibility.html#a11y">Accessibility</a>
+          <a href="legal-privacy-and-accessibility.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking · works offline</div>
+      </footer>
+      </main>
+    </div>
+
+    <script src="help.js"></script>
+  </body>
+</html>

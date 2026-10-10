@@ -17,7 +17,7 @@ Backend choice is independent of level:
   checkbox, Ollama.app on the host via `host.docker.internal:11434` (Apple-Silicon Metal; use for
   14B+ models). Ticket text never leaves the machine.
 - **Cloud** — Cursor, Anthropic (Claude), or Gemini, with per-provider model dropdowns and (Cursor
-  only) an effort setting. Uses YOUR API keys from `~/.cursor/mcp-secrets.env`; the summarised
+  an effort setting (Low · Medium · High · Auto). The models, their efforts and the costly line (output ≥ $10 per 1M by default) are all `ai-intern/cloud-models.json`; a model with no effort parameter of its own gets the effort as prompt guidance. Uses YOUR API keys from `~/.cursor/mcp-secrets.env`; the summarised
   ticket text goes to that provider under its terms.
 
 Settings relevant to jobs mirror to `jira-intern/.settings.json` (`server/settings.mjs`), which
@@ -37,7 +37,7 @@ same level/backend/model as the button.
   Job types: `enrich-report`, `summarize-active`, `pull-model`. Report jobs run several in
   parallel (Settings → parallelism); summarize and pulls are exclusive.
 - **`ai-intern/models.json`** — the local-model catalog (Ollama tag, RAM, GGUF download links,
-  container-vs-host fit). The Settings dropdown, the setup guide's tables, and pull commands all
+  container-vs-host fit). The Settings dropdown, the help guide's tables (`help/06-ai-local-models.html`), and pull commands all
   derive from this one file; add a model by adding a row.
 - **`server/ai.mjs`** — proxies the board's `/api/ai-*` to the worker with a 1-second status cache.
 

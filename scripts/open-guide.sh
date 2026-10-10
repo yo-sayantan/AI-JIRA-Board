@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  Open the Setup & Deployment guide  (macOS / Linux)
 # ─────────────────────────────────────────────────────────────────────────────
-#  Opens docs/index.html in your default browser. Needs NOTHING running — no
+#  Opens help/00-start-here.html in your default browser. Needs NOTHING running — no
 #  Docker, no Node, no server. This is the page to reach for when the board
 #  itself won't start.
 #
@@ -12,15 +12,15 @@ set -euo pipefail
 
 # Resolve the repo from this script's own location, so it works from anywhere.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUIDE="$(cd "$SCRIPT_DIR/.." && pwd)/docs/index.html"
+GUIDE="$(cd "$SCRIPT_DIR/.." && pwd)/help/00-start-here.html"
 
 if [ ! -f "$GUIDE" ]; then
   echo "✖  Guide not found at: $GUIDE" >&2
-  echo "   Run this from inside the repo (it expects ./docs/index.html)." >&2
+  echo "   Run this from inside the repo (it expects ./help/00-start-here.html)." >&2
   exit 1
 fi
 
-echo "📖  Opening the Setup & Deployment guide…"
+echo "📖  Opening the help guide (every page is a plain file in help/)…"
 echo "    $GUIDE"
 
 case "$(uname -s)" in

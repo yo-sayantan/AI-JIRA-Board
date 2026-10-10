@@ -1,0 +1,152 @@
+<!doctype html>
+<!-- Jira Board Help — AI with cloud models and prices. Plain HTML: open this file straight from disk, no server needed. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
+    <title>Jira Board Help — AI with cloud models and prices</title>
+    <link rel="stylesheet" href="help.css" />
+  </head>
+  <body>
+    <nav class="top" aria-label="Help pages">
+      <div class="inner">
+        <span class="brand"><a href="00-start-here.html">🎫 Jira Board Help</a></span>
+        <a class="nl" href="00-start-here.html">Start</a>
+        <a class="nl" href="01-requirements.html"><span class="n">1</span>Requirements</a>
+        <a class="nl" href="02-install-the-tools.html"><span class="n">2</span>Install</a>
+        <a class="nl" href="03-get-the-code-with-git.html"><span class="n">3</span>Git</a>
+        <a class="nl" href="04-configure-token-and-settings.html"><span class="n">4</span>Configure</a>
+        <a class="nl" href="05-deploy-with-docker.html"><span class="n">5</span>Deploy</a>
+        <a class="nl" href="06-ai-local-models.html"><span class="n">6</span>Local AI</a>
+        <a class="nl" href="07-ai-cloud-models-and-prices.html" aria-current="page"><span class="n">7</span>Cloud AI</a>
+        <a class="nl" href="08-other-ways-to-run.html"><span class="n">8</span>Other ways</a>
+        <a class="nl" href="09-troubleshooting-and-faq.html"><span class="n">9</span>Troubleshooting</a>
+        <a class="nl" href="10-developer-documentation.html">Docs</a>
+      </div>
+    </nav>
+
+    <header class="hero page">
+      <div class="logo">☁️</div>
+      <span class="step-of">Step 7 of 9 · optional</span><h1>AI with cloud models and prices</h1>
+      <p class="sub">Cursor, Claude and Gemini: which models Settings offers, efforts, prices, what is costly.</p>
+    </header>
+
+    <div class="layout">
+      <aside class="toc" aria-label="On this page">
+        <p class="toc-h">On this page</p>
+        <a href="#ai-cloud-prices">Cloud AI — model prices</a>
+        <a href="#direct-providers">Claude and Gemini — your own keys</a>
+        <a href="#cloud-models-file">Add or remove a cloud model — cloud-models.json</a>
+        <p class="toc-h">Guide pages</p>
+        <a href="00-start-here.html">00 · Start here</a>
+        <a href="01-requirements.html">01 · Requirements — what to install</a>
+        <a href="02-install-the-tools.html">02 · Install the tools</a>
+        <a href="03-get-the-code-with-git.html">03 · Get the code with Git</a>
+        <a href="04-configure-token-and-settings.html">04 · Configure your token and settings</a>
+        <a href="05-deploy-with-docker.html">05 · Deploy with Docker</a>
+        <a href="06-ai-local-models.html">06 · AI with local models</a>
+        <a href="07-ai-cloud-models-and-prices.html" aria-current="page">07 · AI with cloud models and prices</a>
+        <a href="08-other-ways-to-run.html">08 · Other ways to run</a>
+        <a href="09-troubleshooting-and-faq.html">09 · Troubleshooting and FAQ</a>
+        <a href="10-developer-documentation.html">10 · Developer documentation</a>
+        <a href="legal-privacy-and-accessibility.html">Policies &amp; privacy</a>
+      </aside>
+
+      <main class="content">
+<h2 id="ai-cloud-prices">Cloud AI — model prices</h2>
+      <div class="card">
+        <h3>What a report costs, per model</h3>
+        <p class="small">The <b>i</b> button beside the cloud model list in Settings opens this table. Rates are
+          <b>USD per 1 million tokens</b> at standard speed. <b>Which models Settings offers</b> — and each one's efforts
+          (Low · Medium · High · Auto) and what counts as <b>costly</b> — is one file,
+          <code class="inl">ai-intern/cloud-models.json</code>: add a model there and it appears in Settings, delete it and it is gone,
+          no code change. The prices below are Cursor's published
+          <a href="https://cursor.com/docs/models-and-pricing">models &amp; pricing</a> table, on file in
+          <code class="inl">ai-intern/cursor-prices.json</code> (<span id="cursor-checked">checked …</span>); it fills in a price that an entry in
+          <code class="inl">cloud-models.json</code> leaves out. Edit either file; the worker re-reads it within a minute.</p>
+        <table>
+          <thead>
+            <tr><th>Model</th><th>Maker</th><th>Input</th><th>Cache write</th><th>Cache read</th><th>Output</th></tr>
+          </thead>
+          <tbody id="cursor-price-rows">
+            <tr><td colspan="6">Loading prices… (this needs JavaScript; the table itself is <code class="inl">ai-intern/cursor-prices.json</code>)</td></tr>
+          </tbody>
+        </table>
+        <p class="small"><b>Cache write</b> is what storing a prompt prefix for reuse costs; <b>cache read</b> is what
+          reusing it costs instead of full input. <b>—</b> means Cursor lists no cache-write price for that model.
+          A Cursor model must also be in <i>your key's</i> catalog to be found by name (Cursor's catalog is per account and
+          team). <span style="color:#dc2626">⚠</span> (red, at the right) marks a <b>costly</b> model: output at or above
+          <code class="inl">costlyOutputUsd</code> per 1M tokens (<span data-costly-line>$10</span> now, set in <code class="inl">cloud-models.json</code>).
+          A costly model offers no effort choice unless <code class="inl">costlyShowEffort</code> is on.</p>
+        <details class="faq">
+          <summary>On Cursor's table but not in cloud-models.json (<span id="cursor-over-count">…</span>)</summary>
+          <div class="a">
+            <table>
+              <thead><tr><th>Model</th><th>Maker</th><th>Input</th><th>Output</th></tr></thead>
+              <tbody id="cursor-over-rows"><tr><td colspan="4">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </details>
+        <p class="data-src" data-src-for="prices" data-file="ai-intern/cursor-prices.json and ai-intern/cloud-models.json"></p>
+      </div>
+
+      <h2 id="direct-providers">Claude and Gemini — your own keys</h2>
+      <div class="card">
+        <h3>Models listed for the direct providers</h3>
+        <p class="small">With <b>Claude</b> (billed by Anthropic, console.anthropic.com) or <b>Gemini</b> (billed by Google,
+          aistudio.google.com) selected in Settings, the dropdown offers these rows of
+          <code class="inl">ai-intern/cloud-models.json</code>. Their <code class="inl">id</code> must be the exact model id
+          that provider's API accepts. Keys live in <code class="inl">~/.cursor/mcp-secrets.env</code>
+          (<code class="inl">ANTHROPIC_API_KEY</code>, <code class="inl">GEMINI_API_KEY</code>).</p>
+        <table>
+          <thead><tr><th>Model</th><th>Provider</th><th>Id</th><th>Output / 1M</th><th>Efforts</th></tr></thead>
+          <tbody id="direct-model-rows"><tr><td colspan="5">Loading… (this needs JavaScript; the list itself is <code class="inl">ai-intern/cloud-models.json</code>)</td></tr></tbody>
+        </table>
+      </div>
+
+      <h2 id="cloud-models-file">Add or remove a cloud model — cloud-models.json</h2>
+      <div class="card">
+        <h3>One file is the whole list</h3>
+        <p class="small"><code class="inl">ai-intern/cloud-models.json</code> is exactly what Settings → AI → Cloud offers.
+          Add an entry and the model appears there; delete it and it is gone — no code change, no rebuild. The AI Intern
+          re-reads the file within a minute. Each entry:</p>
+        <pre><button class="copy">Copy</button>{
+  "provider": "cursor",            <span class="cmt">// cursor | claude | gemini</span>
+  "name": "GPT-5.6 Luna",          <span class="cmt">// shown in Settings; for Cursor also how the id is found</span>
+  "id": "gpt-5.6-luna",            <span class="cmt">// exact API id — required for claude and gemini</span>
+  "maker": "OpenAI",               <span class="cmt">// the group in the dropdown</span>
+  "outputUsd": 1.2,                <span class="cmt">// USD per 1M output tokens (omit → cursor-prices.json)</span>
+  "efforts": ["low", "medium", "high", "auto"]
+}</pre>
+        <p class="small"><b>Costly:</b> a model whose <code class="inl">outputUsd</code> is at or above
+          <code class="inl">costlyOutputUsd</code> (top of the file — <span data-costly-line>$10</span> now) gets the ⚠ and,
+          unless <code class="inl">costlyShowEffort</code> is <code class="inl">true</code>, no effort choice. One entry can
+          override that with <code class="inl">"costly": true</code> or <code class="inl">false</code>.
+          <b>Auto</b> leaves the effort to the model.</p>
+      </div>
+
+      
+      <nav class="pager" aria-label="Previous and next page">
+        <a class="prev" href="06-ai-local-models.html"><small>← Previous · 06</small><b>AI with local models</b></a>
+        <a class="next" href="08-other-ways-to-run.html"><small>Next · 08 →</small><b>Other ways to run</b></a>
+      </nav>
+      <footer>
+        <div class="flinks">
+          <a href="legal-privacy-and-accessibility.html#privacy">Privacy Policy</a>
+          <a href="legal-privacy-and-accessibility.html#terms">Terms &amp; Conditions</a>
+          <a href="legal-privacy-and-accessibility.html#cookies">Cookie Policy</a>
+          <a href="legal-privacy-and-accessibility.html#data">Your data</a>
+          <a href="legal-privacy-and-accessibility.html#embeds">Third-party embeds</a>
+          <a href="legal-privacy-and-accessibility.html#a11y">Accessibility</a>
+          <a href="legal-privacy-and-accessibility.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking · works offline</div>
+      </footer>
+      </main>
+    </div>
+
+    <script src="help-data.js"></script>
+    <script src="help.js"></script>
+  </body>
+</html>

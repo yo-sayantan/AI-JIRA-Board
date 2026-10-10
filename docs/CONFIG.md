@@ -138,9 +138,10 @@ absolute path of this folder), so the prompts are path-portable with zero config
 
 ## `ai`
 Defaults for Settings and the intern worker: `level`, `backend`, local/cloud models,
-`cloudProvider`, `cloudEffort`, `useHostOllama`, and the allowed effort list. Saved choices
+`cloudProvider`, `cloudEffort` (low / medium / high / auto), `useHostOllama`, and `parallel` (1–10, PR reports built at once). Saved choices
 in `jira-intern/.settings.json` override these defaults. The local model catalog remains
-`ai-intern/models.json`; `models.catalog` points to it.
+`ai-intern/models.json`; `models.catalog` points to it. The **cloud** model list — models, efforts, what counts as
+costly — is `ai-intern/cloud-models.json`, not this file (see CONTRIBUTING → Add a model).
 
 ## `reports` — PR Readiness Reports
 | key | meaning |

@@ -154,7 +154,7 @@ export default function App() {
       features.prReports
         ? {
             served,
-            generating: reports.generating,
+            generating: reports.working,
             withPrCount: ticketsWithPr,
             reportCount: Object.keys(reports.index?.reports ?? {}).length,
             board: boardWithPr,
@@ -165,7 +165,7 @@ export default function App() {
             modelLabel: aiModelLabel(ai),
           }
         : undefined,
-    [features.prReports, reports.generating, reports.index, reports.generateBulk, reports.generateOne, reports.stopAll, ticketsWithPr, boardWithPr, ai],
+    [features.prReports, reports.working, reports.index, reports.generateBulk, reports.generateOne, reports.stopAll, ticketsWithPr, boardWithPr, ai],
   )
 
   if (source === 'empty') {

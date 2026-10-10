@@ -1,0 +1,223 @@
+{
+  "_readme": "THE list of cloud models in Settings → AI → Cloud. Add a model and it appears there, delete one and it goes — no code change; the AI worker re-reads this file on its next model fetch (a restart of the jira-ai container is not needed). Each entry: provider (cursor | claude | gemini); name (shown in Settings; for Cursor also how the id is found in YOUR key's Cursor catalog); id (the exact API model id — required for claude and gemini, optional for cursor); maker (the group in the dropdown); outputUsd (USD per 1M output tokens — omit it and the Cursor price table in cursor-prices.json is used); efforts (any of low, medium, high, auto — the effort dropdown offers exactly these; auto = the model's own default, no instruction added); costly (true/false, optional — otherwise a model is costly when outputUsd >= costlyOutputUsd); note (a pricing caveat shown with the model). Order here = order in the dropdown within its maker.",
+  "_costly": "A costly model gets the ⚠ and its cost note. Set the line below to move it; or set \"costly\" on a single model.",
+  "costlyOutputUsd": 10,
+  "_costlyShowEffort": "false: a costly model offers no effort choice (pick a cheaper model to set one). true: it offers the efforts listed for it.",
+  "costlyShowEffort": false,
+  "checked": "2026-10-08",
+  "models": [
+    {
+      "provider": "cursor",
+      "name": "Composer 2.5",
+      "id": "composer-2.5",
+      "maker": "Cursor",
+      "outputUsd": 2.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "Grok 4.6",
+      "id": "grok-4.6",
+      "maker": "Cursor",
+      "outputUsd": 6.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "Grok 4.7",
+      "id": "grok-4.7",
+      "maker": "Cursor",
+      "outputUsd": 6.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "Claude Haiku 5.5",
+      "id": "claude-haiku-5-5",
+      "maker": "Anthropic",
+      "outputUsd": 0.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "Claude Sonnet 5.5",
+      "id": "claude-sonnet-5-5",
+      "maker": "Anthropic",
+      "outputUsd": 10.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GPT-5.6 Luna",
+      "id": "gpt-5.6-luna",
+      "maker": "OpenAI",
+      "outputUsd": 1.2,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GPT-5 Mini",
+      "maker": "OpenAI",
+      "outputUsd": 2.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GPT-5.1 Codex Mini",
+      "maker": "OpenAI",
+      "outputUsd": 2.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GPT-5.4 Mini",
+      "maker": "OpenAI",
+      "outputUsd": 4.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GPT-5",
+      "maker": "OpenAI",
+      "outputUsd": 10.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GPT-5-Codex",
+      "maker": "OpenAI",
+      "outputUsd": 10.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GPT-5.1 Codex",
+      "maker": "OpenAI",
+      "outputUsd": 10.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GPT-5.1 Codex Max",
+      "maker": "OpenAI",
+      "outputUsd": 10.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GPT-5.6 Terra",
+      "id": "gpt-5.6-terra",
+      "maker": "OpenAI",
+      "outputUsd": 12.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "Gemini 3.8 Flash",
+      "id": "gemini-3.8-flash",
+      "maker": "Google",
+      "outputUsd": 3.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "Gemini 3.1 Pro",
+      "id": "gemini-3.1-pro",
+      "maker": "Google",
+      "outputUsd": 12.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GLM 5.3 Flash",
+      "maker": "Z.ai",
+      "outputUsd": 0.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GLM 5.2",
+      "maker": "Z.ai",
+      "outputUsd": 4.4,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "GLM 5.3",
+      "maker": "Z.ai",
+      "outputUsd": 4.4,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "Kimi K2.7 Code",
+      "maker": "Moonshot",
+      "outputUsd": 4.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "cursor",
+      "name": "Muse Spark 1.3",
+      "id": "muse-spark-1.3",
+      "maker": "Meta",
+      "outputUsd": 4.25,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "claude",
+      "name": "Claude Haiku 5.5",
+      "id": "claude-haiku-5-5",
+      "maker": "Anthropic",
+      "outputUsd": 0.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "claude",
+      "name": "Claude Haiku 4.5",
+      "id": "claude-haiku-4-5",
+      "maker": "Anthropic",
+      "outputUsd": 5.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "gemini",
+      "name": "Gemini 3.8 Flash",
+      "id": "gemini-3.8-flash",
+      "maker": "Google",
+      "outputUsd": 3.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "gemini",
+      "name": "Gemini 3.7 Flash",
+      "id": "gemini-3.7-flash",
+      "maker": "Google",
+      "outputUsd": 3.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "gemini",
+      "name": "Gemini 3.6 Flash",
+      "id": "gemini-3.6-flash",
+      "maker": "Google",
+      "outputUsd": 7.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "gemini",
+      "name": "Gemini 3.5 Flash",
+      "id": "gemini-3.5-flash",
+      "maker": "Google",
+      "outputUsd": 9.0,
+      "efforts": ["low", "medium", "high", "auto"]
+    },
+    {
+      "provider": "gemini",
+      "name": "Gemini 2.5 Flash",
+      "id": "gemini-2.5-flash",
+      "maker": "Google",
+      "outputUsd": 2.5,
+      "efforts": ["low", "medium", "high", "auto"]
+    }
+  ]
+}

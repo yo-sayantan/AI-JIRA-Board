@@ -93,10 +93,10 @@
         "localModel": { "type": "string" },
         "cloudProvider": { "enum": ["claude", "cursor", "gemini"] },
         "cloudModel": { "type": "string" },
-        "cloudEffort": { "enum": ["low", "medium", "high"] },
+        "cloudEffort": { "enum": ["low", "medium", "high", "auto"] },
         "useHostOllama": { "type": "boolean" },
         "ollamaEnabled": { "type": "boolean" },
-        "parallel": { "type": "integer", "minimum": 1, "maximum": 6 }
+        "parallel": { "type": "integer", "minimum": 1, "maximum": 10 }
       },
       "additionalProperties": false
     },

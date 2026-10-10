@@ -1,0 +1,168 @@
+<!doctype html>
+<!-- Jira Board Help — Setup &amp;amp; Deployment Guide. Plain HTML: open this file straight from disk, no server needed. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
+    <title>Jira Board Help — Setup &amp;amp; Deployment Guide</title>
+    <link rel="stylesheet" href="help.css" />
+  </head>
+  <body>
+    <nav class="top" aria-label="Help pages">
+      <div class="inner">
+        <span class="brand"><a href="00-start-here.html">🎫 Jira Board Help</a></span>
+        <a class="nl" href="00-start-here.html" aria-current="page">Start</a>
+        <a class="nl" href="01-requirements.html"><span class="n">1</span>Requirements</a>
+        <a class="nl" href="02-install-the-tools.html"><span class="n">2</span>Install</a>
+        <a class="nl" href="03-get-the-code-with-git.html"><span class="n">3</span>Git</a>
+        <a class="nl" href="04-configure-token-and-settings.html"><span class="n">4</span>Configure</a>
+        <a class="nl" href="05-deploy-with-docker.html"><span class="n">5</span>Deploy</a>
+        <a class="nl" href="06-ai-local-models.html"><span class="n">6</span>Local AI</a>
+        <a class="nl" href="07-ai-cloud-models-and-prices.html"><span class="n">7</span>Cloud AI</a>
+        <a class="nl" href="08-other-ways-to-run.html"><span class="n">8</span>Other ways</a>
+        <a class="nl" href="09-troubleshooting-and-faq.html"><span class="n">9</span>Troubleshooting</a>
+        <a class="nl" href="10-developer-documentation.html">Docs</a>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div class="logo">🎫</div>
+      <h1>Setup &amp; Deployment Guide</h1>
+      <p class="sub">Everything you need to install the tools, clone the repo, add your Jira token, and get the board running — on <b>Windows</b>, <b>macOS</b> or <b>Linux</b>. Every command is copy-ready.<br /><span class="hero-pill"><span class="dot"></span> Self-hosted · one Docker command · ~10 minutes end to end</span></p>
+    </header>
+
+    <div class="layout">
+      <aside class="toc" aria-label="On this page">
+        <p class="toc-h">On this page</p>
+        <a href="#quick">Quick start</a>
+        <a href="#what">What this is</a>
+        <a href="#pages">Every page</a>
+        <p class="toc-h">Guide pages</p>
+        <a href="00-start-here.html" aria-current="page">00 · Start here</a>
+        <a href="01-requirements.html">01 · Requirements — what to install</a>
+        <a href="02-install-the-tools.html">02 · Install the tools</a>
+        <a href="03-get-the-code-with-git.html">03 · Get the code with Git</a>
+        <a href="04-configure-token-and-settings.html">04 · Configure your token and settings</a>
+        <a href="05-deploy-with-docker.html">05 · Deploy with Docker</a>
+        <a href="06-ai-local-models.html">06 · AI with local models</a>
+        <a href="07-ai-cloud-models-and-prices.html">07 · AI with cloud models and prices</a>
+        <a href="08-other-ways-to-run.html">08 · Other ways to run</a>
+        <a href="09-troubleshooting-and-faq.html">09 · Troubleshooting and FAQ</a>
+        <a href="10-developer-documentation.html">10 · Developer documentation</a>
+        <a href="legal-privacy-and-accessibility.html">Policies &amp; privacy</a>
+      </aside>
+
+      <main class="content">
+      <div class="note ok" style="margin-top: 8px">
+        <b>This guide works with nothing installed or running.</b> Every page is a plain HTML file in the
+        <code class="inl">help/</code> folder of the repository — double-click it to open it in your browser. Once the
+        board is up, its <b>?</b> button opens these same pages. Shortcuts: <code class="inl">./scripts/open-guide.sh</code>
+        (macOS / Linux) · double-click <code class="inl">scripts\open-guide.bat</code> (Windows).
+      </div>
+
+      <h2 id="quick">Quick start — the whole journey in five steps</h2>
+      <div class="stepper">
+        <a href="02-install-the-tools.html"><span class="qn">1</span><b>Install the tools</b><span>Docker Desktop + Git, per your OS</span></a>
+        <a href="03-get-the-code-with-git.html"><span class="qn">2</span><b>Clone the repo</b><span>one <code class="inl">git clone</code></span></a>
+        <a href="04-configure-token-and-settings.html#secrets"><span class="qn">3</span><b>Add your token</b><span>Jira PAT → secrets file</span></a>
+        <a href="04-configure-token-and-settings.html#personal-config"><span class="qn">4</span><b>Personal config</b><span>your name + company URLs</span></a>
+        <a href="05-deploy-with-docker.html"><span class="qn">5</span><b>Deploy</b><span>one command → port 4321</span></a>
+      </div>
+      <p class="small">Each page has the exact copy-ready commands for Windows, macOS and Linux. Stuck? Go straight to
+        <a href="09-troubleshooting-and-faq.html#faq">the FAQ</a> — it covers every problem actually hit on this project.</p>
+
+<h2 id="what">What this is</h2>
+      <div class="card">
+        <p style="margin-top: 0">A personal, self-hosted mirror of your Jira board. A background fetcher pulls
+          the tickets assigned to you into a plain data file; a single-file React app renders them — no Jira
+          login, no waiting on the web UI. Two moving parts:</p>
+        <ul>
+          <li><b>The fetch</b> (<code class="inl">jira-intern/</code>) — pulls your tickets. Needs <b>one Jira token</b>.</li>
+          <li><b>The app</b> (<code class="inl">dist/index.html</code>) — renders whatever the fetch produced. Needs nothing.</li>
+        </ul>
+        <!-- How the pieces fit — themed inline SVG, so it reads in light AND dark mode. -->
+        <svg class="flow" viewBox="0 0 860 206" role="img"
+          aria-label="Flow: Jira is fetched by the jira-intern Python scripts into data.json, which the board renders. Tokens stay outside the repo.">
+          <defs>
+            <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0.5 L7.5 4 L0 7.5 z" fill="var(--muted)" />
+            </marker>
+            <marker id="arrw" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0.5 L7.5 4 L0 7.5 z" fill="var(--warn)" />
+            </marker>
+          </defs>
+          <rect class="bx" x="10" y="38" width="150" height="66" rx="12" />
+          <text class="t1" x="85" y="66" text-anchor="middle">Jira</text>
+          <text class="t2" x="85" y="86" text-anchor="middle">your real tickets</text>
+
+          <path class="ar" d="M162 71 H 238" />
+          <text class="lbl" x="200" y="62" text-anchor="middle">REST fetch</text>
+
+          <rect class="bx hot" x="242" y="38" width="196" height="66" rx="12" />
+          <text class="t1" x="340" y="66" text-anchor="middle">jira-intern</text>
+          <text class="t2" x="340" y="86" text-anchor="middle">Python fetch · runs in Docker</text>
+
+          <path class="ar" d="M440 71 H 516" />
+          <text class="lbl" x="478" y="62" text-anchor="middle">writes</text>
+
+          <rect class="bx" x="520" y="38" width="146" height="66" rx="12" />
+          <text class="t1" x="593" y="66" text-anchor="middle">data.json</text>
+          <text class="t2" x="593" y="86" text-anchor="middle">one plain file</text>
+
+          <path class="ar" d="M668 71 H 712" />
+
+          <rect class="bx hot" x="716" y="38" width="134" height="66" rx="12" />
+          <text class="t1" x="783" y="66" text-anchor="middle">The board</text>
+          <text class="t2" x="783" y="86" text-anchor="middle">localhost:4321</text>
+
+          <rect class="bx" x="242" y="152" width="196" height="44" rx="10" />
+          <text class="t2" x="340" y="171" text-anchor="middle">🔑 ~/.cursor/mcp-secrets.env</text>
+          <text class="t2" x="340" y="186" text-anchor="middle">tokens — always OUTSIDE the repo</text>
+          <path class="ar dash" d="M340 150 V 110" />
+        </svg>
+        <div class="note pink"><b>Your tokens never enter the repo.</b> They live in one file outside it
+          (<code class="inl">~/.cursor/mcp-secrets.env</code>); everything else points at it by path.</div>
+      </div>
+
+      
+
+      <h2 id="pages">Every page of this guide</h2>
+      <p class="small" style="margin: -4px 0 10px">The files are numbered in the order you need them, so the
+        <code class="inl">help/</code> folder lists them as a checklist.</p>
+      <ol class="pages">
+        <li><a href="01-requirements.html"><span class="pn">01</span><b>Requirements — what to install</b><span class="d">Docker, Git and a Jira token; optional Node, Python and extra tokens. <code>help/01-requirements.html</code></span></a></li>
+        <li><a href="02-install-the-tools.html"><span class="pn">02</span><b>Install the tools</b><span class="d">Copy-ready installs for Windows, macOS and Linux, and how to check them. <code>help/02-install-the-tools.html</code></span></a></li>
+        <li><a href="03-get-the-code-with-git.html"><span class="pn">03</span><b>Get the code with Git</b><span class="d">Clone the repository, set your Git identity, everyday Git. <code>help/03-get-the-code-with-git.html</code></span></a></li>
+        <li><a href="04-configure-token-and-settings.html"><span class="pn">04</span><b>Configure your token and settings</b><span class="d">Your Jira token (secrets file) and your personal config — two files, once. <code>help/04-configure-token-and-settings.html</code></span></a></li>
+        <li><a href="05-deploy-with-docker.html"><span class="pn">05</span><b>Deploy with Docker</b><span class="d">The start script, the one command, managing the containers, environment knobs. <code>help/05-deploy-with-docker.html</code></span></a></li>
+        <li><a href="06-ai-local-models.html"><span class="pn">06</span><b>AI with local models</b><span class="d">The AI Intern, host Ollama, downloading a GGUF model, adding a new model. <code>help/06-ai-local-models.html</code></span></a></li>
+        <li><a href="07-ai-cloud-models-and-prices.html"><span class="pn">07</span><b>AI with cloud models and prices</b><span class="d">Cursor, Claude and Gemini: which models Settings offers, efforts, prices, what is costly. <code>help/07-ai-cloud-models-and-prices.html</code></span></a></li>
+        <li><a href="08-other-ways-to-run.html"><span class="pn">08</span><b>Other ways to run</b><span class="d">The static file, a live local server, developing the app, refreshing data by hand. <code>help/08-other-ways-to-run.html</code></span></a></li>
+        <li><a href="09-troubleshooting-and-faq.html"><span class="pn">09</span><b>Troubleshooting and FAQ</b><span class="d">Symptoms and fixes, and every real problem met while building and running the board. <code>help/09-troubleshooting-and-faq.html</code></span></a></li>
+        <li><a href="10-developer-documentation.html"><span class="pn">10</span><b>Developer documentation</b><span class="d">The deep docs in docs/ — for engineers and AI agents — readable right here. <code>help/10-developer-documentation.html</code></span></a></li>
+      </ol>
+      <p class="small">Also in the folder: <a href="developer-doc-viewer.html">developer-doc-viewer.html</a> (reads any file in
+        <code class="inl">docs/</code>) and <a href="legal-privacy-and-accessibility.html">legal-privacy-and-accessibility.html</a> (privacy, cookies, terms, accessibility).
+        <code class="inl">help.css</code>, <code class="inl">help.js</code> and <code class="inl">help-data.js</code> are the shared style, behaviour and data of these pages.</p>
+      <nav class="pager" aria-label="Previous and next page">
+        <a class="next" href="01-requirements.html"><small>Next · 01 →</small><b>Requirements — what to install</b></a>
+      </nav>
+      <footer>
+        <div class="flinks">
+          <a href="legal-privacy-and-accessibility.html#privacy">Privacy Policy</a>
+          <a href="legal-privacy-and-accessibility.html#terms">Terms &amp; Conditions</a>
+          <a href="legal-privacy-and-accessibility.html#cookies">Cookie Policy</a>
+          <a href="legal-privacy-and-accessibility.html#data">Your data</a>
+          <a href="legal-privacy-and-accessibility.html#embeds">Third-party embeds</a>
+          <a href="legal-privacy-and-accessibility.html#a11y">Accessibility</a>
+          <a href="legal-privacy-and-accessibility.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking · works offline</div>
+      </footer>
+      </main>
+    </div>
+
+    <script src="help.js"></script>
+  </body>
+</html>

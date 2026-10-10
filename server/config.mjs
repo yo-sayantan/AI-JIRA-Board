@@ -47,3 +47,5 @@ export const ALLOWED_HOSTS = new Set(
     .filter(Boolean),
 )
 export const BOARD_PATH = '/dist/index.html'
+/** The help guide's first page (help/ — plain pages that also open straight from disk). */
+export const HELP_PATH = '/help/00-start-here.html'

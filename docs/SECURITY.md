@@ -47,7 +47,7 @@ written against the current code; file paths are given so you can check.
 | `jb-completed-show-context` | The Completed dialog's *Mine only / Show context* choice. |
 | `jb-ac:<TICKET-KEY>` | Ticked acceptance-criteria items for that ticket. |
 | `jb-theme`, `jb-hidden` | Legacy keys from older builds; migrated into `jb-settings` / `jb-archived` and removed. |
-| `jb-guide-os` | The OS tab chosen in the offline guide (`docs/index.html`). |
+| `jb-guide-os` | The OS tab chosen in the help guide (`help/02-install-the-tools.html`). |
 
 No cookies. No analytics or telemetry. No external fonts, scripts or images — the bundle is one
 self-contained file and the guide uses system fonts.

@@ -1,0 +1,145 @@
+<!doctype html>
+<!-- Jira Board Help — Install the tools. Plain HTML: open this file straight from disk, no server needed. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%236d5bd0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%233b82f6%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%2216%22%20fill%3D%22url(%23g)%22%2F%3E%3Cpath%20d%3D%22M23%2026a9%209%200%200%201%2018%200c0%204.5-3.4%206.3-5.8%208-1.9%201.3-3.2%202.6-3.2%205%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%225.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2249%22%20r%3D%223.6%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E" />
+    <title>Jira Board Help — Install the tools</title>
+    <link rel="stylesheet" href="help.css" />
+  </head>
+  <body>
+    <nav class="top" aria-label="Help pages">
+      <div class="inner">
+        <span class="brand"><a href="00-start-here.html">🎫 Jira Board Help</a></span>
+        <a class="nl" href="00-start-here.html">Start</a>
+        <a class="nl" href="01-requirements.html"><span class="n">1</span>Requirements</a>
+        <a class="nl" href="02-install-the-tools.html" aria-current="page"><span class="n">2</span>Install</a>
+        <a class="nl" href="03-get-the-code-with-git.html"><span class="n">3</span>Git</a>
+        <a class="nl" href="04-configure-token-and-settings.html"><span class="n">4</span>Configure</a>
+        <a class="nl" href="05-deploy-with-docker.html"><span class="n">5</span>Deploy</a>
+        <a class="nl" href="06-ai-local-models.html"><span class="n">6</span>Local AI</a>
+        <a class="nl" href="07-ai-cloud-models-and-prices.html"><span class="n">7</span>Cloud AI</a>
+        <a class="nl" href="08-other-ways-to-run.html"><span class="n">8</span>Other ways</a>
+        <a class="nl" href="09-troubleshooting-and-faq.html"><span class="n">9</span>Troubleshooting</a>
+        <a class="nl" href="10-developer-documentation.html">Docs</a>
+      </div>
+    </nav>
+
+    <header class="hero page">
+      <div class="logo">⬇️</div>
+      <span class="step-of">Step 2 of 9</span><h1>Install the tools</h1>
+      <p class="sub">Copy-ready installs for Windows, macOS and Linux, and how to check them.</p>
+    </header>
+
+    <div class="layout">
+      <aside class="toc" aria-label="On this page">
+        <p class="toc-h">On this page</p>
+        <a href="#install">Installing the tools — pick your system</a>
+        <a href="#verify">Check everything is installed</a>
+        <p class="toc-h">Guide pages</p>
+        <a href="00-start-here.html">00 · Start here</a>
+        <a href="01-requirements.html">01 · Requirements — what to install</a>
+        <a href="02-install-the-tools.html" aria-current="page">02 · Install the tools</a>
+        <a href="03-get-the-code-with-git.html">03 · Get the code with Git</a>
+        <a href="04-configure-token-and-settings.html">04 · Configure your token and settings</a>
+        <a href="05-deploy-with-docker.html">05 · Deploy with Docker</a>
+        <a href="06-ai-local-models.html">06 · AI with local models</a>
+        <a href="07-ai-cloud-models-and-prices.html">07 · AI with cloud models and prices</a>
+        <a href="08-other-ways-to-run.html">08 · Other ways to run</a>
+        <a href="09-troubleshooting-and-faq.html">09 · Troubleshooting and FAQ</a>
+        <a href="10-developer-documentation.html">10 · Developer documentation</a>
+        <a href="legal-privacy-and-accessibility.html">Policies &amp; privacy</a>
+      </aside>
+
+      <main class="content">
+<h2 id="install">Installing the tools — pick your system</h2>
+      <div class="tabs" role="tablist" aria-label="Operating system">
+        <button role="tab" data-os="win" aria-selected="false">🪟 Windows</button>
+        <button role="tab" data-os="mac" aria-selected="false">🍎 macOS</button>
+        <button role="tab" data-os="linux" aria-selected="false">🐧 Linux</button>
+      </div>
+
+      <div class="card os-pane" data-os="win">
+        <span class="os-label">🪟 Windows</span>
+        <h3>Windows 10 / 11</h3>
+        <p class="small">Easiest path: <b>winget</b>, which ships with Windows 11 and modern Windows 10. Run in
+          PowerShell.</p>
+        <pre><button class="copy">Copy</button>winget install -e --id Git.Git
+winget install -e --id Docker.DockerDesktop
+winget install -e --id OpenJS.NodeJS.LTS      <span class="cmt"># optional</span>
+winget install -e --id Python.Python.3.12     <span class="cmt"># optional</span></pre>
+        <p class="small">Then <b>reboot</b> (Docker Desktop needs it), launch Docker Desktop once, and wait for
+          "Engine running". Docker Desktop will enable WSL 2 for you if it isn't already.</p>
+        <div class="note"><b>No winget?</b> Install each from its download page in the table above. Use
+          <b>PowerShell</b> (not CMD) for the commands on this page — or Git Bash if you prefer bash syntax.</div>
+        <div class="note warn"><b>Path note:</b> commands here use <code class="inl">~/</code> for your home
+          folder. In PowerShell that's <code class="inl">$HOME</code> — e.g.
+          <code class="inl">$HOME\.cursor\mcp-secrets.env</code>.</div>
+      </div>
+
+      <div class="card os-pane" data-os="mac">
+        <span class="os-label">🍎 macOS</span>
+        <h3>macOS 12+</h3>
+        <p class="small">Easiest path: <a href="https://brew.sh">Homebrew</a>. Install it first if you don't have it:</p>
+        <pre><button class="copy">Copy</button>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</pre>
+        <pre><button class="copy">Copy</button>brew install git
+brew install --cask docker      <span class="cmt"># Docker Desktop</span>
+brew install node               <span class="cmt"># optional</span>
+brew install python@3.12        <span class="cmt"># optional</span></pre>
+        <p class="small">Open Docker Desktop once from Applications and wait until the whale icon says
+          "Docker Desktop is running". Git may also come from Xcode Command Line Tools:
+          <code class="inl">xcode-select --install</code>.</p>
+      </div>
+
+      <div class="card os-pane" data-os="linux">
+        <span class="os-label">🐧 Linux</span>
+        <h3>Linux (Debian / Ubuntu shown)</h3>
+        <pre><button class="copy">Copy</button>sudo apt update
+sudo apt install -y git curl python3      <span class="cmt"># python optional</span></pre>
+        <p class="small">Docker Engine + Compose plugin, via Docker's official convenience script:</p>
+        <pre><button class="copy">Copy</button>curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER"      <span class="cmt"># run docker without sudo</span>
+newgrp docker                        <span class="cmt"># apply the group now (or log out/in)</span></pre>
+        <p class="small">Node.js (optional) via <a href="https://github.com/nvm-sh/nvm">nvm</a>:</p>
+        <pre><button class="copy">Copy</button>curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+nvm install 20</pre>
+        <p class="small">Fedora/RHEL: swap <code class="inl">apt</code> for <code class="inl">dnf</code>.
+          Arch: <code class="inl">sudo pacman -S git docker docker-compose nodejs</code>.</p>
+      </div>
+
+      <h2 id="verify">Check everything is installed</h2>
+      <div class="card">
+        <h3>Verify</h3>
+        <pre><button class="copy">Copy</button>git --version
+docker --version
+docker compose version
+node --version     <span class="cmt"># optional</span>
+python3 --version  <span class="cmt"># optional (Windows: python --version)</span></pre>
+        <p class="small">Each should print a version. If <code class="inl">docker</code> errors with
+          "cannot connect to the daemon", Docker Desktop isn't running yet.</p>
+      </div>
+
+      
+      <nav class="pager" aria-label="Previous and next page">
+        <a class="prev" href="01-requirements.html"><small>← Previous · 01</small><b>Requirements — what to install</b></a>
+        <a class="next" href="03-get-the-code-with-git.html"><small>Next · 03 →</small><b>Get the code with Git</b></a>
+      </nav>
+      <footer>
+        <div class="flinks">
+          <a href="legal-privacy-and-accessibility.html#privacy">Privacy Policy</a>
+          <a href="legal-privacy-and-accessibility.html#terms">Terms &amp; Conditions</a>
+          <a href="legal-privacy-and-accessibility.html#cookies">Cookie Policy</a>
+          <a href="legal-privacy-and-accessibility.html#data">Your data</a>
+          <a href="legal-privacy-and-accessibility.html#embeds">Third-party embeds</a>
+          <a href="legal-privacy-and-accessibility.html#a11y">Accessibility</a>
+          <a href="legal-privacy-and-accessibility.html#contact">Contact us</a>
+        </div>
+        <div class="tag">Built to dodge JIRA · made with ☕ + a refresh button · no cookies, no tracking · works offline</div>
+      </footer>
+      </main>
+    </div>
+
+    <script src="help.js"></script>
+  </body>
+</html>

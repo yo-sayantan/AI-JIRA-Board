@@ -40,7 +40,7 @@ bash scripts/start-jira-board.sh                                      # build, d
 **Board & workflow**
 - Six-column kanban — **To Do · Blocked · In Progress · In Review · QA · Done** — with an **On Hold** drop space under Blocked and a **Next Sprint** space at the end of To Do; empty columns fold to slim rails so the busy ones get the width; sprint-carry-over markers, priority and story-point glyphs, PR badges with approval counts.
 - **Drag-and-drop status changes** written through to Jira, with live PR / QA gates and automatic bounce-back.
-- Smart search (`FIDM-6115`, bare numbers, people, branches, PR ids) and one-click stat chips.
+- Smart search (`PROJ-6115`, bare numbers, people, branches, PR ids) and one-click stat chips.
 - **Completed archive** — your whole delivery history by year and month, with lead-time vs dev-time.
 - **Raised by me** — every ticket you filed, who holds it now, and the full hand-off trail.
 - Toasts that appear instantly and queue politely (you choose how many and for how long).
@@ -49,7 +49,7 @@ bash scripts/start-jira-board.sh                                      # build, d
 - **AI briefs** — a deep summary on To Do / In Progress tickets (enriched from linked Confluence pages, related tickets and PR diffs) and a short one for review/QA.
 - **PR Readiness Reports** — ship / no-ship verdict, evidence chain, release gates (approvals, comments, QA, scans), and file-level notes. Deterministic base report always available; AI enrichment layered on top.
 - **Four AI levels** — None · Low · Moderate · Max — trading speed and cost for depth.
-- **Local or Cloud, your choice** — run a model on your own machine (Gemma, Qwen, Llama, Phi… catalog included) or use **Cursor, Gemini or Claude** with a value-priced model shortlist and a built-in [price table](docs/index.html#ai-cloud-prices).
+- **Local or Cloud, your choice** — run a model on your own machine (Gemma, Qwen, Llama, Phi… catalog included) or use **Cursor, Gemini or Claude** with a value-priced model shortlist and a built-in [price table](help/07-ai-cloud-models-and-prices.html#ai-cloud-prices).
 - **Smart Ollama management** — the local-model container only runs when you switch it on *and* a model is present; it starts and stops itself as you change settings.
 - **Model manager** — pick a model, click download, watch progress; or drop in your own `.gguf`.
 
@@ -57,7 +57,7 @@ bash scripts/start-jira-board.sh                                      # build, d
 - **Settings that matter** — appearance (auto / light / dark / scheduled), schedules for background refreshes, parallelism, notification behaviour, and a feature toggle for every section.
 - **Background jobs** — scheduled active refresh, full-board rebuild and report refresh; per-ticket refresh from any card.
 - **Docker, static file, or live server** — the same board runs from a double-click or a container.
-- **Guide built in** — a styled setup & deployment guide with per-OS commands, model downloads and a prices table, one click from Settings.
+- **Guide built in** — a step-by-step setup & deployment guide in [`help/`](help/) (plain HTML that opens from disk, even before anything is deployed) with per-OS commands, model downloads and a prices table; the board's **?** and Settings' **i** open it.
 
 ## 🧠 Local AI (the AI-Ollama container)
 
@@ -74,13 +74,121 @@ Turn the toggle on and the container starts within seconds (if a model is presen
 2. Open **http://localhost:4321** — your board is already populated.
 3. Optional: Settings → **AI** to pick *Local* or *Cloud*; Settings → **Features** to shape the board.
 
-Need help? The [Setup & Deployment guide](docs/index.html) covers Windows, macOS and Linux, and the [FAQ](docs/index.html#faq) answers the usual snags.
+Need help? The **help guide** is plain HTML in [`help/`](help/) — open [`help/00-start-here.html`](help/00-start-here.html) straight from disk, **nothing needs to be installed or running**. Its pages are numbered in the order you need them (requirements → install → Git → configure → deploy …), it covers Windows, macOS and Linux, and [`09-troubleshooting-and-faq.html`](help/09-troubleshooting-and-faq.html) answers the usual snags.
 
-## 📚 All documentation lives in [`docs/`](docs/)
+## 🗺️ Where everything is
+
+### "I want to…" — the file to open
+
+| I want to… | Open / edit | Notes |
+|---|---|---|
+| Install and deploy, step by step | [`help/00-start-here.html`](help/00-start-here.html) | Double-click it — works with nothing installed |
+| Add my **Jira token** (and Bitbucket / Confluence / AI keys) | `~/.cursor/mcp-secrets.env` | Copy from [`setup/mcp-secrets.env.template`](setup/mcp-secrets.env.template). Outside the repo, never committed |
+| Set **my name**, company URLs, footer branding | `~/.ai/config.json` | Copy from [`setup/config.example.json`](setup/config.example.json). Outside the repo |
+| Change the **project defaults** (columns, schedules, AI defaults…) | [`config/jira-board.config.json`](config/jira-board.config.json) | Generic, tracked. Every key: [`docs/CONFIG.md`](docs/CONFIG.md) |
+| Add / remove a **cloud AI model** (Cursor, Claude, Gemini), its efforts, the costly line | [`ai-intern/cloud-models.json`](ai-intern/cloud-models.json) | Settings follows within a minute — no rebuild. [Guide](help/07-ai-cloud-models-and-prices.html) |
+| Add a **local AI model** (Ollama tag / GGUF) | [`ai-intern/models.json`](ai-intern/models.json) | Then `docker compose restart jira-ai`. [Guide](help/06-ai-local-models.html) |
+| Update a **cloud price** | [`ai-intern/cursor-prices.json`](ai-intern/cursor-prices.json) | Reference table; an entry in `cloud-models.json` can override it |
+| Trust my **company's certificate** (on-prem Jira / Bitbucket) | `~/.ai/ca-bundle.pem` | [`docs/SETUP.md`](docs/SETUP.md) step 6 |
+| Change the **port**, containers, mounts | [`docker-compose.yml`](docker-compose.yml) | `PORT=8080 bash scripts/start-jira-board.sh` for a one-off |
+| Deploy / redeploy | [`scripts/start-jira-board.sh`](scripts/start-jira-board.sh) | Builds on your machine, then Docker. [Guide](help/05-deploy-with-docker.html) |
+| Fix a problem | [`help/09-troubleshooting-and-faq.html`](help/09-troubleshooting-and-faq.html) | Every real problem met so far, with the fix |
+| Try the board without Jira | Settings → **Demo mode** | Sample data: [`jira-intern/demo/`](jira-intern/demo/) |
+
+### Configuration files — what, where, who reads it
+
+Settings are layered: **project defaults** → your **personal override** → what you save in **Settings** (the last one wins).
+
+| File | Where | In git? | What it holds | Read by |
+|---|---|---|---|---|
+| `mcp-secrets.env` | `~/.cursor/` | **No — never** | Tokens: `JIRA_PERSONAL_TOKEN`, Bitbucket / Confluence PATs, `CURSOR_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` | the fetch, the AI Intern (mounted read-only into both containers) |
+| `config.json` | `~/.ai/` | **No** | Your identity (display name as Jira shows it, account id), company URLs, branding — only the keys that differ from the defaults | everything, via `jira-intern/local-runner/config.mjs` |
+| `ca-bundle.pem` | `~/.ai/` | **No** | Your company's root certificate(s), added to the system roots | the fetch, the AI Intern |
+| [`jira-board.config.json`](config/jira-board.config.json) | `config/` | Yes (generic only) | Project defaults: columns, refresh windows, AI defaults, report settings, Bitbucket hints. Validated by [`jira-board.config.schema.json`](config/jira-board.config.schema.json) | the board, the server, the fetch, the AI Intern |
+| `.settings.json` | `jira-intern/` | No (runtime) | Everything saved from **Settings** in the board: schedules, parallelism, AI level / backend / model / effort, feature toggles | the server, the scheduler, the runners, the AI Intern |
+| [`cloud-models.json`](ai-intern/cloud-models.json) | `ai-intern/` | Yes | **The** cloud model list: provider, name, id, maker, `outputUsd`, `efforts` (low · medium · high · auto), `costlyOutputUsd` | the AI Intern → Settings; the help guide |
+| [`models.json`](ai-intern/models.json) | `ai-intern/` | Yes | The local model catalog: Ollama tags, GGUF downloads, RAM needs | the AI Intern → Settings; the help guide |
+| [`cursor-prices.json`](ai-intern/cursor-prices.json) | `ai-intern/` | Yes | Cursor's published per-model prices (reference data) | the AI Intern (fills missing prices); the help guide |
+| [`move_targets.json`](jira-intern/move_targets.json) | `jira-intern/` | Yes | The drag-and-drop targets, shared by the board, the server and `transition.py` | developers only |
+| [`docker-compose.yml`](docker-compose.yml) | repo root | Yes | The three containers (`JIRA-Board`, `AI-Intern`, `AI-Ollama`), port 4321, mounts, environment | Docker |
+| Browser `localStorage` | your browser | — | `jb-settings` (theme, toggles), `jb-archived`, `jb-guide-os` … — no cookies | the board, the help guide |
+
+Templates for the files outside the repo live in [`setup/`](setup/): `mcp-secrets.env.template`, `config.example.json`,
+`mcp.cursor.json.template` / `mcp.claude.json.template` / `mcp-with-secrets.sh.template` (Jira & Confluence MCP for
+your editor), and `Start Jira Board.command.template` (a macOS double-click launcher). Step by step:
+[`docs/SETUP.md`](docs/SETUP.md).
+
+### Repository index — every folder
+
+| Path | What it is | You'll touch it when… |
+|---|---|---|
+| [`help/`](help/) | **The help guide** — plain HTML pages, numbered in the order you need them (below). One `help.css`, one `help.js`, and `help-data.js` (generated by every build so tables and docs work offline) | setting up, deploying, troubleshooting |
+| [`docs/`](docs/) | **Developer documentation** (markdown) — architecture, data flow, API, config reference, changelog | changing the code |
+| [`setup/`](setup/) | Templates for your secrets, personal config, editor MCP and the Desktop launcher — no real values | first setup |
+| [`config/`](config/) | Project defaults (`jira-board.config.json`) and its JSON schema | changing defaults |
+| [`scripts/`](scripts/) | `start-jira-board.sh` (build + deploy + open), `open-guide.sh` / `open-guide.bat` (open the help guide), `build-help-data.mjs`, `Open Board.html` | deploying |
+| [`docker/`](docker/) | `Dockerfile` (built with the repo root as context) and `docker-entrypoint.sh` | changing the image |
+| [`docker-compose.yml`](docker-compose.yml) | The containers, port and mounts | changing ports or mounts |
+| [`src/`](src/) | The React 19 board — built into one self-contained `dist/index.html`. `src/types.ts` is the data contract | changing the UI |
+| [`server/`](server/) | The zero-dependency Node server (`serve.mjs`): serves the board and the help guide, runs jobs, proxies the AI Intern | changing the API |
+| [`jira-intern/`](jira-intern/) | **The fetch pipeline** (Python): `daily_fetch.py` (your tickets), `completed_archive.py`, `raised.py`, `devinfo.py` (PRs / branches), `pr_report.py`, `transition.py` (drag → Jira), `local-runner/*.sh` (what the server runs). Also **your data** (below) | changing what is fetched |
+| [`ai-intern/`](ai-intern/) | **The AI Intern** container: `worker.py` (job queue, local or cloud models), `brief.py`, `cloud_config.py` + `cloud-models.json`, `models.json`, `cursor-prices.json` | changing AI behaviour or models |
+| [`tests/`](tests/) | Python tests (`npm test` runs them with the JavaScript ones in `src/**/*.test.ts`) | before every commit |
+| [`tooling/`](tooling/) | `vite.config.ts`, `vitest.config.ts` | rarely |
+| [`index.html`](index.html) | The Vite entry for `npm run dev` (not a page to open) | never |
+| `dist/` | The built board, `dist/index.html` — open it directly, or let the server serve it | after `npm run build` |
+
+### Your data — created at runtime, never committed
+
+All in `jira-intern/` (the folder you deploy from is the one the containers mount — see the
+[FAQ](help/09-troubleshooting-and-faq.html#faq)):
+
+| File / folder | What it is |
+|---|---|
+| `data.json` · `data.js` | The board's whole dump: active tickets, the Completed archive, Raised by me (`data.js` is the same, for opening the board from disk) |
+| `reports/` | PR Readiness Reports, one JSON per ticket (`index.js` for offline viewing) |
+| `cache/` | Per-ticket cache that makes the archive rebuild fast |
+| `models/` | Local AI models (Ollama's store, or a `.gguf` you drop in) |
+| `logs/` · `_STATUS.md` | Run logs and a newest-first audit of every run |
+| `.settings.json` · `.schedule.json` · `.state.json` · `.progress.json` | Saved Settings, schedule stamps, incremental fetch memory, live progress |
+| `.ai-queue/` · `.ai-status.json` | The AI Intern's job queue and status |
+| `*.lock` | One-writer-at-a-time locks (cleared automatically when their process is gone) |
+
+Every file, its writer and its reader: [`docs/RUNTIME-FILES.md`](docs/RUNTIME-FILES.md).
+
+### The help guide — one file per step
+
+| File | Open it to… |
+|---|---|
+| [`00-start-here.html`](help/00-start-here.html) | See what this is, the five-step journey, and every page |
+| [`01-requirements.html`](help/01-requirements.html) | Know what to install (Docker, Git, a Jira token) and where to get it |
+| [`02-install-the-tools.html`](help/02-install-the-tools.html) | Install them on Windows, macOS or Linux, and check they work |
+| [`03-get-the-code-with-git.html`](help/03-get-the-code-with-git.html) | Clone the repository; everyday Git |
+| [`04-configure-token-and-settings.html`](help/04-configure-token-and-settings.html) | Create the secrets file and your personal config |
+| [`05-deploy-with-docker.html`](help/05-deploy-with-docker.html) | Deploy, redeploy, manage the containers |
+| [`06-ai-local-models.html`](help/06-ai-local-models.html) | Run AI on your own machine (Ollama, GGUF) |
+| [`07-ai-cloud-models-and-prices.html`](help/07-ai-cloud-models-and-prices.html) | Use Cursor, Claude or Gemini; prices; `cloud-models.json` |
+| [`08-other-ways-to-run.html`](help/08-other-ways-to-run.html) | Run without Docker, develop the app, refresh by hand |
+| [`09-troubleshooting-and-faq.html`](help/09-troubleshooting-and-faq.html) | Fix a problem |
+| [`10-developer-documentation.html`](help/10-developer-documentation.html) | Find the developer docs (readable in [`developer-doc-viewer.html`](help/developer-doc-viewer.html)) |
+| [`legal-privacy-and-accessibility.html`](help/legal-privacy-and-accessibility.html) | Privacy, your data, cookies, terms, accessibility |
+
+### Everyday commands
+
+```bash
+bash scripts/start-jira-board.sh   # build + deploy + open http://localhost:4321
+./scripts/open-guide.sh            # open the help guide (Windows: scripts\open-guide.bat)
+npm run dev                        # develop the UI with sample data
+npm run build                      # typecheck + build dist/index.html (also refreshes help/help-data.js)
+npm test                           # Python + JavaScript tests
+docker compose logs -f             # watch the containers
+```
+
+## 📚 Help in [`help/`](help/), developer docs in [`docs/`](docs/)
 
 | Start here | |
 |---|---|
-| [`docs/index.html`](docs/index.html) | **Setup & Deployment guide** — per-OS install, copy-ready commands, FAQ (also the board's **?** button) |
+| [`help/00-start-here.html`](help/00-start-here.html) | **Setup & Deployment guide** — numbered pages, per-OS install, copy-ready commands, FAQ (also the board's **?** button). Opens from disk. |
 | [`docs/OVERVIEW.md`](docs/OVERVIEW.md) | What it does, quick start, repository layout |
 | [`docs/AGENTS.md`](docs/AGENTS.md) | **Onboarding for engineers & AI agents** — repo map, golden rules, worked example, gotchas |
 
@@ -100,10 +208,10 @@ Need help? The [Setup & Deployment guide](docs/index.html) covers Windows, macOS
 | [`docs/CONFIG.md`](docs/CONFIG.md) | Key-by-key reference for `config/jira-board.config.json` |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Docker / static file / live server, deploy pitfalls |
 | [`docs/USAGE.md`](docs/USAGE.md) | Using the board: chips, Raised by me, Next Sprint, the drawer |
-| [`docs/legal.html`](docs/legal.html) | Privacy, your data, cookies, terms, accessibility, contact |
+| [`help/legal-privacy-and-accessibility.html`](help/legal-privacy-and-accessibility.html) | Privacy, your data, cookies, terms, accessibility, contact |
 
-When the board is running, every page above is served styled at
-`http://localhost:4321/docs/` (markdown renders through `docs/doc.html`).
+Every `docs/*.md` file above is also readable styled in [`help/developer-doc-viewer.html`](help/developer-doc-viewer.html) —
+from disk or, with the board running, at `http://localhost:4321/help/`.
 
 ---
 

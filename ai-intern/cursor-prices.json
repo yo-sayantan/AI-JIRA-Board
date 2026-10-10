@@ -1,31 +1,7 @@
 {
-  "_readme": "Cursor's published per-model prices, USD per 1M tokens, from https://cursor.com/docs/models-and-pricing.md . The AI worker (ai-intern/cursor_prices.py) keeps a model in the Settings list only when it appears in YOUR key's Cursor catalog AND is priced here at or under maxOutputUsd. Refresh by re-reading that page and editing the rows; modelId is optional and only helps matching.",
+  "_readme": "Cursor's published per-model prices, USD per 1M tokens, from https://cursor.com/docs/models-and-pricing.md . This file is REFERENCE DATA: it feeds the guide's price page and fills in a price (and a model's maker) that a cloud-models.json entry leaves out. WHICH models Settings offers, their efforts and what counts as costly are all in cloud-models.json. Refresh by re-reading that page and editing the rows; modelId is optional and only helps matching.",
   "source": "https://cursor.com/docs/models-and-pricing.md",
   "checked": "2026-10-08",
-  "maxOutputUsd": 10,
-  "_exclude": "Models in the price table that the board never offers, by name — your own curation, independent of price. Remove a name to offer it again.",
-  "exclude": [
-    "Grok 4.5",
-    "Gemini 2.5 Flash",
-    "GPT-5.4 Nano",
-    "Claude 4.5 Haiku",
-    "Gemini 3 Flash",
-    "Gemini 3.5 Flash",
-    "Gemini 3.6 Flash",
-    "Gemini 3.7 Flash",
-    "Claude Sonnet 5"
-  ],
-  "_include": "Offered even though they cost more than maxOutputUsd — your exceptions to the cap. Only models in the API key's catalog are ever offered. 'exclude' wins if a name is in both.",
-  "include": [
-    "GPT-5.6 Terra",
-    "Gemini 3.1 Pro"
-  ],
-  "_pin": "Offered even when the API key's Cursor catalog does not list them, using the model id Cursor documents. Cursor may reject an id its API does not know — the job then fails with a visible error. 'exclude' wins.",
-  "pin": [
-    "Claude Sonnet 5.5",
-    "Claude Haiku 5.5",
-    "Gemini 3.8 Flash"
-  ],
   "models": [
     {
       "name": "Grok 4.7",

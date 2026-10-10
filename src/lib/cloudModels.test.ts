@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CloudModelChoice } from './runner'
-import { groupByProvider, isPricey, usd } from './cloudModels'
+import { effortChoicesFor, groupByProvider, isPricey, usd } from './cloudModels'
 
 describe('usd', () => {
   it('writes whole dollars bare and fractions to the precision Cursor quotes', () => {
@@ -35,10 +35,10 @@ describe('groupByProvider', () => {
 
 describe('isPricey', () => {
   const at = (output: number | null) => ({ price: { output } })
-  it('warns only above $10 — $10 itself is the top of the value range, not a warning', () => {
+  it('without a costly flag, $10 and above is costly — the line is "at or above"', () => {
     expect(isPricey(at(12))).toBe(true)
     expect(isPricey(at(10.01))).toBe(true)
-    expect(isPricey(at(10))).toBe(false)
+    expect(isPricey(at(10))).toBe(true)
     expect(isPricey(at(9.99))).toBe(false)
     expect(isPricey(at(1.2))).toBe(false)
   })
@@ -47,5 +47,32 @@ describe('isPricey', () => {
     expect(isPricey({})).toBe(false)
     expect(isPricey(null)).toBe(false)
     expect(isPricey(undefined)).toBe(false)
+  })
+})
+
+describe('effortChoicesFor', () => {
+  it('offers exactly the efforts the config lists for the model, in the dropdown order', () => {
+    expect(effortChoicesFor({ efforts: ['auto', 'low', 'high', 'medium'] })).toEqual(['low', 'medium', 'high', 'auto'])
+    expect(effortChoicesFor({ efforts: ['low', 'auto'] })).toEqual(['low', 'auto'])
+  })
+  it('offers none when the config lists none (a costly model) or the model is unknown', () => {
+    expect(effortChoicesFor({ efforts: [] })).toEqual([])
+    expect(effortChoicesFor({})).toEqual([])
+    expect(effortChoicesFor(null)).toEqual([])
+  })
+  it('ignores an effort it does not know', () => {
+    expect(effortChoicesFor({ efforts: ['turbo', 'low'] })).toEqual(['low'])
+  })
+})
+
+describe('isPricey follows the worker\'s costly verdict', () => {
+  it('trusts the flag either way, whatever the price says', () => {
+    expect(isPricey({ costly: true, price: { output: 1 } })).toBe(true)
+    expect(isPricey({ costly: false, price: { output: 90 } })).toBe(false)
+  })
+  it('without a flag, $10 itself is costly (at or above the line)', () => {
+    expect(isPricey({ price: { output: 10 } })).toBe(true)
+    expect(isPricey({ price: { output: 9.99 } })).toBe(false)
+    expect(isPricey({ price: null })).toBe(false)
   })
 })

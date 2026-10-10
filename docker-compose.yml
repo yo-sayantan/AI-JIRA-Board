@@ -142,8 +142,11 @@ services:
       - ./config:/app/config:ro
       # Model catalogue: edit it, then `docker compose restart jira-ai` — no rebuild.
       - ./ai-intern/models.json:/app/models.json:ro
-      # Cursor price table: edit it and the worker picks it up on the next catalog fetch — no rebuild.
+      # Cursor price table (reference data for the guide and for entries without a price): no rebuild after an edit.
       - ./ai-intern/cursor-prices.json:/app/cursor-prices.json:ro
+      # THE cloud model list (models, efforts, what counts as costly): edit it and the worker re-reads it on the
+      # next model fetch (within a minute) — no rebuild, no restart.
+      - ./ai-intern/cloud-models.json:/app/cloud-models.json:ro
       # Private CA — same as the board (uncomment both or neither).
       # - ${JIRA_CA_BUNDLE_HOST:-/dev/null}:/etc/ssl/private-ca.pem:ro
     extra_hosts:
